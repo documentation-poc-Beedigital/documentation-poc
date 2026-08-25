@@ -14,3 +14,5 @@ last_reviewed: 2026-08-21
 Las invitaciones enviadas a nuevos usuarios caducan después de 24 horas.
 
 Si la invitación ha caducado, el administrador deberá enviar una nueva.
+
+Los usuarios pueden adjuntar archivos de hasta 25 MB.
