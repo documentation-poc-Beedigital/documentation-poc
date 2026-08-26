@@ -1,0 +1,139 @@
+name: Create documentation proposal
+
+on:
+  workflow_dispatch:
+    inputs:
+      issue_key:
+        description: Jira documentation task key
+        required: true
+        type: string
+      issue_summary:
+        description: Jira task summary
+        required: true
+        type: string
+      old_text:
+        description: Exact text currently documented
+        required: true
+        type: string
+      new_text:
+        description: Exact proposed replacement
+        required: true
+        type: string
+      reason:
+        description: Reason and evidence
+        required: true
+        type: string
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  create-proposal:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Find and replace documented text
+        id: proposal
+        env:
+          OLD_TEXT: ${{ inputs.old_text }}
+          NEW_TEXT: ${{ inputs.new_text }}
+        run: |
+          python - <<'PY'
+          import os
+          from pathlib import Path
+
+          old_text = os.environ["OLD_TEXT"]
+          new_text = os.environ["NEW_TEXT"]
+          matches = []
+
+          for pattern in ("*.md", "*.mdx"):
+              for path in Path("docs").rglob(pattern):
+                  content = path.read_text(encoding="utf-8")
+                  if old_text in content:
+                      matches.append((path, content))
+
+          if not matches:
+              raise SystemExit(
+                  f"No document contains the exact text: {old_text!r}"
+              )
+
+          if len(matches) > 1:
+              paths = ", ".join(str(path) for path, _ in matches)
+              raise SystemExit(
+                  f"Several documents contain the text: {paths}"
+              )
+
+          path, content = matches[0]
+          updated = content.replace(old_text, new_text, 1)
+          path.write_text(updated, encoding="utf-8")
+
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
+              output.write(f"document={path}\n")
+          PY
+
+      - name: Create branch and commit
+        env:
+          ISSUE_KEY: ${{ inputs.issue_key }}
+        run: |
+          BRANCH="docs/${ISSUE_KEY,,}-proposal-${GITHUB_RUN_ID}"
+
+          git config user.name "documentation-agent"
+          git config user.email "documentation-agent@users.noreply.github.com"
+
+          git checkout -b "$BRANCH"
+          git add docs
+          git commit -m "$ISSUE_KEY Propose documentation update"
+          git push origin "$BRANCH"
+
+          echo "BRANCH=$BRANCH" >> "$GITHUB_ENV"
+
+      - name: Create pull request
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE_KEY: ${{ inputs.issue_key }}
+          ISSUE_SUMMARY: ${{ inputs.issue_summary }}
+          OLD_TEXT: ${{ inputs.old_text }}
+          NEW_TEXT: ${{ inputs.new_text }}
+          REASON: ${{ inputs.reason }}
+          DOCUMENT: ${{ steps.proposal.outputs.document }}
+        run: |
+          {
+            echo "## Documentation proposal"
+            echo
+            echo "**Jira task:** $ISSUE_KEY"
+            echo
+            echo "**Affected document:** \`$DOCUMENT\`"
+            echo
+            echo "## Evidence and reason"
+            echo
+            echo "$REASON"
+            echo
+            echo "## Current text"
+            echo
+            echo "$OLD_TEXT"
+            echo
+            echo "## Proposed text"
+            echo
+            echo "$NEW_TEXT"
+            echo
+            echo "## Human validation"
+            echo
+            echo "- [ ] The affected document is correct."
+            echo "- [ ] The evidence is valid."
+            echo "- [ ] The proposed text is correct."
+            echo "- [ ] The change can be published."
+            echo
+            echo "> Generated automatically. This content is not published."
+          } > /tmp/pull-request-body.md
+
+          gh pr create \
+            --base main \
+            --head "$BRANCH" \
+            --title "$ISSUE_KEY $ISSUE_SUMMARY" \
+            --body-file /tmp/pull-request-body.md
