@@ -10,6 +10,6 @@ owner: Product
 
 Los usuarios pueden añadir archivos adjuntos a tareas y comentarios.
 
-El tamaño máximo permitido para cada archivo adjunto es de 35 MB.
+El tamaño máximo permitido para cada archivo adjunto es de 40 MB.
 
 Si un archivo supera este límite, el sistema rechazará la carga.
