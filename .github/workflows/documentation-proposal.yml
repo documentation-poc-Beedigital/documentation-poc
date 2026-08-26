@@ -81,7 +81,7 @@ jobs:
         env:
           ISSUE_KEY: ${{ inputs.issue_key }}
         run: |
-          BRANCH="docs/${ISSUE_KEY,,}-proposal-${GITHUB_RUN_ID}"
+          BRANCH="docs/${ISSUE_KEY,,}-proposal-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
 
           git config user.name "documentation-agent"
           git config user.email "documentation-agent@users.noreply.github.com"
