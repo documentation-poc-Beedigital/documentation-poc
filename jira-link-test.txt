@@ -1,0 +1,1 @@
+Prueba temporal de vinculación entre GitHub y Jira para DOC-14.
