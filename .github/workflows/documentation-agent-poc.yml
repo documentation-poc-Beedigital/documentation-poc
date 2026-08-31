@@ -1,0 +1,255 @@
+name: Documentation agent PoC
+
+on:
+  workflow_dispatch:
+    inputs:
+      issue_key:
+        description: Jira documentation task key
+        required: true
+        type: string
+      issue_summary:
+        description: Jira task summary
+        required: true
+        type: string
+      issue_description:
+        description: Jira task description and evidence
+        required: true
+        type: string
+
+concurrency:
+  group: documentation-agent-poc-${{ inputs.issue_key }}
+  cancel-in-progress: false
+
+jobs:
+  prepare-proposal:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout main without persisted credentials
+        uses: actions/checkout@v5
+        with:
+          ref: main
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Capture trusted main SHA
+        id: base
+        shell: bash
+        run: |
+          set -euo pipefail
+          base_sha="$(git rev-parse --verify 'HEAD^{commit}')"
+          if [[ ! "${base_sha}" =~ ^([0-9a-f]{40}|[0-9a-f]{64})$ ]]; then
+            echo "Checkout produced an invalid commit SHA" >&2
+            exit 1
+          fi
+          echo "sha=${base_sha}" >> "${GITHUB_OUTPUT}"
+
+      - name: Validate and serialize ticket inputs
+        env:
+          ISSUE_KEY: ${{ inputs.issue_key }}
+          ISSUE_SUMMARY: ${{ inputs.issue_summary }}
+          ISSUE_DESCRIPTION: ${{ inputs.issue_description }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          import os
+          import re
+          from pathlib import Path
+
+          issue_key = os.environ["ISSUE_KEY"]
+          issue_summary = os.environ["ISSUE_SUMMARY"]
+          issue_description = os.environ["ISSUE_DESCRIPTION"]
+
+          errors = []
+          if not re.fullmatch(r"[A-Z][A-Z0-9]*(?:-[A-Z0-9]+)*-[1-9][0-9]*", issue_key):
+              errors.append(
+                  "issue_key must contain uppercase Jira-style segments and end in a number"
+              )
+          if not 3 <= len(issue_key) <= 64:
+              errors.append("issue_key must contain between 3 and 64 characters")
+          if not 1 <= len(issue_summary) <= 200:
+              errors.append("issue_summary must contain between 1 and 200 characters")
+          if not issue_summary.strip():
+              errors.append("issue_summary must not be blank")
+          if any(ord(character) < 32 for character in issue_summary):
+              errors.append("issue_summary must not contain control characters")
+          if not 1 <= len(issue_description) <= 20_000:
+              errors.append(
+                  "issue_description must contain between 1 and 20000 characters"
+              )
+          if not issue_description.strip():
+              errors.append("issue_description must not be blank")
+          if any(
+              ord(character) < 32 and character not in "\r\n\t"
+              for character in issue_description
+          ):
+              errors.append(
+                  "issue_description contains an unsupported control character"
+              )
+
+          if errors:
+              raise SystemExit("Invalid workflow inputs:\n- " + "\n- ".join(errors))
+
+          ticket = {
+              "issue_key": issue_key,
+              "issue_summary": issue_summary,
+              "issue_description": issue_description,
+          }
+          runner_temp = Path(os.environ["RUNNER_TEMP"])
+          ticket_path = runner_temp / "documentation-ticket.json"
+          ticket_path.write_text(
+              json.dumps(ticket, ensure_ascii=False, indent=2) + "\n",
+              encoding="utf-8",
+          )
+          PY
+
+      - name: Run validator tests before exposing credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m unittest discover \
+            -s .github/scripts/tests \
+            -p 'test_*.py' \
+            -v
+
+      - name: Stage trusted generator and prompt
+        env:
+          BASE_SHA: ${{ steps.base.outputs.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          git show "${BASE_SHA}:.github/scripts/generate-documentation-proposal.py" \
+            > "${RUNNER_TEMP}/generate-documentation-proposal.py"
+          git show "${BASE_SHA}:.github/prompts/documentation-agent-poc.md" \
+            > "${RUNNER_TEMP}/documentation-agent-poc.md"
+
+      - name: Generate documentation proposal with Gemini
+        id: gemini
+        continue-on-error: true
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python "${RUNNER_TEMP}/generate-documentation-proposal.py" \
+            --repo-root "${GITHUB_WORKSPACE}" \
+            --ticket-file "${RUNNER_TEMP}/documentation-ticket.json" \
+            --prompt-file "${RUNNER_TEMP}/documentation-agent-poc.md" \
+            --agent-report "${RUNNER_TEMP}/agent-report.md"
+
+      - name: Ensure an agent report exists
+        if: always()
+        shell: bash
+        run: |
+          python - <<'PY'
+          import os
+          from pathlib import Path
+
+          report = Path(os.environ["RUNNER_TEMP"]) / "agent-report.md"
+          if not report.exists():
+              report.write_text(
+                  "Decisión: error\n"
+                  "Documento: ninguno\n"
+                  "Evidencia: Gemini did not produce a final report\n"
+                  "Texto anterior: no aplica\n"
+                  "Texto propuesto: no aplica\n"
+                  "Motivo: la ejecución de Gemini no produjo un informe\n",
+                  encoding="utf-8",
+              )
+          PY
+
+      - name: Validate the generated proposal
+        id: validation
+        if: always()
+        continue-on-error: true
+        env:
+          BASE_SHA: ${{ steps.base.outputs.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          output = Path(os.environ["RUNNER_TEMP"]) / "validation-result.json"
+          output.write_text(
+              json.dumps(
+                  {
+                      "valid": False,
+                      "decision": "error",
+                      "base_sha": os.environ["BASE_SHA"],
+                      "changed_files": [],
+                      "errors": [
+                          "The deterministic validator did not complete successfully"
+                      ],
+                  },
+                  ensure_ascii=False,
+                  indent=2,
+              )
+              + "\n",
+              encoding="utf-8",
+          )
+          PY
+
+          current_sha="$(git rev-parse --verify 'HEAD^{commit}')"
+          if [ "${current_sha}" != "${BASE_SHA}" ]; then
+            echo "HEAD changed after checkout: expected ${BASE_SHA}, got ${current_sha}" >&2
+            exit 1
+          fi
+
+          validator_path="${RUNNER_TEMP}/validate-documentation-proposal.py"
+          if ! git show "${BASE_SHA}:.github/scripts/validate-documentation-proposal.py" \
+            > "${validator_path}"; then
+            echo "Could not load the trusted validator from ${BASE_SHA}" >&2
+            exit 1
+          fi
+
+          python "${validator_path}" \
+            --repo-root "${GITHUB_WORKSPACE}" \
+            --base-sha "${BASE_SHA}" \
+            --agent-report "${RUNNER_TEMP}/agent-report.md" \
+            --output "${RUNNER_TEMP}/validation-result.json"
+
+      - name: Capture generated diff
+        if: always()
+        env:
+          BASE_SHA: ${{ steps.base.outputs.sha }}
+        shell: bash
+        run: |
+          git diff --binary "${BASE_SHA}" -- \
+            > "${RUNNER_TEMP}/documentation-proposal.diff"
+
+      - name: Upload proposal evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: documentation-agent-poc-${{ github.run_id }}-${{ github.run_attempt }}
+          if-no-files-found: error
+          retention-days: 14
+          path: |
+            ${{ runner.temp }}/documentation-proposal.diff
+            ${{ runner.temp }}/agent-report.md
+            ${{ runner.temp }}/validation-result.json
+
+      - name: Enforce Gemini and validation results
+        if: always()
+        env:
+          GEMINI_OUTCOME: ${{ steps.gemini.outcome }}
+          VALIDATION_OUTCOME: ${{ steps.validation.outcome }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "${GEMINI_OUTCOME:-missing}" != "success" ]; then
+            echo "Gemini proposal generation failed with outcome ${GEMINI_OUTCOME:-missing}" >&2
+            exit 1
+          fi
+          if [ "${VALIDATION_OUTCOME:-missing}" != "success" ]; then
+            echo "The deterministic proposal validator rejected the change" >&2
+            exit 1
+          fi
