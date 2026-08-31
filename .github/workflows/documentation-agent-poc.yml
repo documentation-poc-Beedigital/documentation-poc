@@ -140,7 +140,8 @@ jobs:
             --repo-root "${GITHUB_WORKSPACE}" \
             --ticket-file "${RUNNER_TEMP}/documentation-ticket.json" \
             --prompt-file "${RUNNER_TEMP}/documentation-agent-poc.md" \
-            --agent-report "${RUNNER_TEMP}/agent-report.md"
+            --agent-report "${RUNNER_TEMP}/agent-report.md"\
+            --timeout 300
 
       - name: Ensure an agent report exists
         if: always()
