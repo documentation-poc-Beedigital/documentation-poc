@@ -17,7 +17,7 @@ from pathlib import Path, PurePosixPath
 from typing import Callable, Mapping, Sequence
 
 
-MODEL = "gemini-3.7-flash"
+MODEL = "gemini-3.6-flash"
 API_URL = (
     "https://generativelanguage.googleapis.com/v1beta/models/"
     f"{MODEL}:generateContent"
