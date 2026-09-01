@@ -233,7 +233,7 @@ class DocumentationProposalGeneratorTests(unittest.TestCase):
         generation_config = self.captured_request["generationConfig"]
         self.assertEqual(4096, generation_config["maxOutputTokens"])
         response_text = generation_config["responseFormat"]["text"]
-        self.assertEqual("application/json", response_text["mimeType"])
+        self.assertEqual("APPLICATION_JSON", response_text["mimeType"])
         schema = response_text["schema"]
         self.assertIs(False, schema["additionalProperties"])
         self.assertEqual(sorted(GENERATOR.PROPOSAL_FIELDS), schema["required"])
