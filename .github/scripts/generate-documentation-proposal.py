@@ -6,8 +6,11 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
+import socket
 import stat
 import sys
+import time
 import urllib.error
 import urllib.request
 from pathlib import Path, PurePosixPath
@@ -15,10 +18,17 @@ from typing import Callable, Mapping, Sequence
 
 
 MODEL = "gemini-3.7-flash"
-API_URL = "https://generativelanguage.googleapis.com/v1beta/interactions"
+API_URL = (
+    "https://generativelanguage.googleapis.com/v1beta/models/"
+    f"{MODEL}:generateContent"
+)
 MAX_DOCUMENTATION_BYTES = 3_000_000
 MAX_FIELD_CHARACTERS = 4_000
 MAX_REPORT_BYTES = 16_384
+MAX_HTTP_ERROR_BODY_BYTES = 2_048
+MAX_HTTP_ERROR_MESSAGE_CHARACTERS = 240
+RETRY_DELAYS = (2.0, 5.0)
+TRANSIENT_HTTP_CODES = frozenset({429, 500, 502, 503, 504})
 PROPOSAL_FIELDS = {
     "decision",
     "document",
@@ -146,20 +156,60 @@ def build_request(
         separators=(",", ":"),
     )
     return {
-        "model": MODEL,
-        "store": False,
-        "system_instruction": system_instruction,
-        "input": untrusted_data,
-        "tools": [],
-        "response_format": [
+        "systemInstruction": {"parts": [{"text": system_instruction}]},
+        "contents": [
             {
-                "type": "text",
-                "mime_type": "application/json",
-                "schema": PROPOSAL_SCHEMA,
+                "role": "user",
+                "parts": [{"text": untrusted_data}],
             }
         ],
-        "generation_config": {"max_output_tokens": 4096},
+        "generationConfig": {
+            "responseFormat": {
+                "text": {
+                    "mimeType": "application/json",
+                    "schema": PROPOSAL_SCHEMA,
+                }
+            },
+            "maxOutputTokens": 4096,
+        },
     }
+
+
+def sanitize_http_error_body(error: urllib.error.HTTPError, api_key: str) -> str:
+    try:
+        raw_body = error.read(MAX_HTTP_ERROR_BODY_BYTES + 1)
+    except OSError:
+        raw_body = b""
+
+    text = raw_body[:MAX_HTTP_ERROR_BODY_BYTES].decode("utf-8", errors="replace")
+    try:
+        parsed = json.loads(text)
+    except json.JSONDecodeError:
+        parsed = None
+    if isinstance(parsed, dict):
+        nested_error = parsed.get("error")
+        if isinstance(nested_error, dict) and isinstance(nested_error.get("message"), str):
+            text = nested_error["message"]
+        elif isinstance(parsed.get("message"), str):
+            text = parsed["message"]
+
+    if api_key:
+        text = text.replace(api_key, "[REDACTED]")
+    text = re.sub(r"[\x00-\x1f\x7f]+", " ", text)
+    text = " ".join(text.split())
+    if not text:
+        return "response body unavailable"
+    if len(text) > MAX_HTTP_ERROR_MESSAGE_CHARACTERS:
+        return text[: MAX_HTTP_ERROR_MESSAGE_CHARACTERS - 3] + "..."
+    return text
+
+
+def is_read_timeout(error: BaseException) -> bool:
+    if isinstance(error, (TimeoutError, socket.timeout)):
+        return True
+    return isinstance(error, urllib.error.URLError) and isinstance(
+        error.reason, (TimeoutError, socket.timeout)
+    )
 
 
 def http_transport(
@@ -167,6 +217,9 @@ def http_transport(
     api_key: str,
     payload: dict[str, object],
     timeout: float,
+    *,
+    opener: Callable[..., object] | None = None,
+    sleeper: Callable[[float], None] = time.sleep,
 ) -> dict[str, object]:
     request = urllib.request.Request(
         endpoint,
@@ -177,13 +230,30 @@ def http_transport(
         },
         method="POST",
     )
-    try:
-        with urllib.request.urlopen(request, timeout=timeout) as response:
-            raw_response = response.read()
-    except urllib.error.HTTPError as error:
-        raise ProposalError(f"Gemini API returned HTTP {error.code}") from error
-    except urllib.error.URLError as error:
-        raise ProposalError(f"Gemini API request failed: {error.reason}") from error
+    open_request = opener or urllib.request.urlopen
+    attempts = len(RETRY_DELAYS) + 1
+    for attempt in range(attempts):
+        try:
+            with open_request(request, timeout=timeout) as response:
+                raw_response = response.read()
+            break
+        except urllib.error.HTTPError as error:
+            detail = sanitize_http_error_body(error, api_key)
+            if error.code in TRANSIENT_HTTP_CODES and attempt < attempts - 1:
+                sleeper(RETRY_DELAYS[attempt])
+                continue
+            raise ProposalError(
+                f"Gemini API returned HTTP {error.code}: {detail}"
+            ) from error
+        except (TimeoutError, socket.timeout, urllib.error.URLError) as error:
+            if is_read_timeout(error):
+                if attempt < attempts - 1:
+                    sleeper(RETRY_DELAYS[attempt])
+                    continue
+                raise ProposalError(
+                    f"Gemini API request timed out after {attempts} attempts"
+                ) from error
+            raise ProposalError("Gemini API request failed") from error
 
     try:
         parsed = json.loads(raw_response.decode("utf-8"))
@@ -195,30 +265,26 @@ def http_transport(
 
 
 def extract_output_text(response: Mapping[str, object]) -> str:
-    if response.get("status") != "completed":
-        raise ProposalError(
-            f"Gemini interaction did not complete successfully: {response.get('status')!r}"
-        )
-    steps = response.get("steps")
-    if not isinstance(steps, list):
-        raise ProposalError("Gemini interaction response does not contain steps")
-
-    for step in reversed(steps):
-        if not isinstance(step, dict) or step.get("type") != "model_output":
-            continue
-        content = step.get("content")
-        if not isinstance(content, list):
-            continue
-        text_parts = [
-            item["text"]
-            for item in content
-            if isinstance(item, dict)
-            and item.get("type") == "text"
-            and isinstance(item.get("text"), str)
-        ]
-        if text_parts:
-            return "".join(text_parts)
-    raise ProposalError("Gemini interaction response contains no model text output")
+    candidates = response.get("candidates")
+    if not isinstance(candidates, list) or not candidates:
+        raise ProposalError("Gemini generateContent response contains no candidates")
+    first_candidate = candidates[0]
+    if not isinstance(first_candidate, dict):
+        raise ProposalError("Gemini generateContent first candidate is invalid")
+    content = first_candidate.get("content")
+    if not isinstance(content, dict):
+        raise ProposalError("Gemini generateContent first candidate contains no content")
+    parts = content.get("parts")
+    if not isinstance(parts, list):
+        raise ProposalError("Gemini generateContent candidate content contains no parts")
+    text = "".join(
+        part["text"]
+        for part in parts
+        if isinstance(part, dict) and isinstance(part.get("text"), str)
+    )
+    if not text:
+        raise ProposalError("Gemini generateContent response contains no textual content")
+    return text
 
 
 def parse_proposal(output_text: str) -> dict[str, str]:
