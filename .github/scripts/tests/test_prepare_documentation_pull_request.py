@@ -127,6 +127,48 @@ class DocumentationPullRequestPreparationTests(unittest.TestCase):
         )
         self.write_validation()
 
+    def test_title_adds_canonical_prefix_when_summary_has_no_prefix(self) -> None:
+        self.assertEqual(
+            "DOC-22 [Documentación] Update invitation expiry",
+            PREPARER.build_pull_request_title("DOC-22", "Update invitation expiry"),
+        )
+
+    def test_title_does_not_duplicate_canonical_prefix(self) -> None:
+        self.assertEqual(
+            "DOC-22 [Documentación] Update invitation expiry",
+            PREPARER.build_pull_request_title(
+                "DOC-22", "[Documentación] Update invitation expiry"
+            ),
+        )
+
+    def test_title_normalizes_uppercase_prefix(self) -> None:
+        self.assertEqual(
+            "DOC-22 [Documentación] Update invitation expiry",
+            PREPARER.build_pull_request_title(
+                "DOC-22", "[DOCUMENTACIÓN] Update invitation expiry"
+            ),
+        )
+
+    def test_title_ignores_leading_spaces_without_changing_body_summary(self) -> None:
+        original_summary = "   [Documentación] Update invitation expiry"
+        self.assertEqual(
+            "DOC-22 [Documentación] Update invitation expiry",
+            PREPARER.build_pull_request_title("DOC-22", original_summary),
+        )
+
+        body = PREPARER.build_pull_request_body(
+            {"issue_key": "DOC-22", "issue_summary": original_summary},
+            "Decision: proposal\n",
+            "https://github.com/example/repository/actions/runs/1",
+        )
+        self.assertIn(PREPARER.escape_markdown_inline(original_summary), body)
+
+    def test_title_rejects_summary_formed_only_by_prefix(self) -> None:
+        with self.assertRaisesRegex(
+            PREPARER.PublicationPreparationError, "meaningful text"
+        ):
+            PREPARER.build_pull_request_title("DOC-22", "  [Documentación]   ")
+
     def test_valid_proposal_builds_safe_publication_metadata_and_body(self) -> None:
         self.make_valid_proposal()
 
