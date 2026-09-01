@@ -51,6 +51,7 @@ jobs:
           echo "sha=${base_sha}" >> "${GITHUB_OUTPUT}"
 
       - name: Validate and serialize ticket inputs
+        id: ticket
         env:
           ISSUE_KEY: ${{ inputs.issue_key }}
           ISSUE_SUMMARY: ${{ inputs.issue_summary }}
@@ -109,6 +110,10 @@ jobs:
               json.dumps(ticket, ensure_ascii=False, indent=2) + "\n",
               encoding="utf-8",
           )
+          with Path(os.environ["GITHUB_OUTPUT"]).open(
+              "a", encoding="utf-8", newline="\n"
+          ) as output:
+              output.write(f"issue_key={issue_key}\n")
           PY
 
       - name: Run validator tests before exposing credentials
@@ -132,6 +137,8 @@ jobs:
             > "${RUNNER_TEMP}/documentation-agent-poc.md"
           git show "${BASE_SHA}:.github/scripts/prepare-documentation-pull-request.py" \
             > "${RUNNER_TEMP}/prepare-documentation-pull-request.py"
+          git show "${BASE_SHA}:.github/scripts/notify-jira-documentation-abstention.py" \
+            > "${RUNNER_TEMP}/notify-jira-documentation-abstention.py"
 
       - name: Generate documentation proposal with Gemini
         id: gemini
@@ -284,6 +291,42 @@ jobs:
             --repository "${REPOSITORY}" \
             --server-url "${SERVER_URL}"
 
+      - name: Prepare Jira abstention notification
+        id: jira_notification_plan
+        if: steps.publication.outputs.decision == 'abstention'
+        env:
+          EXPECTED_ISSUE_KEY: ${{ steps.ticket.outputs.issue_key }}
+          SERVER_URL: ${{ github.server_url }}
+          REPOSITORY: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python "${RUNNER_TEMP}/notify-jira-documentation-abstention.py" prepare \
+            --validation-result "${RUNNER_TEMP}/validation-result.json" \
+            --ticket-file "${RUNNER_TEMP}/documentation-ticket.json" \
+            --agent-report "${RUNNER_TEMP}/agent-report.md" \
+            --payload-file "${RUNNER_TEMP}/jira-abstention-payload.json" \
+            --github-output "${GITHUB_OUTPUT}" \
+            --expected-issue-key "${EXPECTED_ISSUE_KEY}" \
+            --server-url "${SERVER_URL}" \
+            --repository "${REPOSITORY}" \
+            --run-id "${RUN_ID}"
+
+      - name: Notify Jira of valid documentation abstention
+        id: jira_notification
+        if: steps.jira_notification_plan.outputs.notify == 'true'
+        continue-on-error: true
+        env:
+          JIRA_AUTOMATION_WEBHOOK_URL: ${{ secrets.JIRA_AUTOMATION_WEBHOOK_URL }}
+          JIRA_AUTOMATION_WEBHOOK_TOKEN: ${{ secrets.JIRA_AUTOMATION_WEBHOOK_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python "${RUNNER_TEMP}/notify-jira-documentation-abstention.py" send \
+            --payload-file "${RUNNER_TEMP}/jira-abstention-payload.json" \
+            --timeout 30
+
       - name: Publish validated documentation pull request
         if: steps.publication.outputs.publish == 'true'
         env:
@@ -371,3 +414,17 @@ jobs:
 
           printf 'Pull request created: [%s](%s)\n' \
             "${pr_url}" "${pr_url}" >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Enforce Jira abstention notification result
+        if: always()
+        env:
+          NOTIFICATION_REQUIRED: ${{ steps.jira_notification_plan.outputs.notify }}
+          NOTIFICATION_OUTCOME: ${{ steps.jira_notification.outcome }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "${NOTIFICATION_REQUIRED:-false}" = "true" ] && \
+             [ "${NOTIFICATION_OUTCOME:-missing}" != "success" ]; then
+            echo "Jira abstention notification failed" >&2
+            exit 1
+          fi
