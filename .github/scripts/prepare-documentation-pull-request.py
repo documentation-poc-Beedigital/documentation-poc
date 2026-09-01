@@ -17,6 +17,7 @@ ISSUE_KEY_PATTERN = re.compile(
 )
 FULL_SHA_PATTERN = re.compile(r"(?:[0-9a-f]{40}|[0-9a-f]{64})")
 POSITIVE_INTEGER_PATTERN = re.compile(r"[1-9][0-9]*")
+DOCUMENTATION_PREFIX_PATTERN = re.compile(r"^\[documentación\]", re.IGNORECASE)
 REPOSITORY_PATTERN = re.compile(
     r"[A-Za-z0-9](?:[A-Za-z0-9_.-]*[A-Za-z0-9])?/"
     r"[A-Za-z0-9](?:[A-Za-z0-9_.-]*[A-Za-z0-9])?"
@@ -246,6 +247,17 @@ def escape_markdown_inline(value: str) -> str:
     return re.sub(r"([\\`*_{}\[\]()#+.!|>-])", r"\\\1", value)
 
 
+def build_pull_request_title(issue_key: str, issue_summary: str) -> str:
+    normalized_summary = issue_summary.strip()
+    while match := DOCUMENTATION_PREFIX_PATTERN.match(normalized_summary):
+        normalized_summary = normalized_summary[match.end() :].lstrip()
+    if not normalized_summary:
+        raise PublicationPreparationError(
+            "issue_summary must contain meaningful text after [Documentación]"
+        )
+    return f"{issue_key} [Documentación] {normalized_summary}"
+
+
 def build_pull_request_body(
     ticket: Mapping[str, str],
     report: str,
@@ -311,7 +323,7 @@ def prepare_publication(
         "automation/documentation-"
         f"{ticket['issue_key'].lower()}-{run_id}-{run_attempt}"
     )
-    title = f"{ticket['issue_key']} [Documentación] {ticket['issue_summary']}"
+    title = build_pull_request_title(ticket["issue_key"], ticket["issue_summary"])
     commit_message = f"{ticket['issue_key']} Apply validated documentation proposal"
     actions_url = f"{server_url}/{repository}/actions/runs/{run_id}"
     report = read_agent_report(agent_report)
