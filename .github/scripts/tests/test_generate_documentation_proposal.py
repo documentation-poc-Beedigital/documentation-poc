@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import importlib.util
+import io
 import json
 import os
+import socket
 import sys
 import tempfile
 import unittest
+import urllib.error
 from pathlib import Path
 
 
@@ -31,6 +34,20 @@ owner: Product
 ---
 
 """
+
+
+class FakeHTTPResponse:
+    def __init__(self, payload: dict[str, object]) -> None:
+        self.body = json.dumps(payload).encode("utf-8")
+
+    def __enter__(self) -> FakeHTTPResponse:
+        return self
+
+    def __exit__(self, *args: object) -> None:
+        return None
+
+    def read(self) -> bytes:
+        return self.body
 
 
 class DocumentationProposalGeneratorTests(unittest.TestCase):
@@ -84,23 +101,19 @@ class DocumentationProposalGeneratorTests(unittest.TestCase):
 
     def response(self, proposal: dict[str, str]) -> dict[str, object]:
         return {
-            "status": "completed",
-            "steps": [
+            "candidates": [
                 {
-                    "type": "model_output",
-                    "content": [
-                        {
-                            "type": "text",
-                            "text": json.dumps(proposal, ensure_ascii=False),
-                        }
-                    ],
+                    "content": {
+                        "parts": [
+                            {"inlineData": {"mimeType": "ignored/test"}},
+                            {"text": json.dumps(proposal, ensure_ascii=False)},
+                        ]
+                    }
                 }
             ],
         }
 
-    def transport_for(self, proposal: dict[str, str]):
-        response = self.response(proposal)
-
+    def transport_response(self, response: dict[str, object]):
         def transport(
             endpoint: str,
             api_key: str,
@@ -114,6 +127,33 @@ class DocumentationProposalGeneratorTests(unittest.TestCase):
             return response
 
         return transport
+
+    def transport_for(self, proposal: dict[str, str]):
+        return self.transport_response(self.response(proposal))
+
+    def http_error(self, code: int, message: str) -> urllib.error.HTTPError:
+        body = json.dumps({"error": {"message": message}}).encode("utf-8")
+        return urllib.error.HTTPError(
+            GENERATOR.API_URL,
+            code,
+            "simulated error",
+            None,
+            io.BytesIO(body),
+        )
+
+    def sequence_opener(self, outcomes: list[object]):
+        pending = list(outcomes)
+        requests: list[object] = []
+
+        def opener(request: object, timeout: float) -> object:
+            self.assertGreater(timeout, 0)
+            requests.append(request)
+            outcome = pending.pop(0)
+            if isinstance(outcome, BaseException):
+                raise outcome
+            return outcome
+
+        return opener, requests
 
     def run_generator(self, proposal: dict[str, str]) -> dict[str, str]:
         return GENERATOR.generate_and_apply(
@@ -181,19 +221,140 @@ class DocumentationProposalGeneratorTests(unittest.TestCase):
         )
 
         assert self.captured_request is not None
-        self.assertEqual("gemini-3.7-flash", self.captured_request["model"])
-        self.assertIs(False, self.captured_request["store"])
-        self.assertEqual([], self.captured_request["tools"])
-        response_format = self.captured_request["response_format"]
-        self.assertIsInstance(response_format, list)
-        schema = response_format[0]["schema"]
+        self.assertEqual(
+            "https://generativelanguage.googleapis.com/v1beta/models/"
+            "gemini-3.7-flash:generateContent",
+            GENERATOR.API_URL,
+        )
+        self.assertEqual(
+            {"systemInstruction", "contents", "generationConfig"},
+            set(self.captured_request),
+        )
+        generation_config = self.captured_request["generationConfig"]
+        self.assertEqual(4096, generation_config["maxOutputTokens"])
+        response_text = generation_config["responseFormat"]["text"]
+        self.assertEqual("application/json", response_text["mimeType"])
+        schema = response_text["schema"]
         self.assertIs(False, schema["additionalProperties"])
         self.assertEqual(sorted(GENERATOR.PROPOSAL_FIELDS), schema["required"])
-        untrusted_input = json.loads(self.captured_request["input"])
+        contents = self.captured_request["contents"]
+        self.assertEqual("user", contents[0]["role"])
+        untrusted_input = json.loads(contents[0]["parts"][0]["text"])
         self.assertEqual("DOC-1", untrusted_input["ticket"]["issue_key"])
         self.assertTrue(untrusted_input["documents"])
-        self.assertNotIn("DOC-1", self.captured_request["system_instruction"])
+        system_instruction = self.captured_request["systemInstruction"]
+        self.assertNotIn("DOC-1", system_instruction["parts"][0]["text"])
         self.assertNotIn("test-secret-key", json.dumps(self.captured_request))
+
+    def test_generate_content_response_requires_candidates(self) -> None:
+        with self.assertRaisesRegex(GENERATOR.ProposalError, "no candidates"):
+            GENERATOR.extract_output_text({})
+
+    def test_generate_content_response_requires_text(self) -> None:
+        response = {
+            "candidates": [
+                {"content": {"parts": [{"inlineData": {"data": "ignored"}}]}}
+            ]
+        }
+        with self.assertRaisesRegex(GENERATOR.ProposalError, "no textual content"):
+            GENERATOR.extract_output_text(response)
+
+    def test_generate_content_invalid_proposal_json_is_rejected(self) -> None:
+        response = {"candidates": [{"content": {"parts": [{"text": "{invalid"}]}}]}
+        with self.assertRaisesRegex(GENERATOR.ProposalError, "not valid JSON"):
+            GENERATOR.parse_proposal(GENERATOR.extract_output_text(response))
+
+    def test_http_500_is_retried_then_succeeds(self) -> None:
+        expected = self.response(self.proposal())
+        opener, requests = self.sequence_opener(
+            [self.http_error(500, "temporary backend failure"), FakeHTTPResponse(expected)]
+        )
+        sleeps: list[float] = []
+
+        result = GENERATOR.http_transport(
+            GENERATOR.API_URL,
+            "test-secret-key",
+            {"contents": []},
+            15.0,
+            opener=opener,
+            sleeper=sleeps.append,
+        )
+
+        self.assertEqual(expected, result)
+        self.assertEqual([2.0], sleeps)
+        self.assertEqual(2, len(requests))
+        self.assertEqual(
+            "test-secret-key", requests[0].get_header("X-goog-api-key")
+        )
+        self.assertNotIn("test-secret-key", requests[0].full_url)
+
+    def test_transient_http_retries_are_exhausted_after_three_attempts(self) -> None:
+        opener, requests = self.sequence_opener(
+            [
+                self.http_error(500, "first failure"),
+                self.http_error(503, "second failure"),
+                self.http_error(504, "final failure test-secret-key"),
+            ]
+        )
+        sleeps: list[float] = []
+
+        with self.assertRaises(GENERATOR.ProposalError) as raised:
+            GENERATOR.http_transport(
+                GENERATOR.API_URL,
+                "test-secret-key",
+                {"contents": []},
+                15.0,
+                opener=opener,
+                sleeper=sleeps.append,
+            )
+
+        message = str(raised.exception)
+        self.assertIn("HTTP 504", message)
+        self.assertIn("final failure", message)
+        self.assertNotIn("test-secret-key", message)
+        self.assertEqual([2.0, 5.0], sleeps)
+        self.assertEqual(3, len(requests))
+
+    def test_http_401_is_not_retried(self) -> None:
+        opener, requests = self.sequence_opener(
+            [self.http_error(401, "invalid credential test-secret-key")]
+        )
+        sleeps: list[float] = []
+
+        with self.assertRaises(GENERATOR.ProposalError) as raised:
+            GENERATOR.http_transport(
+                GENERATOR.API_URL,
+                "test-secret-key",
+                {"contents": []},
+                15.0,
+                opener=opener,
+                sleeper=sleeps.append,
+            )
+
+        self.assertIn("HTTP 401", str(raised.exception))
+        self.assertNotIn("test-secret-key", str(raised.exception))
+        self.assertEqual([], sleeps)
+        self.assertEqual(1, len(requests))
+
+    def test_read_timeout_is_retried_then_succeeds(self) -> None:
+        expected = self.response(self.proposal())
+        opener, requests = self.sequence_opener(
+            [socket.timeout("read timed out"), FakeHTTPResponse(expected)]
+        )
+        sleeps: list[float] = []
+
+        result = GENERATOR.http_transport(
+            GENERATOR.API_URL,
+            "test-secret-key",
+            {"contents": []},
+            15.0,
+            opener=opener,
+            sleeper=sleeps.append,
+        )
+
+        self.assertEqual(expected, result)
+        self.assertEqual([2.0], sleeps)
+        self.assertEqual(2, len(requests))
 
     def test_reads_regular_docs_and_snapshots_as_evidence(self) -> None:
         documents = GENERATOR.read_documentation(self.root)
