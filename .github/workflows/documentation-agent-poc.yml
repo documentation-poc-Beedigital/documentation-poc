@@ -27,7 +27,8 @@ jobs:
     env:
       PYTHONDONTWRITEBYTECODE: "1"
     permissions:
-      contents: read
+      contents: write
+      pull-requests: write
 
     steps:
       - name: Checkout main without persisted credentials
@@ -119,7 +120,7 @@ jobs:
             -p 'test_*.py' \
             -v
 
-      - name: Stage trusted generator and prompt
+      - name: Stage trusted automation scripts and prompt
         env:
           BASE_SHA: ${{ steps.base.outputs.sha }}
         shell: bash
@@ -129,6 +130,8 @@ jobs:
             > "${RUNNER_TEMP}/generate-documentation-proposal.py"
           git show "${BASE_SHA}:.github/prompts/documentation-agent-poc.md" \
             > "${RUNNER_TEMP}/documentation-agent-poc.md"
+          git show "${BASE_SHA}:.github/scripts/prepare-documentation-pull-request.py" \
+            > "${RUNNER_TEMP}/prepare-documentation-pull-request.py"
 
       - name: Generate documentation proposal with Gemini
         id: gemini
@@ -256,3 +259,115 @@ jobs:
             echo "The deterministic proposal validator rejected the change" >&2
             exit 1
           fi
+
+      - name: Prepare validated pull request publication
+        id: publication
+        env:
+          BASE_SHA: ${{ steps.base.outputs.sha }}
+          RUN_ID: ${{ github.run_id }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
+          REPOSITORY: ${{ github.repository }}
+          SERVER_URL: ${{ github.server_url }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python "${RUNNER_TEMP}/prepare-documentation-pull-request.py" \
+            --repo-root "${GITHUB_WORKSPACE}" \
+            --validation-result "${RUNNER_TEMP}/validation-result.json" \
+            --ticket-file "${RUNNER_TEMP}/documentation-ticket.json" \
+            --agent-report "${RUNNER_TEMP}/agent-report.md" \
+            --body-file "${RUNNER_TEMP}/pull-request-body.md" \
+            --github-output "${GITHUB_OUTPUT}" \
+            --base-sha "${BASE_SHA}" \
+            --run-id "${RUN_ID}" \
+            --run-attempt "${RUN_ATTEMPT}" \
+            --repository "${REPOSITORY}" \
+            --server-url "${SERVER_URL}"
+
+      - name: Publish validated documentation pull request
+        if: steps.publication.outputs.publish == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_PROMPT_DISABLED: "1"
+          BASE_SHA: ${{ steps.base.outputs.sha }}
+          BRANCH: ${{ steps.publication.outputs.branch }}
+          DOCUMENT: ${{ steps.publication.outputs.document }}
+          COMMIT_MESSAGE: ${{ steps.publication.outputs.commit_message }}
+          PR_TITLE: ${{ steps.publication.outputs.pr_title }}
+          PR_BODY: ${{ steps.publication.outputs.pr_body }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          current_sha="$(git rev-parse --verify 'HEAD^{commit}')"
+          if [ "${current_sha}" != "${BASE_SHA}" ]; then
+            echo "HEAD changed before publication: expected ${BASE_SHA}, got ${current_sha}" >&2
+            exit 1
+          fi
+          git diff --check "${BASE_SHA}" --
+
+          git config --local user.name "github-actions[bot]"
+          git config --local user.email \
+            "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch --create "${BRANCH}" "${BASE_SHA}"
+          git add -- "${DOCUMENT}"
+
+          mapfile -d '' staged_files < <(git diff --cached --name-only -z --)
+          if [ "${#staged_files[@]}" -ne 1 ] || \
+             [ "${staged_files[0]:-}" != "${DOCUMENT}" ]; then
+            echo "The staged change does not match the validated Markdown" >&2
+            exit 1
+          fi
+          staged_status="$(git diff --cached --name-status --no-renames -- "${DOCUMENT}")"
+          if [ "${staged_status}" != $'M\t'"${DOCUMENT}" ]; then
+            echo "The staged Markdown is not a simple modification" >&2
+            exit 1
+          fi
+          git diff --cached --check
+          if ! git diff --quiet --; then
+            echo "Unstaged tracked changes remain after staging the validated Markdown" >&2
+            exit 1
+          fi
+          git commit -m "${COMMIT_MESSAGE}" -- "${DOCUMENT}"
+
+          askpass_path="${RUNNER_TEMP}/git-askpass.sh"
+          python - "${askpass_path}" <<'PY'
+          import os
+          import sys
+          from pathlib import Path
+
+          path = Path(sys.argv[1])
+          path.write_text(
+              "#!/bin/sh\n"
+              "case \"$1\" in\n"
+              "  *Username*) printf '%s\\n' 'x-access-token' ;;\n"
+              "  *Password*) printf '%s\\n' \"$GH_TOKEN\" ;;\n"
+              "  *) exit 1 ;;\n"
+              "esac\n",
+              encoding="utf-8",
+              newline="\n",
+          )
+          os.chmod(path, 0o700)
+          PY
+          export GIT_ASKPASS="${askpass_path}"
+          export GIT_ASKPASS_REQUIRE=force
+          export GIT_TERMINAL_PROMPT=0
+          git push --set-upstream origin "HEAD:refs/heads/${BRANCH}"
+
+          set +e
+          pr_url="$(gh pr create \
+            --base main \
+            --head "${BRANCH}" \
+            --title "${PR_TITLE}" \
+            --body-file "${PR_BODY}")"
+          pr_status=$?
+          set -e
+          if [ "${pr_status}" -ne 0 ] || [ -z "${pr_url}" ]; then
+            echo "::error title=Pull request creation failed::The branch ${BRANCH} was pushed successfully but no pull request was created. The branch was not deleted."
+            printf 'Publication failed after pushing branch `%s`. No automatic deletion was attempted.\n' \
+              "${BRANCH}" >> "${GITHUB_STEP_SUMMARY}"
+            exit 1
+          fi
+
+          printf 'Pull request created: [%s](%s)\n' \
+            "${pr_url}" "${pr_url}" >> "${GITHUB_STEP_SUMMARY}"
