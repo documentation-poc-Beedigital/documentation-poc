@@ -223,7 +223,7 @@ class DocumentationProposalGeneratorTests(unittest.TestCase):
         assert self.captured_request is not None
         self.assertEqual(
             "https://generativelanguage.googleapis.com/v1beta/models/"
-            "gemini-3.7-flash:generateContent",
+            "gemini-3.6-flash:generateContent",
             GENERATOR.API_URL,
         )
         self.assertEqual(
