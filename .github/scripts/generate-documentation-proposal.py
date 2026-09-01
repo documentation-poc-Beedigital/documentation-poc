@@ -166,7 +166,7 @@ def build_request(
         "generationConfig": {
             "responseFormat": {
                 "text": {
-                    "mimeType": "application/json",
+                    "mimeType": "APPLICATION_JSON",
                     "schema": PROPOSAL_SCHEMA,
                 }
             },
