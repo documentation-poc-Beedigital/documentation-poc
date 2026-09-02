@@ -15,7 +15,8 @@ Analiza el ticket validado proporcionado como evidencia de negocio, inspecciona 
 - Los archivos bajo `docs/production-snapshots/` son evidencia de solo lectura. Nunca los modifiques.
 - Solo puedes proponer un cambio sobre un único archivo Markdown ya existente con extensión `.md` o `.mdx` dentro de `docs/`.
 - No añadas, elimines ni renombres archivos.
-- No modifiques el frontmatter del documento.
+- No propongas cambios del frontmatter. En particular, no modifiques `version`, `article_id`, `status`, `owner` ni ningún otro campo de metadatos.
+- El incremento de `version` lo aplica exclusivamente código Python determinista después de aceptar la sustitución documental; Gemini nunca lo propone ni lo ejecuta.
 - No modifiques workflows, scripts, prompts, README ni ningún archivo fuera de `docs/`.
 - No ejecutes ni prepares commit, push, merge, pull request, rama, tag o publicación.
 

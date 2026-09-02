@@ -220,6 +220,47 @@ def extract_frontmatter(text: str, path: str) -> tuple[str, ...]:
     raise ValidationError(f"Unclosed frontmatter in {path}")
 
 
+def increment_frontmatter_version(text: str, path: str) -> str:
+    lines = text.splitlines(keepends=True)
+    if not lines or lines[0].rstrip("\r\n").strip() != "---":
+        raise ValidationError(f"Document must have frontmatter: {path}")
+
+    closing_index = next(
+        (
+            index
+            for index in range(1, len(lines))
+            if lines[index].rstrip("\r\n").strip() == "---"
+        ),
+        None,
+    )
+    if closing_index is None:
+        raise ValidationError(f"Unclosed frontmatter in {path}")
+
+    version_indices = [
+        index
+        for index in range(1, closing_index)
+        if re.match(r"^\s*version\s*:", lines[index].rstrip("\r\n"))
+    ]
+    if not version_indices:
+        raise ValidationError(f"Frontmatter must contain version: {path}")
+    if len(version_indices) != 1:
+        raise ValidationError(
+            f"Frontmatter must contain exactly one version line: {path}"
+        )
+
+    version_index = version_indices[0]
+    match = re.fullmatch(
+        r"version: ([0-9]+)\.([0-9]+)(\r?\n)?",
+        lines[version_index],
+    )
+    if match is None:
+        raise ValidationError(f"Frontmatter version must use MAJOR.MINOR: {path}")
+
+    major, minor, line_ending = match.groups()
+    lines[version_index] = f"version: {major}.{int(minor) + 1}{line_ending or ''}"
+    return "".join(lines)
+
+
 def read_base_text(root: Path, base_sha: str, path: str) -> str:
     process = run_git(root, "show", f"{base_sha}:{path}")
     try:
@@ -333,10 +374,6 @@ def validate_repository(
 
             before_text = read_base_text(root, base_sha, raw_path)
             after_text = read_worktree_text(candidate, raw_path)
-            if extract_frontmatter(before_text, raw_path) != extract_frontmatter(
-                after_text, raw_path
-            ):
-                raise ValidationError(f"Frontmatter changes are not allowed: {raw_path}")
 
             diff = run_git(
                 root, "diff", "--binary", "--no-ext-diff", base_sha, "--", raw_path
@@ -372,22 +409,44 @@ def validate_repository(
             if before_text is not None and after_text is not None:
                 previous_text = report_fields["Texto anterior"]
                 proposed_text = report_fields["Texto propuesto"]
-                if previous_text not in before_text:
+                occurrences = before_text.count(previous_text)
+                if occurrences != 1:
                     errors.append(
-                        "Agent report Texto anterior does not exist in the base document"
+                        "Agent report Texto anterior must exist exactly once in the base "
+                        f"document; found {occurrences}"
                     )
-                if proposed_text not in after_text:
+                if previous_text == proposed_text:
                     errors.append(
-                        "Agent report Texto propuesto does not exist in the modified document"
-                    )
-                if previous_text in after_text:
-                    errors.append(
-                        "Agent report Texto anterior still exists in the modified document"
+                        "Agent report Texto anterior and Texto propuesto must be different"
                     )
                 if proposed_text in before_text:
                     errors.append(
                         "Agent report Texto propuesto already exists in the base document"
                     )
+                if occurrences == 1 and previous_text != proposed_text:
+                    proposed_document = before_text.replace(
+                        previous_text, proposed_text, 1
+                    )
+                    try:
+                        if extract_frontmatter(
+                            before_text, selected_path or "unknown"
+                        ) != extract_frontmatter(
+                            proposed_document, selected_path or "unknown"
+                        ):
+                            raise ValidationError(
+                                "Gemini must not modify frontmatter: "
+                                f"{selected_path or 'unknown'}"
+                            )
+                        expected_document = increment_frontmatter_version(
+                            proposed_document, selected_path or "unknown"
+                        )
+                        if after_text != expected_document:
+                            raise ValidationError(
+                                "Modified document must contain exactly the reported "
+                                "single-line replacement and deterministic version increment"
+                            )
+                    except ValidationError as error:
+                        errors.append(str(error))
         else:
             if has_changes:
                 errors.append("An abstención report requires an empty diff")
