@@ -184,6 +184,8 @@ class DocumentationProposalGeneratorTests(unittest.TestCase):
         content = self.document.read_text(encoding="utf-8")
         self.assertNotIn("Invitations expire after 24 hours.", content)
         self.assertIn("Invitations expire after 48 hours.", content)
+        self.assertIn("version: 1.1", content)
+        self.assertIn("status: published", content)
         self.assertEqual(
             "Decisión: propuesta\n"
             "Documento: docs/invitaciones.md\n"
@@ -210,6 +212,85 @@ class DocumentationProposalGeneratorTests(unittest.TestCase):
         self.assertEqual("abstention", result["decision"])
         self.assertEqual(before, self.document.read_text(encoding="utf-8"))
         self.assertIn("Decisión: abstención\n", self.report_file.read_text(encoding="utf-8"))
+
+    def test_minor_version_increment_is_numeric_and_preserves_major(self) -> None:
+        cases = (("1.0", "1.1"), ("1.9", "1.10"), ("2.3", "2.4"))
+        for original, expected in cases:
+            with self.subTest(original=original):
+                self.document.write_text(
+                    FRONTMATTER.replace("version: 1.0", f"version: {original}")
+                    + "# Invitations\n\nInvitations expire after 24 hours.\n",
+                    encoding="utf-8",
+                    newline="",
+                )
+
+                self.run_generator(self.proposal())
+
+                content = self.document.read_text(encoding="utf-8")
+                self.assertIn(f"version: {expected}\n", content)
+                self.assertNotIn(f"version: {original}\n", content)
+
+    def test_rejected_proposal_does_not_increment_version(self) -> None:
+        self.assert_rejected_without_change(
+            self.proposal(old_text="text that is not present"),
+            "old_text must appear exactly once",
+        )
+        self.assertIn("version: 1.0", self.document.read_text(encoding="utf-8"))
+
+    def test_rejects_document_without_frontmatter(self) -> None:
+        self.document.write_text(
+            "# Invitations\n\nInvitations expire after 24 hours.\n",
+            encoding="utf-8",
+            newline="",
+        )
+        self.assert_rejected_without_change(self.proposal(), "must have frontmatter")
+
+    def test_rejects_frontmatter_without_version(self) -> None:
+        self.document.write_text(
+            FRONTMATTER.replace("version: 1.0\n", "")
+            + "# Invitations\n\nInvitations expire after 24 hours.\n",
+            encoding="utf-8",
+            newline="",
+        )
+        self.assert_rejected_without_change(self.proposal(), "must contain version")
+
+    def test_rejects_invalid_version_format(self) -> None:
+        self.document.write_text(
+            FRONTMATTER.replace("version: 1.0", "version: 1.0.0")
+            + "# Invitations\n\nInvitations expire after 24 hours.\n",
+            encoding="utf-8",
+            newline="",
+        )
+        self.assert_rejected_without_change(self.proposal(), "must use MAJOR.MINOR")
+
+    def test_rejects_multiple_version_lines(self) -> None:
+        self.document.write_text(
+            FRONTMATTER.replace("version: 1.0", "version: 1.0\nversion: 2.3")
+            + "# Invitations\n\nInvitations expire after 24 hours.\n",
+            encoding="utf-8",
+            newline="",
+        )
+        self.assert_rejected_without_change(
+            self.proposal(), "must contain exactly one version line"
+        )
+
+    def test_version_increment_preserves_all_other_frontmatter(self) -> None:
+        before_frontmatter = GENERATOR.extract_frontmatter(
+            self.document.read_text(encoding="utf-8")
+        )
+
+        self.run_generator(self.proposal())
+
+        after_frontmatter = GENERATOR.extract_frontmatter(
+            self.document.read_text(encoding="utf-8")
+        )
+        self.assertEqual(
+            tuple(
+                "version: 1.1" if line == "version: 1.0" else line
+                for line in before_frontmatter
+            ),
+            after_frontmatter,
+        )
 
     def test_request_uses_stable_model_strict_schema_and_no_tools(self) -> None:
         self.run_generator(
@@ -261,6 +342,9 @@ class DocumentationProposalGeneratorTests(unittest.TestCase):
         self.assertIn("evidencia de negocio suficiente", prompt)
         self.assertIn("evidencia complementaria de solo lectura", prompt)
         self.assertIn("No te abstengas únicamente porque un snapshot", prompt)
+        self.assertIn("código Python determinista", prompt)
+        for protected_field in ("version", "article_id", "status", "owner"):
+            self.assertIn(f"`{protected_field}`", prompt)
         self.assertIn("El agente nunca decide la publicación final y nunca hace merge", prompt)
 
     def test_ticket_change_overrides_stale_snapshot_and_applies_48_to_72(self) -> None:

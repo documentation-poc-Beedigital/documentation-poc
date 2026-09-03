@@ -31,6 +31,7 @@ owner: Product
 ---
 
 """
+BUMPED_FRONTMATTER = FRONTMATTER.replace("version: 1.0", "version: 1.1")
 
 
 class DocumentationProposalValidatorTests(unittest.TestCase):
@@ -131,7 +132,7 @@ class DocumentationProposalValidatorTests(unittest.TestCase):
     def test_valid_proposal_on_one_markdown(self) -> None:
         self.write(
             "docs/invitaciones.md",
-            FRONTMATTER + "# Invitations\n\nInvitations expire after 48 hours.\n",
+            BUMPED_FRONTMATTER + "# Invitations\n\nInvitations expire after 48 hours.\n",
         )
         self.write_agent_report(
             decision="propuesta",
@@ -163,7 +164,7 @@ class DocumentationProposalValidatorTests(unittest.TestCase):
             previous="Invitations expire after 12 hours.",
             proposed="Invitations expire after 48 hours.",
         )
-        self.assert_rejected_with("Texto anterior does not exist in the base document")
+        self.assert_rejected_with("Texto anterior must exist exactly once")
 
     def test_proposed_text_must_exist_in_modified_document(self) -> None:
         self.write(
@@ -177,7 +178,7 @@ class DocumentationProposalValidatorTests(unittest.TestCase):
             proposed="Invitations expire after 72 hours.",
         )
         self.assert_rejected_with(
-            "Texto propuesto does not exist in the modified document"
+            "must contain exactly the reported single-line replacement"
         )
 
     def test_previous_text_must_not_remain_in_modified_document(self) -> None:
@@ -194,7 +195,7 @@ class DocumentationProposalValidatorTests(unittest.TestCase):
             proposed="Invitations expire after 48 hours.",
         )
         self.assert_rejected_with(
-            "Texto anterior still exists in the modified document"
+            "must contain exactly the reported single-line replacement"
         )
 
     def test_proposed_text_must_not_exist_in_base_document(self) -> None:
@@ -337,7 +338,83 @@ class DocumentationProposalValidatorTests(unittest.TestCase):
             "docs/invitaciones.md",
             changed_frontmatter + "# Invitations\n\nInvitations expire after 48 hours.\n",
         )
-        self.assert_rejected_with("Frontmatter changes are not allowed")
+        self.write_agent_report(
+            decision="propuesta",
+            document="docs/invitaciones.md",
+            previous="Invitations expire after 24 hours.",
+            proposed="Invitations expire after 48 hours.",
+        )
+        self.assert_rejected_with("deterministic version increment")
+
+    def test_gemini_frontmatter_change_is_rejected(self) -> None:
+        changed = FRONTMATTER.replace(
+            "title: Invitations", "title: Updated Invitations"
+        ).replace("version: 1.0", "version: 1.1")
+        self.write(
+            "docs/invitaciones.md",
+            changed + "# Invitations\n\nInvitations expire after 24 hours.\n",
+        )
+        self.write_agent_report(
+            decision="propuesta",
+            document="docs/invitaciones.md",
+            previous="title: Invitations",
+            proposed="title: Updated Invitations",
+        )
+        self.assert_rejected_with("Gemini must not modify frontmatter")
+
+    def test_third_change_is_rejected(self) -> None:
+        self.write(
+            "docs/invitaciones.md",
+            BUMPED_FRONTMATTER
+            + "# Updated Invitations\n\nInvitations expire after 48 hours.\n",
+        )
+        self.write_agent_report(
+            decision="propuesta",
+            document="docs/invitaciones.md",
+            previous="Invitations expire after 24 hours.",
+            proposed="Invitations expire after 48 hours.",
+        )
+        self.assert_rejected_with(
+            "must contain exactly the reported single-line replacement"
+        )
+
+    def test_missing_invalid_and_duplicate_versions_are_rejected(self) -> None:
+        variants = (
+            ("", "must have frontmatter"),
+            (FRONTMATTER.replace("version: 1.0\n", ""), "must contain version"),
+            (
+                FRONTMATTER.replace("version: 1.0", "version: 1.0.0"),
+                "must use MAJOR.MINOR",
+            ),
+            (
+                FRONTMATTER.replace(
+                    "version: 1.0", "version: 1.0\nversion: 2.0"
+                ),
+                "exactly one version line",
+            ),
+        )
+        for frontmatter, expected_error in variants:
+            with self.subTest(expected_error=expected_error):
+                self.write(
+                    "docs/invitaciones.md",
+                    frontmatter
+                    + "# Invitations\n\nInvitations expire after 24 hours.\n",
+                )
+                self.git("add", "docs/invitaciones.md")
+                self.git("commit", "--quiet", "-m", "Set version fixture")
+                self.base_sha = self.git("rev-parse", "HEAD").stdout.strip()
+                self.write(
+                    "docs/invitaciones.md",
+                    frontmatter
+                    + "# Invitations\n\nInvitations expire after 48 hours.\n",
+                )
+                self.write_agent_report(
+                    decision="propuesta",
+                    document="docs/invitaciones.md",
+                    previous="Invitations expire after 24 hours.",
+                    proposed="Invitations expire after 48 hours.",
+                )
+                self.assert_rejected_with(expected_error)
 
     def test_new_file_is_rejected(self) -> None:
         self.write("docs/new-document.md", "# New document\n")

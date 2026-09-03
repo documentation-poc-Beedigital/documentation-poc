@@ -367,6 +367,45 @@ def extract_frontmatter(text: str) -> tuple[str, ...]:
     raise ProposalError("Document has unclosed frontmatter")
 
 
+def increment_frontmatter_version(text: str) -> str:
+    lines = text.splitlines(keepends=True)
+    if not lines or lines[0].rstrip("\r\n").strip() != "---":
+        raise ProposalError("Document must have frontmatter")
+
+    closing_index = next(
+        (
+            index
+            for index in range(1, len(lines))
+            if lines[index].rstrip("\r\n").strip() == "---"
+        ),
+        None,
+    )
+    if closing_index is None:
+        raise ProposalError("Document has unclosed frontmatter")
+
+    version_indices = [
+        index
+        for index in range(1, closing_index)
+        if re.match(r"^\s*version\s*:", lines[index].rstrip("\r\n"))
+    ]
+    if not version_indices:
+        raise ProposalError("Document frontmatter must contain version")
+    if len(version_indices) != 1:
+        raise ProposalError("Document frontmatter must contain exactly one version line")
+
+    version_index = version_indices[0]
+    match = re.fullmatch(
+        r"version: ([0-9]+)\.([0-9]+)(\r?\n)?",
+        lines[version_index],
+    )
+    if match is None:
+        raise ProposalError("Document frontmatter version must use MAJOR.MINOR")
+
+    major, minor, line_ending = match.groups()
+    lines[version_index] = f"version: {major}.{int(minor) + 1}{line_ending or ''}"
+    return "".join(lines)
+
+
 def apply_proposal(repo_root: Path, proposal: Mapping[str, str]) -> str | None:
     if proposal["decision"] == "abstention":
         return None
@@ -388,9 +427,10 @@ def apply_proposal(repo_root: Path, proposal: Mapping[str, str]) -> str | None:
     if new_text in before:
         raise ProposalError("new_text already exists in the base document")
 
-    after = before.replace(old_text, new_text, 1)
-    if extract_frontmatter(before) != extract_frontmatter(after):
+    proposed = before.replace(old_text, new_text, 1)
+    if extract_frontmatter(before) != extract_frontmatter(proposed):
         raise ProposalError("The proposed replacement changes frontmatter")
+    after = increment_frontmatter_version(proposed)
     try:
         document.write_text(after, encoding="utf-8", newline="")
     except OSError as error:
