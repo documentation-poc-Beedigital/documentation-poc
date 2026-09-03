@@ -24,6 +24,9 @@ REPOSITORY_PATTERN = re.compile(
 )
 ALLOWED_SUFFIXES = {".md", ".mdx"}
 MAX_AGENT_REPORT_BYTES = 16_384
+FRONTMATTER_VERSION_PATTERN = re.compile(
+    r"^version: ([0-9]+\.[0-9]+)\r?$", re.MULTILINE
+)
 
 
 class PublicationPreparationError(ValueError):
@@ -243,6 +246,31 @@ def read_agent_report(path: Path) -> str:
     return report
 
 
+def extract_document_version(content: bytes, label: str) -> str:
+    try:
+        text = content.decode("utf-8")
+    except UnicodeDecodeError as error:
+        raise PublicationPreparationError(f"{label} is not valid UTF-8") from error
+    matches = FRONTMATTER_VERSION_PATTERN.findall(text)
+    if len(matches) != 1:
+        raise PublicationPreparationError(
+            f"{label} must contain exactly one MAJOR.MINOR version"
+        )
+    return matches[0]
+
+
+def document_versions(root: Path, base_sha: str, document: str) -> tuple[str, str]:
+    previous = run_git(root, "show", f"{base_sha}:{document}").stdout
+    try:
+        proposed = root.joinpath(*PurePosixPath(document).parts).read_bytes()
+    except OSError as error:
+        raise PublicationPreparationError("Could not read proposed document") from error
+    return (
+        extract_document_version(previous, "Base document"),
+        extract_document_version(proposed, "Proposed document"),
+    )
+
+
 def escape_markdown_inline(value: str) -> str:
     return re.sub(r"([\\`*_{}\[\]()#+.!|>-])", r"\\\1", value)
 
@@ -328,6 +356,9 @@ def prepare_publication(
     actions_url = f"{server_url}/{repository}/actions/runs/{run_id}"
     report = read_agent_report(agent_report)
     body = build_pull_request_body(ticket, report, actions_url)
+    previous_version, proposed_version = document_versions(
+        root, base_sha, document or ""
+    )
     body_file.parent.mkdir(parents=True, exist_ok=True)
     body_file.write_text(body, encoding="utf-8", newline="\n")
     return {
@@ -338,6 +369,8 @@ def prepare_publication(
         "commit_message": commit_message,
         "pr_title": title,
         "pr_body": str(body_file),
+        "previous_version": previous_version,
+        "proposed_version": proposed_version,
     }
 
 
