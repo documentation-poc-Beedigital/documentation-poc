@@ -1,7 +1,7 @@
 ---
 article_id: ART-DOC-AGENT-001
 title: Flujo del agente de documentación
-version: 1.0
+version: 1.1
 status: published
 owner: Product
 last_reviewed: 2026-09-02
@@ -31,7 +31,7 @@ flowchart TD
 
 ## Funcionamiento actual
 
-Cuando la tarea documental pasa a **In Progress**, una persona añade manualmente la etiqueta `documentation-agent-ready`.
+Cuando una tarea con la etiqueta `documentation-task` pasa a **In Progress**, Jira añade automáticamente la etiqueta `documentation-agent-ready`.
 
 La etiqueta inicia el workflow de GitHub Actions. El agente utiliza el ticket como evidencia de negocio, revisa la documentación existente y determina si hay un documento directamente relacionado que pueda actualizarse de forma inequívoca.
 
