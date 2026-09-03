@@ -35,6 +35,7 @@ class DocumentationPullRequestPreparationTests(unittest.TestCase):
         self.document = self.root / "docs" / "invitaciones.md"
         self.document.parent.mkdir()
         self.document.write_text(
+            "---\nversion: 1.0\n---\n\n"
             "# Invitations\n\nInvitations expire after 24 hours.\n",
             encoding="utf-8",
             newline="\n",
@@ -121,6 +122,7 @@ class DocumentationPullRequestPreparationTests(unittest.TestCase):
 
     def make_valid_proposal(self) -> None:
         self.document.write_text(
+            "---\nversion: 1.1\n---\n\n"
             "# Invitations\n\nInvitations expire after 48 hours.\n",
             encoding="utf-8",
             newline="\n",
@@ -187,6 +189,8 @@ class DocumentationPullRequestPreparationTests(unittest.TestCase):
             "DOC-AGENT-1 [Documentación] Update invitation expiry",
             plan["pr_title"],
         )
+        self.assertEqual("1.0", plan["previous_version"])
+        self.assertEqual("1.1", plan["proposed_version"])
         body = self.body_file.read_text(encoding="utf-8")
         self.assertIn("DOC-AGENT-1", body)
         self.assertIn("Update invitation expiry", body)

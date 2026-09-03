@@ -139,6 +139,8 @@ jobs:
             > "${RUNNER_TEMP}/prepare-documentation-pull-request.py"
           git show "${BASE_SHA}:.github/scripts/notify-jira-documentation-abstention.py" \
             > "${RUNNER_TEMP}/notify-jira-documentation-abstention.py"
+          git show "${BASE_SHA}:.github/scripts/notify-slack-documentation-pr.py" \
+            > "${RUNNER_TEMP}/notify-slack-documentation-pr.py"
 
       - name: Generate documentation proposal with Gemini
         id: gemini
@@ -328,6 +330,7 @@ jobs:
             --timeout 30
 
       - name: Publish validated documentation pull request
+        id: pull_request
         if: steps.publication.outputs.publish == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -338,9 +341,34 @@ jobs:
           COMMIT_MESSAGE: ${{ steps.publication.outputs.commit_message }}
           PR_TITLE: ${{ steps.publication.outputs.pr_title }}
           PR_BODY: ${{ steps.publication.outputs.pr_body }}
+          ISSUE_KEY: ${{ steps.ticket.outputs.issue_key }}
+          REPOSITORY: ${{ github.repository }}
         shell: bash
         run: |
           set -euo pipefail
+
+          gh pr list --state open --head "${BRANCH}" --limit 100 \
+            --json url,title,headRefName \
+            > "${RUNNER_TEMP}/open-prs-for-branch.json"
+          gh pr list --state open --search "${ISSUE_KEY} in:title" --limit 1000 \
+            --json url,title,headRefName \
+            > "${RUNNER_TEMP}/open-prs-for-ticket.json"
+          existing_pr_url="$(python \
+            "${RUNNER_TEMP}/notify-slack-documentation-pr.py" find-pr \
+            --candidates-file \
+              "${RUNNER_TEMP}/open-prs-for-branch.json" \
+              "${RUNNER_TEMP}/open-prs-for-ticket.json" \
+            --branch "${BRANCH}" \
+            --issue-key "${ISSUE_KEY}" \
+            --repository "${REPOSITORY}")"
+          if [ -n "${existing_pr_url}" ]; then
+            printf 'pr_url=%s\ncreated=false\n' "${existing_pr_url}" \
+              >> "${GITHUB_OUTPUT}"
+            printf 'Open pull request reused: [%s](%s)\n' \
+              "${existing_pr_url}" "${existing_pr_url}" \
+              >> "${GITHUB_STEP_SUMMARY}"
+            exit 0
+          fi
 
           current_sha="$(git rev-parse --verify 'HEAD^{commit}')"
           if [ "${current_sha}" != "${BASE_SHA}" ]; then
@@ -412,8 +440,40 @@ jobs:
             exit 1
           fi
 
+          confirmed_pr_url="$(gh pr view "${pr_url}" --json url --jq '.url')"
+          if [ -z "${confirmed_pr_url}" ]; then
+            echo "::error title=Pull request confirmation failed::GitHub did not confirm the newly created pull request URL."
+            exit 1
+          fi
+
+          printf 'pr_url=%s\ncreated=true\n' "${confirmed_pr_url}" \
+            >> "${GITHUB_OUTPUT}"
+
           printf 'Pull request created: [%s](%s)\n' \
-            "${pr_url}" "${pr_url}" >> "${GITHUB_STEP_SUMMARY}"
+            "${confirmed_pr_url}" "${confirmed_pr_url}" \
+            >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Notify Slack of new documentation pull request
+        if: steps.pull_request.outputs.created == 'true'
+        continue-on-error: true
+        env:
+          SLACK_DOCUMENTATION_WEBHOOK_URL: ${{ secrets.SLACK_DOCUMENTATION_WEBHOOK_URL }}
+          ISSUE_KEY: ${{ steps.ticket.outputs.issue_key }}
+          ISSUE_SUMMARY: ${{ inputs.issue_summary }}
+          DOCUMENT: ${{ steps.publication.outputs.document }}
+          PREVIOUS_VERSION: ${{ steps.publication.outputs.previous_version }}
+          PROPOSED_VERSION: ${{ steps.publication.outputs.proposed_version }}
+          PR_URL: ${{ steps.pull_request.outputs.pr_url }}
+        shell: bash
+        run: |
+          python "${RUNNER_TEMP}/notify-slack-documentation-pr.py" send \
+            --issue-key "${ISSUE_KEY}" \
+            --issue-summary "${ISSUE_SUMMARY}" \
+            --document "${DOCUMENT}" \
+            --previous-version "${PREVIOUS_VERSION}" \
+            --proposed-version "${PROPOSED_VERSION}" \
+            --pr-url "${PR_URL}" \
+            --timeout 15
 
       - name: Enforce Jira abstention notification result
         if: always()
