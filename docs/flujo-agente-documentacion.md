@@ -1,6 +1,7 @@
 ---
 article_id: ART-DOC-AGENT-001
 title: Flujo del agente de documentación
+slug: /
 version: 1.1
 status: published
 owner: Product
