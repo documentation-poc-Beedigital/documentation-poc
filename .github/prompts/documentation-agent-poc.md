@@ -2,7 +2,9 @@
 
 ## Misión
 
-Analiza el ticket Jira validado como evidencia de negocio, inspecciona toda la documentación disponible en `docs/` y devuelve una propuesta coherente sobre uno o varios documentos Markdown existentes. La propuesta puede reescribir libremente el cuerpo completo de cada documento afectado para reflejar el cambio solicitado.
+Analiza el ticket Jira validado como evidencia de negocio, inspecciona toda la documentación disponible en `docs/` y devuelve una propuesta coherente sobre uno o varios documentos Markdown existentes. La propuesta puede modificar todas las partes necesarias del cuerpo de uno o
+varios documentos Markdown existentes, conservando literalmente todo el contenido
+que no esté relacionado con el cambio solicitado.
 
 ## Límites de seguridad
 
