@@ -23,14 +23,7 @@ REPOSITORY_PATTERN = re.compile(
     r"[A-Za-z0-9](?:[A-Za-z0-9_.-]*[A-Za-z0-9])?/"
     r"[A-Za-z0-9](?:[A-Za-z0-9_.-]*[A-Za-z0-9])?"
 )
-REPORT_FIELDS = (
-    "Decisión",
-    "Documento",
-    "Evidencia",
-    "Texto anterior",
-    "Texto propuesto",
-    "Motivo",
-)
+REPORT_FIELDS = {"decision", "summary", "reason", "evidence", "documents"}
 MAX_AGENT_REPORT_BYTES = 16_384
 MAX_REASON_CHARACTERS = 1_000
 GENERIC_SEND_ERROR = "Jira abstention notification failed"
@@ -74,7 +67,7 @@ def load_ticket_issue_key(path: Path, expected_issue_key: str) -> str:
     return issue_key
 
 
-def parse_agent_report(path: Path) -> dict[str, str]:
+def parse_agent_report(path: Path) -> dict[str, object]:
     try:
         payload = path.read_bytes()
     except OSError as error:
@@ -82,20 +75,12 @@ def parse_agent_report(path: Path) -> dict[str, str]:
     if len(payload) > MAX_AGENT_REPORT_BYTES:
         raise JiraNotificationError("Agent report exceeds the validated size limit")
     try:
-        text = payload.decode("utf-8")
-    except UnicodeDecodeError as error:
-        raise JiraNotificationError("Agent report is not valid UTF-8") from error
-
-    lines = text.splitlines()
-    if len(lines) != len(REPORT_FIELDS):
+        value = json.loads(payload.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise JiraNotificationError("Agent report is not valid UTF-8 JSON") from error
+    if not isinstance(value, dict) or set(value) != REPORT_FIELDS:
         raise JiraNotificationError("Agent report does not match the validated format")
-    fields: dict[str, str] = {}
-    for expected_name, line in zip(REPORT_FIELDS, lines):
-        name, separator, value = line.partition(": ")
-        if not separator or name != expected_name or not value.strip():
-            raise JiraNotificationError("Agent report does not match the validated format")
-        fields[name] = value.strip()
-    return fields
+    return value
 
 
 def validate_reason(value: object) -> str:
@@ -147,9 +132,9 @@ def prepare_notification(
 
     issue_key = load_ticket_issue_key(ticket_file, expected_issue_key)
     report = parse_agent_report(agent_report)
-    if report["Decisión"] != "abstención":
+    if report["decision"] != "abstention" or report["documents"] != []:
         raise JiraNotificationError("Agent report decision is not an abstention")
-    reason = validate_reason(report["Motivo"])
+    reason = validate_reason(report["reason"])
     actions_url = build_actions_url(server_url, repository, run_id)
     payload = {
         "issue_key": issue_key,

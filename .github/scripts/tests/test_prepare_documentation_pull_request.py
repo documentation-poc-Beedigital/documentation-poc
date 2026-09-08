@@ -8,15 +8,10 @@ import tempfile
 import unittest
 from pathlib import Path
 
-
-PREPARER_PATH = (
-    Path(__file__).resolve().parents[1] / "prepare-documentation-pull-request.py"
-)
-SPEC = importlib.util.spec_from_file_location(
-    "prepare_documentation_pull_request", PREPARER_PATH
-)
+PREPARER_PATH = Path(__file__).resolve().parents[1] / "prepare-documentation-pull-request.py"
+SPEC = importlib.util.spec_from_file_location("prepare_documentation_pull_request", PREPARER_PATH)
 if SPEC is None or SPEC.loader is None:
-    raise RuntimeError(f"Could not load pull request preparer from {PREPARER_PATH}")
+    raise RuntimeError(f"Could not load preparer from {PREPARER_PATH}")
 PREPARER = importlib.util.module_from_spec(SPEC)
 sys.modules[SPEC.name] = PREPARER
 SPEC.loader.exec_module(PREPARER)
@@ -31,246 +26,239 @@ class DocumentationPullRequestPreparationTests(unittest.TestCase):
         self.git("config", "user.name", "Publication Tests")
         self.git("config", "user.email", "publication@example.invalid")
         self.git("config", "core.autocrlf", "false")
-
-        self.document = self.root / "docs" / "invitaciones.md"
-        self.document.parent.mkdir()
-        self.document.write_text(
-            "---\nversion: 1.0\n---\n\n"
-            "# Invitations\n\nInvitations expire after 24 hours.\n",
-            encoding="utf-8",
-            newline="\n",
-        )
+        self.write("docs/one.md", "---\nversion: 1.0\n---\n\n# One\n")
+        self.write("docs/two.mdx", "---\nversion: 2.9\n---\n\n# Two\n")
         self.git("add", ".")
-        self.git("commit", "--quiet", "-m", "Initial documentation")
+        self.git("commit", "--quiet", "-m", "Initial")
         self.base_sha = self.git("rev-parse", "HEAD").stdout.strip()
-
-        temporary_root = Path(self.temporary_directory.name)
-        self.validation_result = temporary_root / "validation-result.json"
-        self.ticket_file = temporary_root / "ticket.json"
-        self.agent_report = temporary_root / "agent-report.md"
-        self.body_file = temporary_root / "pull-request-body.md"
-        self.github_output = temporary_root / "github-output.txt"
-        self.ticket_file.write_text(
-            json.dumps(
-                {
-                    "issue_key": "DOC-AGENT-1",
-                    "issue_summary": "Update invitation expiry",
-                    "issue_description": "Production uses 48 hours.",
-                }
-            ),
-            encoding="utf-8",
-        )
-        self.agent_report.write_text(
-            "Decision: proposal\n"
-            "Document: docs/invitaciones.md\n"
-            "Evidence: production snapshot\n"
-            "Previous text: 24 hours\n"
-            "Proposed text: 48 hours\n"
-            "Reason: align with production\n",
-            encoding="utf-8",
-        )
+        temp = Path(self.temporary_directory.name)
+        self.validation_result = temp / "validation.json"
+        self.ticket_file = temp / "ticket.json"
+        self.agent_report = temp / "agent-report.md"
+        self.body_file = temp / "body.md"
+        self.ticket_file.write_text(json.dumps({
+            "issue_key": "DOC-AGENT-1", "issue_summary": "Update related docs",
+            "issue_description": "Natural-language change request",
+        }), encoding="utf-8")
+        self.agent_report.write_text(json.dumps({
+            "decision": "proposal", "summary": "Two docs", "reason": "Ticket",
+            "evidence": "Docs", "documents": [],
+        }, indent=2), encoding="utf-8")
 
     def tearDown(self) -> None:
         self.temporary_directory.cleanup()
 
     def git(self, *args: str) -> subprocess.CompletedProcess[str]:
-        return subprocess.run(
-            ["git", *args],
-            cwd=self.root,
-            text=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            check=True,
-        )
+        return subprocess.run(["git", *args], cwd=self.root, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
 
-    def write_validation(
-        self,
-        *,
-        valid: object = True,
-        decision: str = "proposal",
-        changed_files: list[object] | None = None,
-        base_sha: str | None = None,
-    ) -> None:
-        if changed_files is None:
-            changed_files = ["docs/invitaciones.md"] if decision == "proposal" else []
-        self.validation_result.write_text(
-            json.dumps(
-                {
-                    "valid": valid,
-                    "decision": decision,
-                    "base_sha": base_sha or self.base_sha,
-                    "changed_files": changed_files,
-                    "errors": [],
-                }
-            ),
-            encoding="utf-8",
-        )
+    def write(self, relative: str, content: str) -> None:
+        path = self.root / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content, encoding="utf-8", newline="")
+
+    def metadata(self, path: str, previous: str, proposed: str) -> dict[str, str]:
+        return {"path": path, "reason": "Affected by ticket", "evidence": "Ticket and docs", "previous_version": previous, "proposed_version": proposed}
+
+    def write_validation(self, decision: str = "proposal", documents: list[dict[str, str]] | None = None, **overrides: object) -> None:
+        if documents is None:
+            documents = [self.metadata("docs/one.md", "1.0", "1.1")]
+        value: dict[str, object] = {
+            "valid": True, "decision": decision, "base_sha": self.base_sha,
+            "changed_files": [item["path"] for item in documents] if decision == "proposal" else [],
+            "documents": documents if decision == "proposal" else [], "errors": [],
+        }
+        value.update(overrides)
+        self.validation_result.write_text(json.dumps(value), encoding="utf-8")
+        self.agent_report.write_text(json.dumps({
+            "decision": decision,
+            "summary": "Update related documents",
+            "reason": "Concrete Jira request",
+            "evidence": "Ticket and repository docs",
+            "documents": documents if decision == "proposal" else [],
+        }), encoding="utf-8")
 
     def prepare(self) -> dict[str, str]:
         return PREPARER.prepare_publication(
-            repo_root=self.root,
-            validation_result=self.validation_result,
-            ticket_file=self.ticket_file,
-            agent_report=self.agent_report,
-            body_file=self.body_file,
-            base_sha=self.base_sha,
-            run_id="123456789",
-            run_attempt="2",
-            repository="example/documentation-poc",
-            server_url="https://github.com",
+            self.root, self.validation_result, self.ticket_file, self.agent_report,
+            self.body_file, self.base_sha, "123456789", "2",
+            "example/documentation-poc", "https://github.com",
         )
 
-    def make_valid_proposal(self) -> None:
-        self.document.write_text(
-            "---\nversion: 1.1\n---\n\n"
-            "# Invitations\n\nInvitations expire after 48 hours.\n",
-            encoding="utf-8",
-            newline="\n",
-        )
-        self.write_validation()
-
-    def test_title_adds_canonical_prefix_when_summary_has_no_prefix(self) -> None:
-        self.assertEqual(
-            "DOC-22 [Documentación] Update invitation expiry",
-            PREPARER.build_pull_request_title("DOC-22", "Update invitation expiry"),
-        )
-
-    def test_title_does_not_duplicate_canonical_prefix(self) -> None:
-        self.assertEqual(
-            "DOC-22 [Documentación] Update invitation expiry",
-            PREPARER.build_pull_request_title(
-                "DOC-22", "[Documentación] Update invitation expiry"
-            ),
-        )
-
-    def test_title_normalizes_uppercase_prefix(self) -> None:
-        self.assertEqual(
-            "DOC-22 [Documentación] Update invitation expiry",
-            PREPARER.build_pull_request_title(
-                "DOC-22", "[DOCUMENTACIÓN] Update invitation expiry"
-            ),
-        )
-
-    def test_title_ignores_leading_spaces_without_changing_body_summary(self) -> None:
-        original_summary = "   [Documentación] Update invitation expiry"
-        self.assertEqual(
-            "DOC-22 [Documentación] Update invitation expiry",
-            PREPARER.build_pull_request_title("DOC-22", original_summary),
-        )
-
-        body = PREPARER.build_pull_request_body(
-            {"issue_key": "DOC-22", "issue_summary": original_summary},
-            "Decision: proposal\n",
-            "https://github.com/example/repository/actions/runs/1",
-        )
-        self.assertIn(PREPARER.escape_markdown_inline(original_summary), body)
-
-    def test_title_rejects_summary_formed_only_by_prefix(self) -> None:
-        with self.assertRaisesRegex(
-            PREPARER.PublicationPreparationError, "meaningful text"
-        ):
-            PREPARER.build_pull_request_title("DOC-22", "  [Documentación]   ")
-
-    def test_valid_proposal_builds_safe_publication_metadata_and_body(self) -> None:
-        self.make_valid_proposal()
-
+    def test_valid_multi_document_plan_has_one_branch_commit_pr_and_json(self) -> None:
+        self.write("docs/one.md", "---\nversion: 1.1\n---\n\n# One changed\n")
+        self.write("docs/two.mdx", "---\nversion: 2.10\n---\n\n# Two changed\n")
+        documents = [self.metadata("docs/one.md", "1.0", "1.1"), self.metadata("docs/two.mdx", "2.9", "2.10")]
+        self.write_validation(documents=documents)
         plan = self.prepare()
-
         self.assertEqual("true", plan["publish"])
-        self.assertEqual(
-            "automation/documentation-doc-agent-1-123456789-2", plan["branch"]
-        )
-        self.assertEqual("docs/invitaciones.md", plan["document"])
-        self.assertEqual(
-            "DOC-AGENT-1 Apply validated documentation proposal",
-            plan["commit_message"],
-        )
-        self.assertEqual(
-            "DOC-AGENT-1 [Documentación] Update invitation expiry",
-            plan["pr_title"],
-        )
-        self.assertEqual("1.0", plan["previous_version"])
-        self.assertEqual("1.1", plan["proposed_version"])
+        self.assertEqual("automation/documentation-doc-agent-1-123456789-2", plan["branch"])
+        self.assertEqual("DOC-AGENT-1 Apply validated documentation proposal", plan["commit_message"])
+        self.assertEqual(documents, json.loads(plan["documents_json"]))
         body = self.body_file.read_text(encoding="utf-8")
-        self.assertIn("DOC-AGENT-1", body)
-        self.assertIn("Update invitation expiry", body)
-        self.assertIn("Decision: proposal", body)
-        self.assertIn(
-            "https://github.com/example/documentation-poc/actions/runs/123456789",
-            body,
-        )
-        self.assertIn("generada por Gemini", body)
-        self.assertIn("validada determinísticamente", body)
+        self.assertIn("Informe del agente", body)
+        self.assertIn("actions/runs/123456789", body)
 
-    def test_valid_abstention_skips_publication_and_requires_empty_diff(self) -> None:
-        self.write_validation(decision="abstention")
+    def test_single_document_remains_supported(self) -> None:
+        self.write("docs/one.md", "---\nversion: 1.1\n---\n\n# One changed\n")
+        self.write_validation()
+        self.assertEqual(1, len(json.loads(self.prepare()["documents_json"])))
 
-        plan = self.prepare()
+    def test_abstention_skips_publication_with_empty_diff(self) -> None:
+        self.write_validation(decision="abstention", documents=[])
+        self.assertEqual({"publish": "false", "decision": "abstention"}, self.prepare())
 
-        self.assertEqual({"publish": "false", "decision": "abstention"}, plan)
-        self.assertFalse(self.body_file.exists())
-
-    def test_valid_must_be_exact_boolean_true(self) -> None:
-        self.make_valid_proposal()
-        self.write_validation(valid=1)
-
-        with self.assertRaisesRegex(
-            PREPARER.PublicationPreparationError, "valid must be exactly true"
-        ):
+    def test_changed_files_and_metadata_must_match_complete_diff(self) -> None:
+        self.write("docs/one.md", "---\nversion: 1.1\n---\n\n# One changed\n")
+        self.write("docs/two.mdx", "---\nversion: 2.10\n---\n\n# Two changed\n")
+        self.write_validation()
+        with self.assertRaisesRegex(PREPARER.PublicationPreparationError, "all validated"):
             self.prepare()
 
-    def test_proposal_requires_one_safe_markdown_path(self) -> None:
-        self.make_valid_proposal()
-        invalid_values = (
-            [],
-            ["docs/invitaciones.md", "docs/otro.md"],
-            ["README.md"],
-            ["docs/../README.md"],
-            ["docs/invitaciones.md\nmalicioso"],
-            ["docs/production-snapshots/state.md"],
-        )
-        for changed_files in invalid_values:
-            with self.subTest(changed_files=changed_files):
-                self.write_validation(changed_files=changed_files)
+    def test_duplicate_unsafe_and_snapshot_paths_are_rejected(self) -> None:
+        self.write("docs/one.md", "---\nversion: 1.1\n---\n\n# One changed\n")
+        invalid = (["docs/one.md", "docs/one.md"], ["README.md"], ["docs/../README.md"], ["docs/production-snapshots/state.md"])
+        for paths in invalid:
+            with self.subTest(paths=paths):
+                self.write_validation(changed_files=paths)
                 with self.assertRaises(PREPARER.PublicationPreparationError):
                     self.prepare()
 
-    def test_git_diff_must_match_the_validated_document(self) -> None:
-        self.make_valid_proposal()
-        self.write_validation(changed_files=["docs/otro.md"])
-
-        with self.assertRaises(PREPARER.PublicationPreparationError):
+    def test_versions_are_independently_verified(self) -> None:
+        self.write("docs/one.md", "---\nversion: 1.1\n---\n\n# One changed\n")
+        document = self.metadata("docs/one.md", "1.0", "9.9")
+        self.write_validation(documents=[document])
+        with self.assertRaisesRegex(PREPARER.PublicationPreparationError, "versions do not match"):
             self.prepare()
 
-    def test_untracked_files_prevent_publication(self) -> None:
-        self.make_valid_proposal()
-        (self.root / "unexpected.tmp").write_text("unexpected", encoding="utf-8")
-
-        with self.assertRaisesRegex(
-            PREPARER.PublicationPreparationError, "Untracked files prevent publication"
-        ):
+    def test_untracked_file_and_changed_head_prevent_publication(self) -> None:
+        self.write("docs/one.md", "---\nversion: 1.1\n---\n\n# One changed\n")
+        self.write_validation()
+        self.write("unexpected.tmp", "unexpected")
+        with self.assertRaisesRegex(PREPARER.PublicationPreparationError, "Untracked"):
+            self.prepare()
+        (self.root / "unexpected.tmp").unlink()
+        self.git("add", "docs/one.md")
+        self.git("commit", "--quiet", "-m", "Unexpected")
+        with self.assertRaisesRegex(PREPARER.PublicationPreparationError, "HEAD no longer"):
             self.prepare()
 
-    def test_changed_head_prevents_publication(self) -> None:
-        self.make_valid_proposal()
-        self.git("add", "docs/invitaciones.md")
-        self.git("commit", "--quiet", "-m", "Unexpected commit")
+    def test_title_normalizes_documentation_prefix(self) -> None:
+        self.assertEqual(
+            "DOC-22 [Documentación] Update",
+            PREPARER.build_pull_request_title("DOC-22", " [DOCUMENTACIÓN] Update"),
+        )
 
-        with self.assertRaisesRegex(
-            PREPARER.PublicationPreparationError, "HEAD no longer matches"
-        ):
+    def test_title_adds_documentation_prefix_when_absent(self) -> None:
+        self.assertEqual(
+            "DOC-22 [Documentación] Update",
+            PREPARER.build_pull_request_title("DOC-22", "Update"),
+        )
+
+    def test_title_deduplicates_repeated_documentation_prefixes(self) -> None:
+        self.assertEqual(
+            "DOC-22 [Documentación] Update",
+            PREPARER.build_pull_request_title(
+                "DOC-22", "[Documentación] [DOCUMENTACIÓN] Update"
+            ),
+        )
+
+    def test_prefix_only_summary_is_rejected(self) -> None:
+        with self.assertRaisesRegex(PREPARER.PublicationPreparationError, "meaningful text"):
+            PREPARER.build_pull_request_title("DOC-22", " [Documentación] ")
+
+    def test_leading_spaces_are_trimmed_only_for_title_not_ticket_content(self) -> None:
+        self.write("docs/one.md", "---\nversion: 1.1\n---\n\n# One changed\n")
+        self.ticket_file.write_text(json.dumps({
+            "issue_key": "DOC-AGENT-1",
+            "issue_summary": "  Preserve intentional source spacing",
+            "issue_description": "  Original description spacing",
+        }), encoding="utf-8")
+        self.write_validation()
+        plan = self.prepare()
+        self.assertEqual(
+            "DOC-AGENT-1 [Documentación] Preserve intentional source spacing",
+            plan["pr_title"],
+        )
+        self.assertEqual(
+            "  Original description spacing",
+            PREPARER.load_ticket(self.ticket_file)["issue_description"],
+        )
+        self.assertIn(
+            "**Resumen:**   Preserve intentional source spacing",
+            self.body_file.read_text(encoding="utf-8"),
+        )
+
+    def test_validation_valid_must_be_exact_boolean_true(self) -> None:
+        self.write("docs/one.md", "---\nversion: 1.1\n---\n\n# One changed\n")
+        for invalid in (1, "true", False, None):
+            with self.subTest(valid=invalid):
+                self.write_validation(valid=invalid)
+                with self.assertRaisesRegex(PREPARER.PublicationPreparationError, "exactly true"):
+                    self.prepare()
+
+    def test_invalid_validation_decision_is_rejected(self) -> None:
+        self.write_validation(decision="merge")
+        with self.assertRaisesRegex(PREPARER.PublicationPreparationError, "proposal or abstention"):
             self.prepare()
 
-    def test_ticket_values_are_revalidated_before_building_commands(self) -> None:
-        self.make_valid_proposal()
-        ticket = json.loads(self.ticket_file.read_text(encoding="utf-8"))
-        ticket["issue_key"] = "DOC-1; touch unsafe"
-        self.ticket_file.write_text(json.dumps(ticket), encoding="utf-8")
+    def test_jira_issue_key_is_revalidated(self) -> None:
+        self.ticket_file.write_text(json.dumps({
+            "issue_key": "DOC-1; touch owned", "issue_summary": "Update",
+            "issue_description": "Concrete request",
+        }), encoding="utf-8")
+        with self.assertRaisesRegex(PREPARER.PublicationPreparationError, "Jira-style key"):
+            PREPARER.load_ticket(self.ticket_file)
 
-        with self.assertRaisesRegex(
-            PREPARER.PublicationPreparationError, "Jira-style key"
-        ):
-            self.prepare()
+    def test_jira_summary_is_revalidated(self) -> None:
+        self.ticket_file.write_text(json.dumps({
+            "issue_key": "DOC-1", "issue_summary": "Unsafe\nsummary",
+            "issue_description": "Concrete request",
+        }), encoding="utf-8")
+        with self.assertRaisesRegex(PREPARER.PublicationPreparationError, "safe single-line"):
+            PREPARER.load_ticket(self.ticket_file)
+
+    def test_jira_description_length_is_revalidated(self) -> None:
+        self.ticket_file.write_text(json.dumps({
+            "issue_key": "DOC-1", "issue_summary": "Update",
+            "issue_description": "x" * 20_001,
+        }), encoding="utf-8")
+        with self.assertRaisesRegex(PREPARER.PublicationPreparationError, "safe Jira description"):
+            PREPARER.load_ticket(self.ticket_file)
+
+    def test_jira_description_control_characters_are_revalidated(self) -> None:
+        self.ticket_file.write_text(json.dumps({
+            "issue_key": "DOC-1", "issue_summary": "Update",
+            "issue_description": "Unsafe\u0000description",
+        }), encoding="utf-8")
+        with self.assertRaisesRegex(PREPARER.PublicationPreparationError, "safe Jira description"):
+            PREPARER.load_ticket(self.ticket_file)
+
+    def test_shell_metacharacters_in_summary_are_data_not_commands(self) -> None:
+        self.write("docs/one.md", "---\nversion: 1.1\n---\n\n# One changed\n")
+        marker = self.root / "owned"
+        self.ticket_file.write_text(json.dumps({
+            "issue_key": "DOC-1", "issue_summary": "Update $(touch owned); `whoami`",
+            "issue_description": "Concrete request",
+        }), encoding="utf-8")
+        self.write_validation()
+        plan = self.prepare()
+        self.assertIn("$(touch owned)", plan["pr_title"])
+        self.assertFalse(marker.exists())
+
+    def test_pull_request_body_lists_every_document_and_version(self) -> None:
+        self.write("docs/one.md", "---\nversion: 1.1\n---\n\n# One changed\n")
+        self.write("docs/two.mdx", "---\nversion: 2.10\n---\n\n# Two changed\n")
+        documents = [
+            self.metadata("docs/one.md", "1.0", "1.1"),
+            self.metadata("docs/two.mdx", "2.9", "2.10"),
+        ]
+        self.write_validation(documents=documents)
+        self.prepare()
+        body = self.body_file.read_text(encoding="utf-8")
+        self.assertIn("`docs/one.md`", body)
+        self.assertIn("`1.0` → `1.1`", body)
+        self.assertIn("`docs/two.mdx`", body)
+        self.assertIn("`2.9` → `2.10`", body)
 
 
 if __name__ == "__main__":

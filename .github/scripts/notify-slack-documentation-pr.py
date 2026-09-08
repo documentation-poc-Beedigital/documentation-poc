@@ -11,7 +11,7 @@ import sys
 import urllib.error
 import urllib.request
 from pathlib import Path
-from typing import Callable, Sequence
+from typing import Callable, Mapping, Sequence
 from urllib.parse import urlsplit
 
 
@@ -115,38 +115,76 @@ def escape_slack_text(value: str) -> str:
 def build_message(
     issue_key: str,
     issue_summary: str,
-    document: str,
-    previous_version: str,
-    proposed_version: str,
+    documents: Sequence[Mapping[str, str]],
     pr_url: str,
 ) -> str:
     if not ISSUE_KEY_PATTERN.fullmatch(issue_key):
         raise SlackNotificationError("Invalid Jira key")
     validate_single_line(issue_summary, "ticket summary")
-    validate_single_line(document, "document")
-    if not VERSION_PATTERN.fullmatch(previous_version):
-        raise SlackNotificationError("Invalid previous version")
-    if not VERSION_PATTERN.fullmatch(proposed_version):
-        raise SlackNotificationError("Invalid proposed version")
+    if not documents:
+        raise SlackNotificationError("At least one document is required")
+    document_lines: list[str] = []
+    for document in documents:
+        if set(document) != {
+            "path", "reason", "evidence", "previous_version", "proposed_version"
+        }:
+            raise SlackNotificationError("Invalid document metadata")
+        path = validate_single_line(document["path"], "document")
+        previous_version = document["previous_version"]
+        proposed_version = document["proposed_version"]
+        if not VERSION_PATTERN.fullmatch(previous_version):
+            raise SlackNotificationError("Invalid previous version")
+        if not VERSION_PATTERN.fullmatch(proposed_version):
+            raise SlackNotificationError("Invalid proposed version")
+        document_lines.append(
+            f"• `{escape_slack_text(path)}`: {previous_version} → {proposed_version}"
+        )
     if not pr_url.startswith("https://github.com/"):
         raise SlackNotificationError("Invalid pull request URL")
     return (
         ":books: *Nueva propuesta documental pendiente de aprobación*\n\n"
         f"*Ticket:* {issue_key}\n"
         f"*Resumen:* {escape_slack_text(issue_summary)}\n"
-        f"*Documento:* `{escape_slack_text(document)}`\n"
-        f"*Versión:* {previous_version} → {proposed_version}\n\n"
+        f"*Documentos ({len(documents)}):*\n" + "\n".join(document_lines) + "\n\n"
         f"*Revisar pull request:* {pr_url}\n"
         "La propuesta requiere aprobación humana antes de publicarse."
     )
 
 
-def build_payload(**message_fields: str) -> bytes:
+def build_payload(
+    *,
+    issue_key: str,
+    issue_summary: str,
+    documents: Sequence[Mapping[str, str]],
+    pr_url: str,
+) -> bytes:
     return json.dumps(
-        {"text": build_message(**message_fields)},
+        {
+            "text": build_message(
+                issue_key=issue_key,
+                issue_summary=issue_summary,
+                documents=documents,
+                pr_url=pr_url,
+            )
+        },
         ensure_ascii=False,
         separators=(",", ":"),
     ).encode("utf-8")
+
+
+def parse_documents_json(value: str) -> list[dict[str, str]]:
+    try:
+        parsed = json.loads(value)
+    except json.JSONDecodeError as error:
+        raise SlackNotificationError("Invalid documents JSON") from error
+    if not isinstance(parsed, list):
+        raise SlackNotificationError("Invalid documents JSON")
+    documents: list[dict[str, str]] = []
+    for item in parsed:
+        if not isinstance(item, dict) or any(not isinstance(value, str) for value in item.values()):
+            raise SlackNotificationError("Invalid documents JSON")
+        documents.append(item)
+    return documents
 
 
 class NoRedirectHandler(urllib.request.HTTPRedirectHandler):
@@ -209,9 +247,7 @@ def build_parser() -> argparse.ArgumentParser:
     send = subparsers.add_parser("send")
     send.add_argument("--issue-key", required=True)
     send.add_argument("--issue-summary", required=True)
-    send.add_argument("--document", required=True)
-    send.add_argument("--previous-version", required=True)
-    send.add_argument("--proposed-version", required=True)
+    send.add_argument("--documents-json", required=True)
     send.add_argument("--pr-url", required=True)
     send.add_argument("--timeout", type=float, default=15.0)
     return parser
@@ -249,9 +285,7 @@ def main(
         payload = build_payload(
             issue_key=args.issue_key,
             issue_summary=args.issue_summary,
-            document=args.document,
-            previous_version=args.previous_version,
-            proposed_version=args.proposed_version,
+            documents=parse_documents_json(args.documents_json),
             pr_url=args.pr_url,
         )
         send_notification(
