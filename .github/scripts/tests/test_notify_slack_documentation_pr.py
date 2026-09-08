@@ -26,13 +26,26 @@ SPEC.loader.exec_module(NOTIFIER)
 
 
 class SlackDocumentationNotificationTests(unittest.TestCase):
-    def fields(self, **overrides: str) -> dict[str, str]:
-        fields = {
+    def fields(self, **overrides: object) -> dict[str, object]:
+        fields: dict[str, object] = {
             "issue_key": "DOC-32",
             "issue_summary": "Automatizar la activación del agente",
-            "document": "docs/flujo-agente-documentacion.md",
-            "previous_version": "1.0",
-            "proposed_version": "1.1",
+            "documents": [
+                {
+                    "path": "docs/flujo-agente-documentacion.md",
+                    "reason": "Ticket",
+                    "evidence": "Docs",
+                    "previous_version": "1.0",
+                    "proposed_version": "1.1",
+                },
+                {
+                    "path": "docs/invitaciones.md",
+                    "reason": "Coherence",
+                    "evidence": "Docs",
+                    "previous_version": "2.4",
+                    "proposed_version": "2.5",
+                },
+            ],
             "pr_url": "https://github.com/example/docs/pull/42",
         }
         fields.update(overrides)
@@ -42,12 +55,10 @@ class SlackDocumentationNotificationTests(unittest.TestCase):
         fields = self.fields()
         return [
             "send",
-            "--issue-key", fields["issue_key"],
-            "--issue-summary", fields["issue_summary"],
-            "--document", fields["document"],
-            "--previous-version", fields["previous_version"],
-            "--proposed-version", fields["proposed_version"],
-            "--pr-url", fields["pr_url"],
+            "--issue-key", str(fields["issue_key"]),
+            "--issue-summary", str(fields["issue_summary"]),
+            "--documents-json", json.dumps(fields["documents"]),
+            "--pr-url", str(fields["pr_url"]),
             "--timeout", "7",
         ]
 
@@ -58,16 +69,14 @@ class SlackDocumentationNotificationTests(unittest.TestCase):
         self.assertIn("Automatizar la activación del agente", message)
         self.assertIn("docs/flujo-agente-documentacion.md", message)
         self.assertIn("1.0 → 1.1", message)
+        self.assertIn("docs/invitaciones.md", message)
+        self.assertIn("2.4 → 2.5", message)
         self.assertIn("https://github.com/example/docs/pull/42", message)
         self.assertIn("requiere aprobación humana", message)
 
     def test_quotes_accents_and_special_characters_are_valid_json(self) -> None:
         payload = NOTIFIER.build_payload(
-            **self.fields(
-                issue_summary=(
-                    'Añadir "revisión" de café, 50% & <segura> ¿ya? <!channel>'
-                )
-            )
+            **self.fields(issue_summary='Añadir "revisión" de café, 50% & <segura> ¿ya? <!channel>')
         )
         decoded = json.loads(payload.decode("utf-8"))
         self.assertIn('"revisión"', decoded["text"])

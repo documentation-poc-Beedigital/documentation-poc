@@ -74,12 +74,18 @@ class JiraAbstentionNotificationTests(unittest.TestCase):
 
     def write_report(self, reason: str) -> None:
         self.agent_report.write_text(
-            "Decisión: abstención\n"
-            "Documento: ninguno\n"
-            "Evidencia: no aplica\n"
-            "Texto anterior: no aplica\n"
-            "Texto propuesto: no aplica\n"
-            f"Motivo: {reason}\n",
+            json.dumps(
+                {
+                    "decision": "abstention",
+                    "summary": "No responsible proposal",
+                    "reason": reason,
+                    "evidence": "Reviewed docs and snapshots",
+                    "documents": [],
+                },
+                ensure_ascii=False,
+                indent=2,
+            )
+            + "\n",
             encoding="utf-8",
             newline="\n",
         )

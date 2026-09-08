@@ -154,7 +154,7 @@ jobs:
             --repo-root "${GITHUB_WORKSPACE}" \
             --ticket-file "${RUNNER_TEMP}/documentation-ticket.json" \
             --prompt-file "${RUNNER_TEMP}/documentation-agent-poc.md" \
-            --agent-report "${RUNNER_TEMP}/agent-report.md"\
+            --agent-report "${RUNNER_TEMP}/agent-report.md" \
             --timeout 300
 
       - name: Ensure an agent report exists
@@ -162,18 +162,25 @@ jobs:
         shell: bash
         run: |
           python - <<'PY'
+          import json
           import os
           from pathlib import Path
 
           report = Path(os.environ["RUNNER_TEMP"]) / "agent-report.md"
           if not report.exists():
               report.write_text(
-                  "Decisión: error\n"
-                  "Documento: ninguno\n"
-                  "Evidencia: Gemini did not produce a final report\n"
-                  "Texto anterior: no aplica\n"
-                  "Texto propuesto: no aplica\n"
-                  "Motivo: la ejecución de Gemini no produjo un informe\n",
+                  json.dumps(
+                      {
+                          "decision": "error",
+                          "summary": "Gemini no produjo un informe",
+                          "reason": "La ejecución de Gemini no produjo un informe",
+                          "evidence": "No existe una respuesta estructurada validable",
+                          "documents": [],
+                      },
+                      ensure_ascii=False,
+                      indent=2,
+                  )
+                  + "\n",
                   encoding="utf-8",
               )
           PY
@@ -200,6 +207,7 @@ jobs:
                       "decision": "error",
                       "base_sha": os.environ["BASE_SHA"],
                       "changed_files": [],
+                      "documents": [],
                       "errors": [
                           "The deterministic validator did not complete successfully"
                       ],
@@ -337,7 +345,7 @@ jobs:
           GH_PROMPT_DISABLED: "1"
           BASE_SHA: ${{ steps.base.outputs.sha }}
           BRANCH: ${{ steps.publication.outputs.branch }}
-          DOCUMENT: ${{ steps.publication.outputs.document }}
+          DOCUMENTS_JSON: ${{ steps.publication.outputs.documents_json }}
           COMMIT_MESSAGE: ${{ steps.publication.outputs.commit_message }}
           PR_TITLE: ${{ steps.publication.outputs.pr_title }}
           PR_BODY: ${{ steps.publication.outputs.pr_body }}
@@ -381,25 +389,38 @@ jobs:
           git config --local user.email \
             "41898282+github-actions[bot]@users.noreply.github.com"
           git switch --create "${BRANCH}" "${BASE_SHA}"
-          git add -- "${DOCUMENT}"
+          mapfile -t documents < <(
+            python -c 'import json, os; print("\n".join(sorted(item["path"] for item in json.loads(os.environ["DOCUMENTS_JSON"]))))'
+          )
+          if [ "${#documents[@]}" -eq 0 ]; then
+            echo "No validated documents were provided for publication" >&2
+            exit 1
+          fi
+          git add -- "${documents[@]}"
 
           mapfile -d '' staged_files < <(git diff --cached --name-only -z --)
-          if [ "${#staged_files[@]}" -ne 1 ] || \
-             [ "${staged_files[0]:-}" != "${DOCUMENT}" ]; then
-            echo "The staged change does not match the validated Markdown" >&2
+          if [ "${#staged_files[@]}" -ne "${#documents[@]}" ]; then
+            echo "The staged changes do not match the validated Markdown documents" >&2
             exit 1
           fi
-          staged_status="$(git diff --cached --name-status --no-renames -- "${DOCUMENT}")"
-          if [ "${staged_status}" != $'M\t'"${DOCUMENT}" ]; then
-            echo "The staged Markdown is not a simple modification" >&2
-            exit 1
-          fi
+          for index in "${!documents[@]}"; do
+            if [ "${staged_files[index]:-}" != "${documents[index]}" ]; then
+              echo "The staged paths do not match the validated documents" >&2
+              exit 1
+            fi
+          done
+          while IFS=$'\t' read -r status path; do
+            if [ "${status}" != "M" ]; then
+              echo "The staged Markdown ${path} is not a simple modification" >&2
+              exit 1
+            fi
+          done < <(git diff --cached --name-status --no-renames -- "${documents[@]}")
           git diff --cached --check
           if ! git diff --quiet --; then
             echo "Unstaged tracked changes remain after staging the validated Markdown" >&2
             exit 1
           fi
-          git commit -m "${COMMIT_MESSAGE}" -- "${DOCUMENT}"
+          git commit -m "${COMMIT_MESSAGE}" -- "${documents[@]}"
 
           askpass_path="${RUNNER_TEMP}/git-askpass.sh"
           python - "${askpass_path}" <<'PY'
@@ -460,18 +481,14 @@ jobs:
           SLACK_DOCUMENTATION_WEBHOOK_URL: ${{ secrets.SLACK_DOCUMENTATION_WEBHOOK_URL }}
           ISSUE_KEY: ${{ steps.ticket.outputs.issue_key }}
           ISSUE_SUMMARY: ${{ inputs.issue_summary }}
-          DOCUMENT: ${{ steps.publication.outputs.document }}
-          PREVIOUS_VERSION: ${{ steps.publication.outputs.previous_version }}
-          PROPOSED_VERSION: ${{ steps.publication.outputs.proposed_version }}
+          DOCUMENTS_JSON: ${{ steps.publication.outputs.documents_json }}
           PR_URL: ${{ steps.pull_request.outputs.pr_url }}
         shell: bash
         run: |
           python "${RUNNER_TEMP}/notify-slack-documentation-pr.py" send \
             --issue-key "${ISSUE_KEY}" \
             --issue-summary "${ISSUE_SUMMARY}" \
-            --document "${DOCUMENT}" \
-            --previous-version "${PREVIOUS_VERSION}" \
-            --proposed-version "${PROPOSED_VERSION}" \
+            --documents-json "${DOCUMENTS_JSON}" \
             --pr-url "${PR_URL}" \
             --timeout 15
 

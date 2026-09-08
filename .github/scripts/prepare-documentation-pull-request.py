@@ -23,7 +23,7 @@ REPOSITORY_PATTERN = re.compile(
     r"[A-Za-z0-9](?:[A-Za-z0-9_.-]*[A-Za-z0-9])?"
 )
 ALLOWED_SUFFIXES = {".md", ".mdx"}
-MAX_AGENT_REPORT_BYTES = 16_384
+MAX_AGENT_REPORT_BYTES = 262_144
 FRONTMATTER_VERSION_PATTERN = re.compile(
     r"^version: ([0-9]+\.[0-9]+)\r?$", re.MULTILINE
 )
@@ -65,8 +65,16 @@ def load_ticket(path: Path) -> dict[str, str]:
         or any(ord(character) < 32 for character in issue_summary)
     ):
         raise PublicationPreparationError("issue_summary is not a safe single-line value")
-    if not isinstance(issue_description, str) or not issue_description.strip():
-        raise PublicationPreparationError("issue_description must be a non-empty string")
+    if (
+        not isinstance(issue_description, str)
+        or not issue_description.strip()
+        or len(issue_description) > 20_000
+        or any(
+            ord(character) < 32 and character not in "\r\n\t"
+            for character in issue_description
+        )
+    ):
+        raise PublicationPreparationError("issue_description is not a safe Jira description")
     return {
         "issue_key": issue_key,
         "issue_summary": issue_summary,
@@ -189,7 +197,7 @@ def validate_repository_state(
     base_sha: str,
     decision: str,
     changed_files: list[object],
-) -> str | None:
+) -> list[str]:
     validate_base_state(root, base_sha)
     entries = changed_entries(root, base_sha)
     untracked = untracked_paths(root)
@@ -205,18 +213,19 @@ def validate_repository_state(
             )
         if entries:
             raise PublicationPreparationError("An abstention requires an empty Git diff")
-        return None
+        return []
 
-    if len(changed_files) != 1 or not isinstance(changed_files[0], str):
+    if not changed_files or any(not isinstance(path, str) for path in changed_files):
+        raise PublicationPreparationError("A proposal requires Markdown paths in changed_files")
+    documents = [str(path) for path in changed_files]
+    if len(documents) != len(set(documents)):
+        raise PublicationPreparationError("changed_files contains duplicate paths")
+    for document in documents:
+        validate_document_path(root, document)
+    if sorted(entries) != sorted(("M", document) for document in documents):
         raise PublicationPreparationError(
-            "A proposal requires exactly one Markdown path in changed_files"
-        )
-    document = changed_files[0]
-    validate_document_path(root, document)
-    if entries != [("M", document)]:
-        raise PublicationPreparationError(
-            "The Git diff does not match the single validated Markdown: "
-            f"expected M {document}, found {entries!r}"
+            "The Git diff does not match all validated Markdown documents: "
+            f"expected {documents!r}, found {entries!r}"
         )
 
     diff_check = run_git(root, "diff", "--check", base_sha, "--", check=False)
@@ -227,10 +236,10 @@ def validate_repository_state(
         raise PublicationPreparationError(
             f"git diff --check against BASE_SHA failed: {details or 'no error output'}"
         )
-    return document
+    return documents
 
 
-def read_agent_report(path: Path) -> str:
+def read_agent_report(path: Path) -> dict[str, object]:
     try:
         payload = path.read_bytes()
     except OSError as error:
@@ -238,11 +247,13 @@ def read_agent_report(path: Path) -> str:
     if len(payload) > MAX_AGENT_REPORT_BYTES:
         raise PublicationPreparationError("Agent report exceeds the validated size limit")
     try:
-        report = payload.decode("utf-8")
-    except UnicodeDecodeError as error:
-        raise PublicationPreparationError("Agent report is not valid UTF-8") from error
-    if not report.strip():
-        raise PublicationPreparationError("Agent report is empty")
+        report = json.loads(payload.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise PublicationPreparationError("Agent report is not valid UTF-8 JSON") from error
+    if not isinstance(report, dict) or set(report) != {
+        "decision", "summary", "reason", "evidence", "documents"
+    }:
+        raise PublicationPreparationError("Agent report has an unexpected structure")
     return report
 
 
@@ -288,16 +299,45 @@ def build_pull_request_title(issue_key: str, issue_summary: str) -> str:
 
 def build_pull_request_body(
     ticket: Mapping[str, str],
-    report: str,
+    report: Mapping[str, object],
     actions_url: str,
 ) -> str:
-    indented_report = "\n".join(f"    {line}" for line in report.splitlines())
+    documents = report.get("documents")
+    if not isinstance(documents, list) or not documents:
+        raise PublicationPreparationError("Proposal report must describe its documents")
+    document_sections: list[str] = []
+    for item in documents:
+        if not isinstance(item, dict):
+            raise PublicationPreparationError("Proposal report document is invalid")
+        path = item.get("path")
+        reason = item.get("reason")
+        evidence = item.get("evidence")
+        previous = item.get("previous_version")
+        proposed = item.get("proposed_version")
+        if not all(isinstance(value, str) for value in (path, reason, evidence, previous, proposed)):
+            raise PublicationPreparationError("Proposal report document metadata is invalid")
+        document_sections.append(
+            f"### `{path}`\n\n"
+            f"- Versión: `{previous}` → `{proposed}`\n"
+            f"- Motivo: {escape_markdown_inline(reason)}\n"
+            f"- Evidencia: {escape_markdown_inline(evidence)}\n"
+        )
+    summary = report.get("summary")
+    reason = report.get("reason")
+    evidence = report.get("evidence")
+    if not all(isinstance(value, str) for value in (summary, reason, evidence)):
+        raise PublicationPreparationError("Proposal report summary is invalid")
     return (
         "## Propuesta documental automatizada\n\n"
         f"**Clave Jira:** `{ticket['issue_key']}`\n\n"
         f"**Resumen:** {escape_markdown_inline(ticket['issue_summary'])}\n\n"
         "## Informe del agente\n\n"
-        f"{indented_report}\n\n"
+        f"**Cambio:** {escape_markdown_inline(summary)}\n\n"
+        f"**Motivo:** {escape_markdown_inline(reason)}\n\n"
+        f"**Evidencia:** {escape_markdown_inline(evidence)}\n\n"
+        "## Documentos afectados\n\n"
+        + "\n".join(document_sections)
+        + "\n"
         f"[Ver ejecución de GitHub Actions]({actions_url})\n\n"
         "> Esta propuesta fue generada por Gemini y validada "
         "determinísticamente antes de su publicación.\n"
@@ -333,7 +373,7 @@ def prepare_publication(
     if not isinstance(changed_files, list):
         raise PublicationPreparationError("validation-result.json changed_files must be a list")
 
-    document = validate_repository_state(root, base_sha, decision, changed_files)
+    documents = validate_repository_state(root, base_sha, decision, changed_files)
     if decision == "abstention":
         return {"publish": "false", "decision": "abstention"}
 
@@ -354,23 +394,57 @@ def prepare_publication(
     title = build_pull_request_title(ticket["issue_key"], ticket["issue_summary"])
     commit_message = f"{ticket['issue_key']} Apply validated documentation proposal"
     actions_url = f"{server_url}/{repository}/actions/runs/{run_id}"
+    validated_documents = validation.get("documents")
+    if not isinstance(validated_documents, list) or len(validated_documents) != len(documents):
+        raise PublicationPreparationError(
+            "validation-result.json documents must describe every changed file"
+        )
+    publication_documents: list[dict[str, str]] = []
+    seen: set[str] = set()
+    for item in validated_documents:
+        if not isinstance(item, dict) or set(item) != {
+            "path", "reason", "evidence", "previous_version", "proposed_version"
+        }:
+            raise PublicationPreparationError("Invalid validated document metadata")
+        document = item["path"]
+        if not isinstance(document, str) or document in seen or document not in documents:
+            raise PublicationPreparationError("Validated document metadata paths do not match")
+        seen.add(document)
+        previous_version, proposed_version = document_versions(root, base_sha, document)
+        if item["previous_version"] != previous_version or item["proposed_version"] != proposed_version:
+            raise PublicationPreparationError("Validated document versions do not match Git")
+        if not isinstance(item["reason"], str) or not isinstance(item["evidence"], str):
+            raise PublicationPreparationError("Validated document explanation is invalid")
+        publication_documents.append(
+            {
+                "path": document,
+                "reason": item["reason"],
+                "evidence": item["evidence"],
+                "previous_version": previous_version,
+                "proposed_version": proposed_version,
+            }
+        )
     report = read_agent_report(agent_report)
+    if report.get("decision") != "proposal":
+        raise PublicationPreparationError("Agent report decision does not match publication")
+    report_documents = report.get("documents")
+    if not isinstance(report_documents, list) or [
+        item.get("path") if isinstance(item, dict) else None for item in report_documents
+    ] != [item["path"] for item in publication_documents]:
+        raise PublicationPreparationError("Agent report documents do not match validation")
     body = build_pull_request_body(ticket, report, actions_url)
-    previous_version, proposed_version = document_versions(
-        root, base_sha, document or ""
-    )
     body_file.parent.mkdir(parents=True, exist_ok=True)
     body_file.write_text(body, encoding="utf-8", newline="\n")
     return {
         "publish": "true",
         "decision": "proposal",
         "branch": branch,
-        "document": document or "",
+        "documents_json": json.dumps(
+            publication_documents, ensure_ascii=False, separators=(",", ":")
+        ),
         "commit_message": commit_message,
         "pr_title": title,
         "pr_body": str(body_file),
-        "previous_version": previous_version,
-        "proposed_version": proposed_version,
     }
 
 
