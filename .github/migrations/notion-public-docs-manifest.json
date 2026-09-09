@@ -1,0 +1,254 @@
+{
+  "schema_version": 1,
+  "migration": "notion-public-docs",
+  "source": {
+    "archive": "3a61cce7-9154-4269-b534-0d587d6d8133_ExportBlock-22070d85-f47d-435c-8894-61cfd9d38824.zip",
+    "sha256": "37e3ac464b65e206014981ef7eea090654a47b00005b34dd6f58df17fd5e0931",
+    "markdown_pages": 32,
+    "csv_files": 2,
+    "categories": 8,
+    "articles": 24,
+    "unique_internal_destinations": 24,
+    "asides": 11,
+    "images": 0,
+    "videos": 0,
+    "attachments": 0
+  },
+  "frontmatter": {
+    "version": "1.0",
+    "status": "published",
+    "owner": "Product",
+    "last_reviewed": "2026-09-09",
+    "article_id_derivation": "NOTION- + uppercase 32-character Notion UUID"
+  },
+  "categories": [
+    {
+      "article_id": "NOTION-293B7527AC25808AB603DE04E37FD7FA",
+      "created": "October 21, 2025 12:51 PM",
+      "notion_id": "293b7527ac25808ab603de04e37fd7fa",
+      "path": "docs/centro-de-ayuda/cuenta-y-facturacion/index.md",
+      "title": "Cuenta y facturación",
+      "articles": [
+        {
+          "article_id": "NOTION-293B7527AC2580D2A907FDE6E5FE897D",
+          "notion_id": "293b7527ac2580d2a907fde6e5fe897d",
+          "path": "docs/centro-de-ayuda/cuenta-y-facturacion/configurar-tu-perfil-de-usuario.md",
+          "title": "Configurar tu perfil de usuario"
+        },
+        {
+          "article_id": "NOTION-293B7527AC2580198727D2472095CF40",
+          "notion_id": "293b7527ac2580198727d2472095cf40",
+          "path": "docs/centro-de-ayuda/cuenta-y-facturacion/gestionar-tu-plan-y-tus-facturas.md",
+          "title": "Gestionar tu plan y tus facturas"
+        },
+        {
+          "article_id": "NOTION-293B7527AC2580559DCAEA01D891166F",
+          "notion_id": "293b7527ac2580559dcaea01d891166f",
+          "path": "docs/centro-de-ayuda/cuenta-y-facturacion/contactar-con-soporte.md",
+          "title": "Contactar con soporte"
+        },
+        {
+          "article_id": "NOTION-29CB7527AC25803EAFC4CA2F66E40100",
+          "notion_id": "29cb7527ac25803eafc4ca2f66e40100",
+          "path": "docs/centro-de-ayuda/cuenta-y-facturacion/enviar-sugerencias.md",
+          "title": "Enviar sugerencias"
+        }
+      ]
+    },
+    {
+      "article_id": "NOTION-29CB7527AC2580569616CB6FF64994C5",
+      "created": "October 30, 2025 11:21 AM",
+      "notion_id": "29cb7527ac2580569616cb6ff64994c5",
+      "path": "docs/centro-de-ayuda/inicio-y-acceso/index.md",
+      "title": "Inicio y acceso",
+      "articles": [
+        {
+          "article_id": "NOTION-29CB7527AC25802184E3E9E42CF145C4",
+          "notion_id": "29cb7527ac25802184e3e9e42cf145c4",
+          "path": "docs/centro-de-ayuda/inicio-y-acceso/acceder-a-la-plataforma.md",
+          "title": "Acceder a la plataforma"
+        },
+        {
+          "article_id": "NOTION-29CB7527AC25805FBCA2F3502E47AAF2",
+          "notion_id": "29cb7527ac25805fbca2f3502e47aaf2",
+          "path": "docs/centro-de-ayuda/inicio-y-acceso/configurar-opciones-de-seguridad.md",
+          "title": "Configurar opciones de seguridad"
+        },
+        {
+          "article_id": "NOTION-29CB7527AC2580738CE7F3C0C3BED33A",
+          "notion_id": "29cb7527ac2580738ce7f3c0c3bed33a",
+          "path": "docs/centro-de-ayuda/inicio-y-acceso/cerrar-sesion-en-la-plataforma.md",
+          "title": "Cerrar sesión en la plataforma"
+        },
+        {
+          "article_id": "NOTION-29CB7527AC2580F1923AD7B8DE4BC730",
+          "notion_id": "29cb7527ac2580f1923ad7b8de4bc730",
+          "path": "docs/centro-de-ayuda/inicio-y-acceso/descargar-la-app.md",
+          "title": "Descargar la app"
+        }
+      ]
+    },
+    {
+      "article_id": "NOTION-33DB7527AC258099913DE0A2F8D411CE",
+      "created": "April 9, 2026 12:58 PM",
+      "notion_id": "33db7527ac258099913de0a2f8d411ce",
+      "path": "docs/centro-de-ayuda/visibilidad/index.md",
+      "title": "Visibilidad",
+      "articles": [
+        {
+          "article_id": "NOTION-281B7527AC25816F982ADF1D7872261E",
+          "notion_id": "281b7527ac25816f982adf1d7872261e",
+          "path": "docs/centro-de-ayuda/visibilidad/anadir-o-actualizar-informacion-en-tu-perfil-de-google.md",
+          "title": "Añadir o actualizar información en tu Perfil de Google"
+        },
+        {
+          "article_id": "NOTION-294B7527AC2580D6BF9EFF0387AB0A49",
+          "notion_id": "294b7527ac2580d6bf9eff0387ab0a49",
+          "path": "docs/centro-de-ayuda/visibilidad/expansion-de-tu-negocio-en-otras-plataformas.md",
+          "title": "Expansión de tu negocio en otras plataformas"
+        },
+        {
+          "article_id": "NOTION-365B7527AC2580B3BD31C0399509AFFD",
+          "notion_id": "365b7527ac2580b3bd31c0399509affd",
+          "path": "docs/centro-de-ayuda/visibilidad/como-crear-tu-pagina-web.md",
+          "title": "Cómo crear tu página web"
+        }
+      ]
+    },
+    {
+      "article_id": "NOTION-365B7527AC25801CB0ADC4C3062368A8",
+      "created": "May 19, 2026 9:41 AM",
+      "notion_id": "365b7527ac25801cb0adc4c3062368a8",
+      "path": "docs/centro-de-ayuda/reputacion/index.md",
+      "title": "Reputación",
+      "articles": [
+        {
+          "article_id": "NOTION-29CB7527AC2580ADAE29D4030612C887",
+          "notion_id": "29cb7527ac2580adae29d4030612c887",
+          "path": "docs/centro-de-ayuda/reputacion/consultar-y-responder-resenas.md",
+          "title": "Consultar y responder reseñas"
+        },
+        {
+          "article_id": "NOTION-29CB7527AC258010B98BE0B7A8A72476",
+          "notion_id": "29cb7527ac258010b98be0b7a8a72476",
+          "path": "docs/centro-de-ayuda/reputacion/automatizar-respuestas-con-beelma.md",
+          "title": "Automatizar respuestas con Beelma"
+        },
+        {
+          "article_id": "NOTION-365B7527AC25803181F0E9EB44032E79",
+          "notion_id": "365b7527ac25803181f0e9eb44032e79",
+          "path": "docs/centro-de-ayuda/reputacion/analizar-resenas-con-beelma.md",
+          "title": "Analizar reseñas con Beelma"
+        },
+        {
+          "article_id": "NOTION-29CB7527AC2580EBB5F8FEFE35C75D98",
+          "notion_id": "29cb7527ac2580ebb5f8fefe35c75d98",
+          "path": "docs/centro-de-ayuda/reputacion/solicitar-mas-resenas-por-whatsapp.md",
+          "title": "Solicitar más reseñas por WhatsApp"
+        },
+        {
+          "article_id": "NOTION-29CB7527AC2580709E3DC05A4B94F629",
+          "notion_id": "29cb7527ac2580709e3dc05a4b94f629",
+          "path": "docs/centro-de-ayuda/reputacion/configurar-alertas-automaticas-de-nuevas-resenas.md",
+          "title": "Configurar alertas automáticas de nuevas reseñas"
+        }
+      ]
+    },
+    {
+      "article_id": "NOTION-365B7527AC258063B166CC696E9E1D76",
+      "created": "May 19, 2026 10:00 AM",
+      "notion_id": "365b7527ac258063b166cc696e9e1d76",
+      "path": "docs/centro-de-ayuda/fidelizacion/index.md",
+      "title": "Fidelización",
+      "articles": [
+        {
+          "article_id": "NOTION-2BDB7527AC2580E2AD53DD358D340739",
+          "notion_id": "2bdb7527ac2580e2ad53dd358d340739",
+          "path": "docs/centro-de-ayuda/fidelizacion/crear-publicaciones-en-google.md",
+          "title": "Crear publicaciones en Google"
+        },
+        {
+          "article_id": "NOTION-365B7527AC25800FBC3DFFA089DC28B5",
+          "notion_id": "365b7527ac25800fbc3dffa089dc28b5",
+          "path": "docs/centro-de-ayuda/fidelizacion/crear-publicaciones-en-redes-sociales.md",
+          "title": "Crear publicaciones en Redes Sociales"
+        }
+      ]
+    },
+    {
+      "article_id": "NOTION-365B7527AC2580DCA322C8BF8AB512E5",
+      "created": "May 19, 2026 10:55 AM",
+      "notion_id": "365b7527ac2580dca322c8bf8ab512e5",
+      "path": "docs/centro-de-ayuda/analitica/index.md",
+      "title": "Analítica",
+      "articles": [
+        {
+          "article_id": "NOTION-281B7527AC25817690BDF271B522C0A7",
+          "notion_id": "281b7527ac25817690bdf271b522c0a7",
+          "path": "docs/centro-de-ayuda/analitica/consultar-estadisticas-del-perfil-de-google.md",
+          "title": "Consultar estadísticas del Perfil de Google"
+        },
+        {
+          "article_id": "NOTION-365B7527AC2580BB95A7C05CB42840A4",
+          "notion_id": "365b7527ac2580bb95a7c05cb42840a4",
+          "path": "docs/centro-de-ayuda/analitica/consultar-estadisticas-de-redes-sociales.md",
+          "title": "Consultar estadísticas de Redes Sociales"
+        },
+        {
+          "article_id": "NOTION-365B7527AC2580EFBFABED7D6303BD08",
+          "notion_id": "365b7527ac2580efbfabed7d6303bd08",
+          "path": "docs/centro-de-ayuda/analitica/consultar-estadisticas-web.md",
+          "title": "Consultar estadísticas web"
+        }
+      ]
+    },
+    {
+      "article_id": "NOTION-365B7527AC2580C08C26ECCD945F3EF5",
+      "created": "May 19, 2026 11:13 AM",
+      "notion_id": "365b7527ac2580c08c26eccd945f3ef5",
+      "path": "docs/centro-de-ayuda/beelma/index.md",
+      "title": "Beelma",
+      "articles": [
+        {
+          "article_id": "NOTION-365B7527AC25802C9C76DB58EE0A3D73",
+          "notion_id": "365b7527ac25802c9c76db58ee0a3d73",
+          "path": "docs/centro-de-ayuda/beelma/que-es-beelma-y-como-empezar-a-usarla.md",
+          "title": "Qué es Beelma y cómo empezar a usarla"
+        }
+      ]
+    },
+    {
+      "article_id": "NOTION-36EB7527AC25804DA424DB2E85074BE7",
+      "created": "May 28, 2026 11:27 AM",
+      "notion_id": "36eb7527ac25804da424db2e85074be7",
+      "path": "docs/centro-de-ayuda/perfil-de-empresa-en-google/index.md",
+      "title": "Conexión Perfil de Empresa en Google",
+      "articles": [
+        {
+          "article_id": "NOTION-281B7527AC25817081B1D51E45A498C7",
+          "notion_id": "281b7527ac25817081b1d51e45a498c7",
+          "path": "docs/centro-de-ayuda/perfil-de-empresa-en-google/como-conectar-tu-perfil-de-google.md",
+          "title": "Cómo conectar tu Perfil de Google"
+        },
+        {
+          "article_id": "NOTION-281B7527AC258075AC6BCA2C4D278384",
+          "notion_id": "281b7527ac258075ac6bca2c4d278384",
+          "path": "docs/centro-de-ayuda/perfil-de-empresa-en-google/crear-un-perfil-de-empresa-en-google.md",
+          "title": "Crear un Perfil de Empresa en Google"
+        }
+      ]
+    }
+  ],
+  "review_findings": [
+    {
+      "notion_id": "365b7527ac25803181f0e9eb44032e79",
+      "kind": "possible_source_wording_error",
+      "detail": "The source says 'analiza automáticamente ... y obtener información'. It is preserved for human review."
+    },
+    {
+      "notion_id": "365b7527ac2580efbfabed7d6303bd08",
+      "kind": "possible_functional_inconsistency",
+      "detail": "The web statistics article describes Perfil de Google statistics in its introduction. It is preserved for human review."
+    }
+  ]
+}
