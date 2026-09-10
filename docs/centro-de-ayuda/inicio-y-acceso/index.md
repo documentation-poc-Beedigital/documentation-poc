@@ -6,6 +6,7 @@ status: published
 owner: Product
 last_reviewed: 2026-09-09
 notion_id: 29cb7527ac2580569616cb6ff64994c5
+sidebar_position: 1
 ---
 
 # Inicio y acceso
