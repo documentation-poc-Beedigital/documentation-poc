@@ -6,6 +6,7 @@ status: published
 owner: Product
 last_reviewed: 2026-09-09
 notion_id: 33db7527ac258099913de0a2f8d411ce
+sidebar_position: 3
 ---
 
 # Visibilidad

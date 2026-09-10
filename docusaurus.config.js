@@ -2,8 +2,8 @@
 
 /** @type {import('@docusaurus/types').Config} */
 const config = {
-  title: 'Documentación BeeDigital',
-  tagline: 'Documentación de producto',
+  title: 'Centro de Ayuda Beesible',
+  tagline: 'Ayuda para utilizar Beesible',
   url: 'https://documentation-poc-beedigital.github.io',
   baseUrl: '/documentation-poc/',
   organizationName: 'documentation-poc-Beedigital',
@@ -28,7 +28,7 @@ const config = {
         docs: {
           path: 'docs',
           routeBasePath: '/',
-          sidebarPath: require.resolve('./sidebars.js'),
+          sidebarPath: './sidebars.js',
           exclude: ['production-snapshots/**'],
         },
         blog: false,
@@ -38,19 +38,12 @@ const config = {
 
   themeConfig: {
     navbar: {
-      title: 'Documentación BeeDigital',
-      items: [
-        {
-          type: 'docSidebar',
-          sidebarId: 'docsSidebar',
-          position: 'left',
-          label: 'Documentación',
-        },
-      ],
+      title: 'Centro de Ayuda Beesible',
+      items: [],
     },
     footer: {
       style: 'dark',
-      copyright: `BeeDigital ${new Date().getFullYear()}`,
+      copyright: `Beesible ${new Date().getFullYear()}`,
     },
   },
 };

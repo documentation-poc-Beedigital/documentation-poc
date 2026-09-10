@@ -129,6 +129,22 @@ class NotionMigrationSafetyTests(unittest.TestCase):
             "notion_id: 0123456789abcdef0123456789abcdef", frontmatter
         )
 
+    def test_category_frontmatter_contains_deterministic_sidebar_position(self) -> None:
+        notion_id = "29cb7527ac2580569616cb6ff64994c5"
+        page = MIGRATION.Page(
+            notion_id=notion_id,
+            title="Inicio y acceso",
+            source_name="ignored.md",
+            content="# Inicio y acceso\n",
+            created="October 30, 2025 11:21 AM",
+            category_id=notion_id,
+            destination=MIGRATION.PurePosixPath(
+                "docs/centro-de-ayuda/inicio-y-acceso/index.md"
+            ),
+            is_category=True,
+        )
+        self.assertIn("sidebar_position: 1", MIGRATION.render_frontmatter(page))
+
 
 if __name__ == "__main__":
     unittest.main()

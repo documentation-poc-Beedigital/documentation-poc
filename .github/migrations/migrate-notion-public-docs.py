@@ -84,6 +84,17 @@ CATEGORY_CONTRACT = {
     ),
 }
 
+CATEGORY_SIDEBAR_POSITIONS = {
+    "29cb7527ac2580569616cb6ff64994c5": 1,
+    "36eb7527ac25804da424db2e85074be7": 2,
+    "33db7527ac258099913de0a2f8d411ce": 3,
+    "365b7527ac25801cb0adc4c3062368a8": 4,
+    "365b7527ac258063b166cc696e9e1d76": 5,
+    "365b7527ac2580c08c26eccd945f3ef5": 6,
+    "365b7527ac2580dca322c8bf8ab512e5": 7,
+    "293b7527ac25808ab603de04e37fd7fa": 8,
+}
+
 REVIEW_FINDINGS = (
     {
         "notion_id": "365b7527ac25803181f0e9eb44032e79",
@@ -286,6 +297,11 @@ def rewrite_links(
 
 def render_frontmatter(page: Page) -> str:
     title = json.dumps(page.title, ensure_ascii=False)
+    sidebar_position = (
+        f"sidebar_position: {CATEGORY_SIDEBAR_POSITIONS[page.notion_id]}\n"
+        if page.is_category
+        else ""
+    )
     return (
         "---\n"
         f"article_id: {page.article_id}\n"
@@ -295,6 +311,7 @@ def render_frontmatter(page: Page) -> str:
         "owner: Product\n"
         f"last_reviewed: {LAST_REVIEWED}\n"
         f"notion_id: {page.notion_id}\n"
+        f"{sidebar_position}"
         "---\n\n"
     )
 
