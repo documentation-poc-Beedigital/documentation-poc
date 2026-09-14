@@ -1,18 +1,19 @@
 ---
 article_id: NOTION-365B7527AC2580B3BD31C0399509AFFD
 title: "Cómo crear tu página web"
-version: 1.0
+version: 1.1
 status: published
 owner: Product
 last_reviewed: 2026-09-09
 notion_id: 365b7527ac2580b3bd31c0399509affd
 ---
-
 # Cómo crear tu página web
 
-Crear tu página web en **Beesible** es un proceso guiado que te permite tener tu sitio listo paso a paso, sin conocimientos técnicos.
+Durante el proceso de onboarding y desde tu primer acceso a la plataforma, **Beesible** genera automáticamente una primera versión funcional de la web de tu negocio utilizando la información disponible en tu Perfil de Empresa en Google (Google Business Profile), sin necesidad de configuración previa ni intervención manual.
 
-A continuación te explicamos cómo hacerlo desde cero.
+Esta versión inicial sirve como punto de partida para que puedas disponer de un sitio web activo e ir personalizándolo según tus necesidades. Incluso si la información de tu perfil de Google es parcial o incompleta, la plataforma creará la estructura web básica con los datos disponibles, incluyendo elementos como opiniones o reseñas formateadas con fechas amigables (por ejemplo, 10/03/2019).
+
+A continuación te explicamos cómo gestionar, configurar y personalizar tu página web paso a paso.
 
 ---
 
