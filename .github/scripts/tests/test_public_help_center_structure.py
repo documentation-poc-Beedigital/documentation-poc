@@ -59,7 +59,7 @@ class PublicHelpCenterStructureTests(unittest.TestCase):
         home = DOCS_ROOT / "index.md"
         metadata = frontmatter(home)
         self.assertEqual("Centro de Ayuda Beesible", metadata["title"])
-        self.assertEqual("1.0", metadata["version"])
+        self.assertEqual("1.1", metadata["version"])
         self.assertEqual("published", metadata["status"])
         self.assertEqual("Product", metadata["owner"])
         self.assertEqual("2026-09-09", metadata["last_reviewed"])
