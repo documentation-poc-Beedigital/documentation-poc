@@ -4,6 +4,7 @@
 const config = {
   title: 'Centro de Ayuda Beesible',
   tagline: 'Ayuda para utilizar Beesible',
+  favicon: 'img/brand/beesible-icon.svg',
   url: 'https://documentation-poc-beedigital.github.io',
   baseUrl: '/documentation-poc/',
   organizationName: 'documentation-poc-Beedigital',
@@ -20,6 +21,17 @@ const config = {
     mermaid: true,
   },
   themes: ['@docusaurus/theme-mermaid'],
+  plugins: [
+    ['@cmfcmf/docusaurus-search-local', {
+      indexDocs: true,
+      indexBlog: false,
+      indexPages: false,
+      language: 'es',
+      indexDocSidebarParentCategories: 1,
+      includeParentCategoriesInPageTitle: true,
+      maxSearchResults: 8,
+    }],
+  ],
 
   presets: [
     [
@@ -32,17 +44,26 @@ const config = {
           exclude: ['production-snapshots/**'],
         },
         blog: false,
+        theme: {customCss: './src/css/custom.css'},
       },
     ],
   ],
 
   themeConfig: {
+    metadata: [{name: 'description', content: 'Centro de Ayuda Beesible: guías públicas para acceder a tu cuenta, gestionar tu presencia digital y utilizar Beelma.'}],
     navbar: {
-      title: 'Centro de Ayuda Beesible',
-      items: [],
+      title: 'Centro de Ayuda',
+      logo: {
+        alt: 'Beesible — Centro de Ayuda',
+        src: 'img/brand/beesible-oscuro.svg',
+        srcDark: 'img/brand/beesible-claro.svg',
+        href: '/',
+      },
+      items: [{type: 'search', position: 'right'}],
     },
     footer: {
       style: 'dark',
+      links: [{title: 'Beesible', items: [{label: 'Conoce Beesible', href: 'https://www.beesible.ai/'}]}],
       copyright: `Beesible ${new Date().getFullYear()}`,
     },
   },

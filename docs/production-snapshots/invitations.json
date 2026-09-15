@@ -1,0 +1,8 @@
+{
+  "feature": "invitation-expiration",
+  "current_production_value_hours": 48,
+  "previous_value_hours": 24,
+  "captured_at": "2026-08-21",
+  "source": "simulated-production",
+  "related_issue": "POC-001"
+}
