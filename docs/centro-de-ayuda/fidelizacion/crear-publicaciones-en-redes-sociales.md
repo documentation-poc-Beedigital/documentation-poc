@@ -1,12 +1,13 @@
 ---
 article_id: NOTION-365B7527AC25800FBC3DFFA089DC28B5
 title: "Crear publicaciones en Redes Sociales"
-version: 1.1
+version: 1.0
 status: published
 owner: Product
 last_reviewed: 2026-09-09
 notion_id: 365b7527ac25800fbc3dffa089dc28b5
 ---
+
 # Crear publicaciones en Redes Sociales
 
 Beesible te permite **organizar y gestionar la actividad de redes sociales desde un mismo lugar**. Facilita la planificación de publicaciones, el control de mensajes y la administración de varias cuentas sin tener que acceder a cada plataforma por separado.
@@ -69,44 +70,6 @@ Además, ayuda a publicar de forma más regular, organizar mejor el contenido y 
 - Filtrar conversaciones por: **No resueltos / No leídos / Todos.**
 - **Marcar todo como resuelto.**
 - **Marcar todo como leído.**
-
----
-
-## 🤖 Gestionar publicaciones en Facebook e Instagram desde Beelma
-
-:::note
-💡 **Nota sobre la función en validación (PoC):** Las capacidades descritas a continuación para conectar, publicar y consultar métricas en Facebook e Instagram a través de Beelma forman parte de una validación en fase de PoC y no constituyen un lanzamiento general en Producción.
-:::
-
-### Conectar Facebook e Instagram desde Beelma
-
-1. Solicita a Beelma en el chat conectar tus redes sociales (Facebook e Instagram).
-2. Beelma te proporcionará un **enlace de autorización** que caduca a los **5 minutos**.
-3. Abre el enlace y completa la autorización fuera del chat:
-   - **Facebook**: requiere conectar una **Página del negocio** (no se admiten perfiles personales).
-   - **Instagram**: requiere una **cuenta profesional** (Business o Creator).
-4. Tras completar la autorización, puedes pedir a Beelma en el chat que **compruebe el estado de las conexiones** para confirmar si cada red está activa.
-
----
-
-### Preparar y publicar contenido desde Beelma
-
-1. **Pedir borrador**: Solicita a Beelma un borrador para Facebook, Instagram o ambas redes. Beelma preparará el texto y, si lo pides, añadirá imágenes.
-2. **Revisar y solicitar cambios**: Revisa el borrador en la conversación y solicita las modificaciones necesarias en el texto o la imagen antes de publicar.
-3. **Publicación explícita e inmediata**: La publicación únicamente se realiza cuando confirmas de forma explícita a Beelma que deseas publicar. Se publica de manera inmediata en Facebook, Instagram o ambas.
-4. **Protección de idempotencia**: Si se reintenta enviar una misma publicación, la protección de idempotencia evita crear contenido duplicado.
-
-*Nota:* No están incluidas la programación de publicaciones, la edición o eliminación posterior a la publicación, la publicación de vídeos o reels, ni la publicación en otras redes sociales como LinkedIn o X.
-
----
-
-### Consultar publicaciones y métricas desde Beelma
-
-1. Pide a Beelma ver las publicaciones creadas desde el chat.
-2. Beelma mostrará el **estado** de tus publicaciones.
-3. Puedes consultar las **métricas disponibles** para comprobar el rendimiento de las publicaciones correspondientes creadas con Beelma.
-
-*Nota:* Quedan fuera del alcance la gestión de mensajes directos, comentarios, gestión de comunidad, webhooks, informes programados y métricas de publicaciones creadas fuera de Beelma.
 
 ---
 
