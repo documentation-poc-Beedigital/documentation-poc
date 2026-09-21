@@ -36,6 +36,12 @@ class DocumentationProposalValidatorTests(unittest.TestCase):
         self.write("docs/invitaciones.md", FRONTMATTER + BODY_ONE)
         self.write("docs/archivos-adjuntos.md", FRONTMATTER.replace("ART-001", "ART-002").replace("Invitations", "Attachments") + BODY_TWO)
         self.write("docs/production-snapshots/state.json", "{}\n")
+        self.write(
+            "docs/centro-de-ayuda/cuenta/index.md",
+            FRONTMATTER.replace("ART-001", "ART-CATEGORY")
+            .replace("Invitations", "Cuenta")
+            + "\n# Cuenta\n",
+        )
         self.write("README.md", "# Fixture\n")
         self.git("add", ".")
         self.git("commit", "--quiet", "-m", "Initial fixtures")
@@ -61,8 +67,10 @@ class DocumentationProposalValidatorTests(unittest.TestCase):
         after = updated_frontmatter + body
         self.write(path, after)
         item = {
-            "path": path, "reason": "Ticket requires this change", "evidence": "Ticket and local docs",
+            "operation": "update", "path": path, "title": "Invitations",
+            "reason": "Ticket requires this change", "evidence": "Ticket and local docs",
             "previous_version": "1.0", "proposed_version": version,
+            "previous_document_sha256": hashlib.sha256(before.encode()).hexdigest(),
             "proposed_body_sha256": hashlib.sha256(body.encode()).hexdigest(),
             "proposed_document_sha256": hashlib.sha256(after.encode()).hexdigest(),
             "diff": "".join(difflib.unified_diff(
@@ -72,6 +80,23 @@ class DocumentationProposalValidatorTests(unittest.TestCase):
         }
         item.update(overrides)
         return item
+
+    def create(self, path: str, title: str, body: str) -> dict[str, object]:
+        after = VALIDATOR.expected_create_frontmatter(path, title) + body
+        self.write(path, after)
+        return {
+            "operation": "create", "path": path, "title": title,
+            "reason": "Ticket requires a new article",
+            "evidence": "Ticket and local docs",
+            "previous_version": None, "proposed_version": "1.0",
+            "previous_document_sha256": None,
+            "proposed_body_sha256": hashlib.sha256(body.encode()).hexdigest(),
+            "proposed_document_sha256": hashlib.sha256(after.encode()).hexdigest(),
+            "diff": "".join(difflib.unified_diff(
+                [], after.splitlines(keepends=True),
+                fromfile="/dev/null", tofile=f"b/{path}",
+            )),
+        }
 
     def write_report(self, decision: str, documents: list[dict[str, str]], **overrides: object) -> None:
         report: dict[str, object] = {
@@ -350,6 +375,96 @@ class DocumentationProposalValidatorTests(unittest.TestCase):
         result = self.validate()
         self.assertTrue(result["valid"], result)
         self.assertEqual(original, (self.root / "docs/invitaciones.md").read_bytes())
+
+    def test_valid_created_document_is_accepted(self) -> None:
+        item = self.create(
+            "docs/centro-de-ayuda/cuenta/activar-alertas.md",
+            "Activar alertas", "\n# Activar alertas\n",
+        )
+        self.write_report("proposal", [item])
+        result = self.validate()
+        self.assertTrue(result["valid"], result)
+        self.assertEqual("create", result["documents"][0]["operation"])
+        self.assertIsNone(result["documents"][0]["previous_version"])
+
+    def test_valid_mixed_creation_and_update_is_atomic_set(self) -> None:
+        updated = self.modify("docs/invitaciones.md", BODY_ONE.replace("24", "48"))
+        created = self.create(
+            "docs/centro-de-ayuda/cuenta/activar-alertas.md",
+            "Activar alertas", "\n# Activar alertas\n",
+        )
+        self.write_report("proposal", [updated, created])
+        result = self.validate()
+        self.assertTrue(result["valid"], result)
+        self.assertEqual({"create", "update"}, {
+            item["operation"] for item in result["documents"]
+        })
+
+    def test_creation_requires_exact_deterministic_frontmatter(self) -> None:
+        item = self.create(
+            "docs/centro-de-ayuda/cuenta/activar-alertas.md",
+            "Activar alertas", "\n# Activar alertas\n",
+        )
+        path = self.root / item["path"]
+        path.write_text(
+            path.read_text(encoding="utf-8").replace(
+                "version: 1.0", "version: 1.0\nnotion_id: invented"
+            ),
+            encoding="utf-8",
+        )
+        self.write_report("proposal", [item])
+        self.assert_rejected("deterministic")
+
+    def test_create_update_conflicts_and_missing_targets_are_rejected(self) -> None:
+        created = self.create(
+            "docs/centro-de-ayuda/cuenta/activar-alertas.md",
+            "Activar alertas", "\n# Activar alertas\n",
+        )
+        created["operation"] = "update"
+        self.write_report("proposal", [created])
+        self.assert_rejected("did not exist in the base")
+
+        self.git("clean", "-fd")
+        updated = self.modify("docs/invitaciones.md", BODY_ONE.replace("24", "48"))
+        updated["operation"] = "create"
+        self.write_report("proposal", [updated])
+        self.assert_rejected("Created document")
+
+    def test_created_markdown_must_be_nonempty_and_well_formed(self) -> None:
+        for body, message in (("\n", "empty"), ("\n~~~text\nopen\n", "unclosed")):
+            with self.subTest(message=message):
+                self.git("clean", "-fd")
+                item = self.create(
+                    "docs/centro-de-ayuda/cuenta/nuevo.md", "Nuevo artículo", body
+                )
+                self.write_report("proposal", [item])
+                self.assert_rejected(message)
+
+    def test_created_document_duplicate_purpose_is_rejected(self) -> None:
+        self.write(
+            "docs/centro-de-ayuda/cuenta/existente.md",
+            FRONTMATTER.replace("Invitations", "Activar alertas")
+            + "\n# Activar alertas\n",
+        )
+        self.git("add", ".")
+        self.git("commit", "--quiet", "-m", "Existing article")
+        self.base_sha = self.git("rev-parse", "HEAD").stdout.strip()
+        item = self.create(
+            "docs/centro-de-ayuda/cuenta/nuevo.md",
+            "Activar alertas", "\n# Otra redacción\n",
+        )
+        self.write_report("proposal", [item])
+        self.assert_rejected("duplicates")
+
+    def test_undeclared_creation_is_rejected(self) -> None:
+        self.write(
+            "docs/centro-de-ayuda/cuenta/no-declarado.md",
+            VALIDATOR.expected_create_frontmatter(
+                "docs/centro-de-ayuda/cuenta/no-declarado.md", "No declarado"
+            ) + "\n# No declarado\n",
+        )
+        self.write_report("abstention", [])
+        self.assert_rejected("empty Git diff")
 
 
 if __name__ == "__main__":

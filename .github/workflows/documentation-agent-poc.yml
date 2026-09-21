@@ -152,6 +152,7 @@ jobs:
           set -euo pipefail
           python "${RUNNER_TEMP}/generate-documentation-proposal.py" \
             --repo-root "${GITHUB_WORKSPACE}" \
+            --base-sha "${{ steps.base.outputs.sha }}" \
             --ticket-file "${RUNNER_TEMP}/documentation-ticket.json" \
             --prompt-file "${RUNNER_TEMP}/documentation-agent-poc.md" \
             --agent-report "${RUNNER_TEMP}/agent-report.md" \
@@ -247,6 +248,14 @@ jobs:
         run: |
           git diff --binary "${BASE_SHA}" -- \
             > "${RUNNER_TEMP}/documentation-proposal.diff"
+
+      - name: Validate documentation site after applying proposal
+        if: steps.validation.outcome == 'success'
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm ci
+          npm run build
 
       - name: Upload proposal evidence
         if: always()
@@ -410,8 +419,8 @@ jobs:
             fi
           done
           while IFS=$'\t' read -r status path; do
-            if [ "${status}" != "M" ]; then
-              echo "The staged Markdown ${path} is not a simple modification" >&2
+            if [ "${status}" != "M" ] && [ "${status}" != "A" ]; then
+              echo "The staged Markdown ${path} is not a validated creation or modification" >&2
               exit 1
             fi
           done < <(git diff --cached --name-status --no-renames -- "${documents[@]}")

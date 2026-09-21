@@ -19,10 +19,13 @@ DEFAULT_MAX_REPORT_BYTES = 262_144
 ALLOWED_SUFFIXES = {".md", ".mdx"}
 REPORT_FIELDS = {"decision", "summary", "reason", "evidence", "documents"}
 REPORT_DOCUMENT_FIELDS = {
-    "path", "reason", "evidence", "previous_version", "proposed_version",
+    "operation", "path", "title", "reason", "evidence", "previous_version", "proposed_version",
+    "previous_document_sha256",
     "proposed_body_sha256", "proposed_document_sha256", "diff",
 }
 SHA256_PATTERN = re.compile(r"[0-9a-f]{64}")
+CREATE_ROOT = PurePosixPath("docs/centro-de-ayuda")
+KEBAB_CASE_NAME = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)*\.md")
 
 
 class ValidationError(ValueError):
@@ -73,9 +76,20 @@ def parse_agent_report(path: Path, max_bytes: int) -> dict[str, object]:
     for index, item in enumerate(documents):
         if not isinstance(item, dict) or set(item) != REPORT_DOCUMENT_FIELDS:
             raise ValidationError(f"Agent report document {index} has an unexpected structure")
-        normalized: dict[str, str] = {}
-        for field in ("path", "reason", "evidence", "previous_version", "proposed_version"):
+        normalized: dict[str, object] = {}
+        for field in ("operation", "path", "title", "reason", "evidence", "proposed_version"):
             normalized[field] = safe_single_line(item[field], f"documents[{index}].{field}")
+        if normalized["operation"] not in {"create", "update"}:
+            raise ValidationError(f"Agent report documents[{index}].operation is invalid")
+        for field in ("previous_version", "previous_document_sha256"):
+            if item[field] is None:
+                normalized[field] = None
+            elif field == "previous_version":
+                normalized[field] = safe_single_line(item[field], f"documents[{index}].{field}")
+            elif not isinstance(item[field], str) or not SHA256_PATTERN.fullmatch(item[field]):
+                raise ValidationError(f"Agent report documents[{index}].{field} is invalid")
+            else:
+                normalized[field] = item[field]
         for field in ("proposed_body_sha256", "proposed_document_sha256"):
             if not isinstance(item[field], str) or not SHA256_PATTERN.fullmatch(item[field]):
                 raise ValidationError(f"Agent report documents[{index}].{field} is invalid")
@@ -83,7 +97,7 @@ def parse_agent_report(path: Path, max_bytes: int) -> dict[str, object]:
         if not isinstance(item["diff"], str):
             raise ValidationError(f"Agent report documents[{index}].diff must be a string")
         normalized["diff"] = item["diff"]
-        parsed.append(normalized)
+        parsed.append(normalized)  # type: ignore[arg-type]
     if value["decision"] == "proposal" and not parsed:
         raise ValidationError("A proposal report requires at least one document")
     if value["decision"] == "abstention" and parsed:
@@ -140,7 +154,7 @@ def untracked_paths(root: Path) -> list[str]:
     return [decode_path(item) for item in output.split(b"\0") if item]
 
 
-def validate_relative_path(root: Path, raw_path: str) -> Path:
+def validate_relative_path(root: Path, raw_path: str, operation: str = "update") -> Path:
     if not raw_path or "\\" in raw_path:
         raise ValidationError(f"Unsafe repository path: {raw_path!r}")
     relative = PurePosixPath(raw_path)
@@ -152,6 +166,15 @@ def validate_relative_path(root: Path, raw_path: str) -> Path:
         raise ValidationError(f"production-snapshots is read-only and cannot be changed: {raw_path}")
     if relative.suffix.lower() not in ALLOWED_SUFFIXES:
         raise ValidationError(f"Changed file is not Markdown (.md or .mdx): {raw_path}")
+    if operation == "create":
+        if relative.suffix != ".md":
+            raise ValidationError(f"Created document must use the .md extension: {raw_path}")
+        if len(relative.parts) != 4 or PurePosixPath(*relative.parts[:2]) != CREATE_ROOT:
+            raise ValidationError(f"Created document must belong to an existing Help Center category: {raw_path}")
+        if relative.name == "index.md":
+            raise ValidationError(f"Creating category indexes is not allowed: {raw_path}")
+        if not KEBAB_CASE_NAME.fullmatch(relative.name):
+            raise ValidationError(f"Created document name must be kebab-case: {raw_path}")
     candidate = root.joinpath(*relative.parts)
     root_resolved = root.resolve(strict=True)
     try:
@@ -163,9 +186,74 @@ def validate_relative_path(root: Path, raw_path: str) -> Path:
         cursor = cursor / part
         if cursor.is_symlink():
             raise ValidationError(f"Symlinks are not allowed in changed paths: {raw_path}")
+    if operation == "create" and (not candidate.parent.is_dir() or not (candidate.parent / "index.md").is_file()):
+        raise ValidationError(f"Created document category must already exist: {raw_path}")
     if not candidate.exists() or not candidate.is_file():
         raise ValidationError(f"Changed Markdown must be an existing regular file: {raw_path}")
     return candidate
+
+
+def deterministic_article_id(raw_path: str) -> str:
+    return "GITHUB-" + hashlib.sha256(raw_path.encode("utf-8")).hexdigest()[:32].upper()
+
+
+def expected_create_frontmatter(raw_path: str, title: str) -> str:
+    return (
+        "---\n"
+        f"article_id: {deterministic_article_id(raw_path)}\n"
+        f"title: {json.dumps(title, ensure_ascii=False)}\n"
+        "version: 1.0\n"
+        "---\n"
+    )
+
+
+def validate_markdown_body(body: str, path: str) -> None:
+    if not body.strip():
+        raise ValidationError(f"Proposed body is empty: {path}")
+    if any(re.search(r"[ \t]+$", line) for line in body.splitlines()):
+        raise ValidationError(f"Proposed body contains trailing whitespace: {path}")
+    open_fence: str | None = None
+    for line in body.splitlines():
+        match = re.match(r"^\s*(```|~~~)", line)
+        if match:
+            marker = match.group(1)
+            if open_fence is None:
+                open_fence = marker
+            elif marker == open_fence:
+                open_fence = None
+    if open_fence is not None:
+        raise ValidationError(f"Proposed body contains an unclosed Markdown fence: {path}")
+
+
+def normalized_purpose(value: str) -> str:
+    return " ".join(re.findall(r"[a-z0-9]+", value.casefold()))
+
+
+def has_duplicate_purpose(root: Path, candidate: Path, title: str) -> bool:
+    purpose = normalized_purpose(title)
+    help_root = root.joinpath(*CREATE_ROOT.parts)
+    for path in help_root.rglob("*.md"):
+        if path == candidate or path.is_symlink() or path.name == "index.md":
+            continue
+        try:
+            frontmatter, body = split_frontmatter(
+                path.read_text(encoding="utf-8"), path.as_posix()
+            )
+        except (OSError, UnicodeDecodeError, ValidationError):
+            continue
+        title_match = re.search(
+            r'^title:\s*["\']?(.*?)["\']?\s*$', frontmatter, re.MULTILINE
+        )
+        heading = next(
+            (line[2:].strip() for line in body.splitlines() if line.startswith("# ")),
+            "",
+        )
+        if purpose in {
+            normalized_purpose(title_match.group(1)) if title_match else "",
+            normalized_purpose(heading),
+        }:
+            return True
+    return False
 
 
 def split_frontmatter(text: str, path: str) -> tuple[str, str]:
@@ -232,9 +320,7 @@ def validate_repository(
         errors.append(str(error))
     entries = changed_entries(root, base_sha)
     untracked = untracked_paths(root)
-    changed_files = [path for _, path in entries]
-    if untracked:
-        errors.append("Added or untracked files are not allowed: " + ", ".join(untracked))
+    changed_files = [path for _, path in entries] + untracked
     for status, path in entries:
         if status != "M":
             errors.append(f"Only modification status M is allowed; {path} has status {status}")
@@ -248,47 +334,85 @@ def validate_repository(
         if report["decision"] == "abstention":
             if entries or untracked:
                 errors.append("An abstention report requires an empty Git diff")
-        elif sorted(reported_paths) != sorted(changed_files) or untracked:
-            errors.append("Proposal report documents must match every modified file exactly")
+            if untracked:
+                errors.append("Added or untracked files are not allowed for abstention: " + ", ".join(untracked))
+        elif sorted(reported_paths) != sorted(changed_files):
+            errors.append("Proposal report documents must match every changed file exactly")
         total_diff_bytes = len(run_git(root, "diff", "--binary", "--no-ext-diff", base_sha, "--").stdout)
+        total_diff_bytes += sum(
+            root.joinpath(*PurePosixPath(path).parts).stat().st_size
+            for path in untracked
+            if root.joinpath(*PurePosixPath(path).parts).is_file()
+        )
         if total_diff_bytes > config.max_diff_bytes:
             errors.append(f"Combined diff is too large: {total_diff_bytes} bytes exceeds {config.max_diff_bytes}")
         for item in reported_documents:
             path = str(item["path"])
+            operation = str(item["operation"])
             try:
-                candidate = validate_relative_path(root, path)
-                if run_git(root, "cat-file", "-e", f"{base_sha}:{path}", check=False).returncode != 0:
-                    raise ValidationError(f"Changed Markdown did not exist in the base commit: {path}")
-                before = read_base_text(root, base_sha, path)
+                candidate = validate_relative_path(root, path, operation)
+                existed = run_git(root, "cat-file", "-e", f"{base_sha}:{path}", check=False).returncode == 0
+                if operation == "update" and not existed:
+                    raise ValidationError(f"Updated Markdown did not exist in the base commit: {path}")
+                if operation == "create" and existed:
+                    raise ValidationError(f"Created Markdown already existed in the base commit: {path}")
+                if operation == "create" and path not in untracked:
+                    raise ValidationError(f"Created Markdown must be an untracked addition: {path}")
+                if operation == "update" and ("M", path) not in entries:
+                    raise ValidationError(f"Updated Markdown must have Git status M: {path}")
+                before = read_base_text(root, base_sha, path) if existed else None
                 after = read_worktree_text(candidate, path)
-                before_frontmatter, before_body = split_frontmatter(before, path)
                 after_frontmatter, after_body = split_frontmatter(after, path)
-                expected_frontmatter, previous_version, proposed_version = increment_frontmatter_version(before_frontmatter, path)
+                validate_markdown_body(after_body, path)
+                if operation == "create":
+                    expected_frontmatter = expected_create_frontmatter(path, str(item["title"]))
+                    previous_version = None
+                    proposed_version = "1.0"
+                    if has_duplicate_purpose(root, candidate, str(item["title"])):
+                        raise ValidationError(
+                            f"Created document duplicates an existing document purpose: {path}"
+                        )
+                else:
+                    assert before is not None
+                    before_frontmatter, before_body = split_frontmatter(before, path)
+                    expected_frontmatter, previous_version, proposed_version = increment_frontmatter_version(before_frontmatter, path)
+                    if after_body == before_body:
+                        raise ValidationError(f"Proposed body is unchanged: {path}")
                 if after_frontmatter != expected_frontmatter:
-                    raise ValidationError(f"Only the deterministic MINOR version increment is allowed in frontmatter: {path}")
-                if after_body == before_body:
-                    raise ValidationError(f"Proposed body is unchanged: {path}")
+                    raise ValidationError(
+                        f"Only the deterministic MINOR version increment or deterministic creation "
+                        f"frontmatter is allowed: {path}"
+                    )
                 if item["previous_version"] != previous_version or item["proposed_version"] != proposed_version:
                     raise ValidationError(f"Reported versions do not match {path}")
+                previous_hash = sha256_text(before) if before is not None else None
+                if item["previous_document_sha256"] != previous_hash:
+                    raise ValidationError(f"Previous document hash does not match {path}")
                 if item["proposed_body_sha256"] != sha256_text(after_body):
                     raise ValidationError(f"Modified body does not match the validated proposal: {path}")
                 if item["proposed_document_sha256"] != sha256_text(after):
                     raise ValidationError(f"Modified document does not match the validated proposal: {path}")
                 expected_diff = "".join(difflib.unified_diff(
-                    before.splitlines(keepends=True), after.splitlines(keepends=True),
-                    fromfile=f"a/{path}", tofile=f"b/{path}",
+                    before.splitlines(keepends=True) if before is not None else [],
+                    after.splitlines(keepends=True),
+                    fromfile=f"a/{path}" if before is not None else "/dev/null", tofile=f"b/{path}",
                 ))
                 if item["diff"] != expected_diff:
                     raise ValidationError(f"Reported diff does not match the complete change: {path}")
                 documents_result.append({
-                    "path": path, "reason": item["reason"], "evidence": item["evidence"],
+                    "operation": operation, "path": path, "title": item["title"],
+                    "reason": item["reason"], "evidence": item["evidence"],
                     "previous_version": previous_version, "proposed_version": proposed_version,
                 })
             except ValidationError as error:
                 errors.append(str(error))
+    reported_operations = {
+        str(item["path"]): str(item["operation"])
+        for item in report["documents"]
+    } if report is not None else {}
     for path in changed_files:
         try:
-            validate_relative_path(root, path)
+            validate_relative_path(root, path, reported_operations.get(path, "update"))
         except ValidationError as error:
             if str(error) not in errors:
                 errors.append(str(error))

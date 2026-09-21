@@ -23,6 +23,8 @@ REPOSITORY_PATTERN = re.compile(
     r"[A-Za-z0-9](?:[A-Za-z0-9_.-]*[A-Za-z0-9])?"
 )
 ALLOWED_SUFFIXES = {".md", ".mdx"}
+CREATE_ROOT = PurePosixPath("docs/centro-de-ayuda")
+KEBAB_CASE_NAME = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)*\.md")
 MAX_AGENT_REPORT_BYTES = 262_144
 FRONTMATTER_VERSION_PATTERN = re.compile(
     r"^version: ([0-9]+\.[0-9]+)\r?$", re.MULTILINE
@@ -158,7 +160,7 @@ def validate_base_state(root: Path, base_sha: str) -> None:
         raise PublicationPreparationError("HEAD no longer matches the trusted BASE_SHA")
 
 
-def validate_document_path(root: Path, raw_path: str) -> Path:
+def validate_document_path(root: Path, raw_path: str, operation: str = "update") -> Path:
     if (
         not raw_path
         or "\\" in raw_path
@@ -174,6 +176,15 @@ def validate_document_path(root: Path, raw_path: str) -> Path:
         raise PublicationPreparationError("production-snapshots cannot be published")
     if relative.suffix.lower() not in ALLOWED_SUFFIXES:
         raise PublicationPreparationError("Validated document is not Markdown")
+    if operation == "create":
+        if (
+            relative.suffix != ".md"
+            or len(relative.parts) != 4
+            or PurePosixPath(*relative.parts[:2]) != CREATE_ROOT
+            or relative.name == "index.md"
+            or not KEBAB_CASE_NAME.fullmatch(relative.name)
+        ):
+            raise PublicationPreparationError("Validated created document path is not allowed")
 
     candidate = root.joinpath(*relative.parts)
     cursor = root
@@ -197,15 +208,11 @@ def validate_repository_state(
     base_sha: str,
     decision: str,
     changed_files: list[object],
+    document_metadata: list[object] | None = None,
 ) -> list[str]:
     validate_base_state(root, base_sha)
     entries = changed_entries(root, base_sha)
     untracked = untracked_paths(root)
-    if untracked:
-        raise PublicationPreparationError(
-            "Untracked files prevent publication: " + ", ".join(untracked)
-        )
-
     if decision == "abstention":
         if changed_files != []:
             raise PublicationPreparationError(
@@ -220,12 +227,29 @@ def validate_repository_state(
     documents = [str(path) for path in changed_files]
     if len(documents) != len(set(documents)):
         raise PublicationPreparationError("changed_files contains duplicate paths")
-    for document in documents:
-        validate_document_path(root, document)
-    if sorted(entries) != sorted(("M", document) for document in documents):
+    metadata = document_metadata or []
+    operations = {
+        str(item.get("path")): item.get("operation")
+        for item in metadata if isinstance(item, dict)
+    }
+    if set(operations) != set(documents):
         raise PublicationPreparationError(
-            "The Git diff does not match all validated Markdown documents: "
-            f"expected {documents!r}, found {entries!r}"
+            "Validated operation metadata does not match changed_files"
+        )
+    if any(operation not in {"create", "update"} for operation in operations.values()):
+        raise PublicationPreparationError("Validated document operation is invalid")
+    for document in documents:
+        validate_document_path(root, document, str(operations[document]))
+    expected_entries = sorted(
+        ("M", document) for document in documents if operations[document] == "update"
+    )
+    expected_untracked = sorted(
+        document for document in documents if operations[document] == "create"
+    )
+    if sorted(entries) != expected_entries or sorted(untracked) != expected_untracked:
+        raise PublicationPreparationError(
+            "Untracked files or the Git diff do not match all validated Markdown documents: "
+            f"expected {documents!r}, found tracked={entries!r}, untracked={untracked!r}"
         )
 
     diff_check = run_git(root, "diff", "--check", base_sha, "--", check=False)
@@ -270,14 +294,20 @@ def extract_document_version(content: bytes, label: str) -> str:
     return matches[0]
 
 
-def document_versions(root: Path, base_sha: str, document: str) -> tuple[str, str]:
-    previous = run_git(root, "show", f"{base_sha}:{document}").stdout
+def document_versions(
+    root: Path, base_sha: str, document: str, operation: str
+) -> tuple[str | None, str]:
+    previous = (
+        run_git(root, "show", f"{base_sha}:{document}").stdout
+        if operation == "update"
+        else None
+    )
     try:
         proposed = root.joinpath(*PurePosixPath(document).parts).read_bytes()
     except OSError as error:
         raise PublicationPreparationError("Could not read proposed document") from error
     return (
-        extract_document_version(previous, "Base document"),
+        extract_document_version(previous, "Base document") if previous is not None else None,
         extract_document_version(proposed, "Proposed document"),
     )
 
@@ -305,22 +335,37 @@ def build_pull_request_body(
     documents = report.get("documents")
     if not isinstance(documents, list) or not documents:
         raise PublicationPreparationError("Proposal report must describe its documents")
-    document_sections: list[str] = []
+    created_sections: list[str] = []
+    updated_sections: list[str] = []
     for item in documents:
         if not isinstance(item, dict):
             raise PublicationPreparationError("Proposal report document is invalid")
+        operation = item.get("operation")
         path = item.get("path")
+        title = item.get("title")
         reason = item.get("reason")
         evidence = item.get("evidence")
         previous = item.get("previous_version")
         proposed = item.get("proposed_version")
-        if not all(isinstance(value, str) for value in (path, reason, evidence, previous, proposed)):
+        if (
+            operation not in {"create", "update"}
+            or not all(
+                isinstance(value, str)
+                for value in (path, title, reason, evidence, proposed)
+            )
+            or (operation == "update" and not isinstance(previous, str))
+            or (operation == "create" and previous is not None)
+        ):
             raise PublicationPreparationError("Proposal report document metadata is invalid")
-        document_sections.append(
-            f"### `{path}`\n\n"
-            f"- Versión: `{previous}` → `{proposed}`\n"
+        section = (
+            f"### {escape_markdown_inline(title)}\n\n"
+            f"- Ruta: `{path}`\n"
+            f"- Versión: `{'nuevo' if previous is None else previous}` → `{proposed}`\n"
             f"- Motivo: {escape_markdown_inline(reason)}\n"
             f"- Evidencia: {escape_markdown_inline(evidence)}\n"
+        )
+        (created_sections if operation == "create" else updated_sections).append(
+            section
         )
     summary = report.get("summary")
     reason = report.get("reason")
@@ -335,8 +380,10 @@ def build_pull_request_body(
         f"**Cambio:** {escape_markdown_inline(summary)}\n\n"
         f"**Motivo:** {escape_markdown_inline(reason)}\n\n"
         f"**Evidencia:** {escape_markdown_inline(evidence)}\n\n"
-        "## Documentos afectados\n\n"
-        + "\n".join(document_sections)
+        "## Documentos creados\n\n"
+        + ("\n".join(created_sections) if created_sections else "Ninguno.\n")
+        + "\n## Documentos actualizados\n\n"
+        + ("\n".join(updated_sections) if updated_sections else "Ninguno.\n")
         + "\n"
         f"[Ver ejecución de GitHub Actions]({actions_url})\n\n"
         "> Esta propuesta fue generada por Gemini y validada "
@@ -373,7 +420,14 @@ def prepare_publication(
     if not isinstance(changed_files, list):
         raise PublicationPreparationError("validation-result.json changed_files must be a list")
 
-    documents = validate_repository_state(root, base_sha, decision, changed_files)
+    validated_documents = validation.get("documents")
+    if not isinstance(validated_documents, list):
+        raise PublicationPreparationError(
+            "validation-result.json documents must be a list"
+        )
+    documents = validate_repository_state(
+        root, base_sha, decision, changed_files, validated_documents
+    )
     if decision == "abstention":
         return {"publish": "false", "decision": "abstention"}
 
@@ -394,30 +448,43 @@ def prepare_publication(
     title = build_pull_request_title(ticket["issue_key"], ticket["issue_summary"])
     commit_message = f"{ticket['issue_key']} Apply validated documentation proposal"
     actions_url = f"{server_url}/{repository}/actions/runs/{run_id}"
-    validated_documents = validation.get("documents")
     if not isinstance(validated_documents, list) or len(validated_documents) != len(documents):
         raise PublicationPreparationError(
             "validation-result.json documents must describe every changed file"
         )
-    publication_documents: list[dict[str, str]] = []
+    publication_documents: list[dict[str, object]] = []
     seen: set[str] = set()
     for item in validated_documents:
         if not isinstance(item, dict) or set(item) != {
-            "path", "reason", "evidence", "previous_version", "proposed_version"
+            "operation", "path", "title", "reason", "evidence",
+            "previous_version", "proposed_version"
         }:
             raise PublicationPreparationError("Invalid validated document metadata")
         document = item["path"]
         if not isinstance(document, str) or document in seen or document not in documents:
             raise PublicationPreparationError("Validated document metadata paths do not match")
         seen.add(document)
-        previous_version, proposed_version = document_versions(root, base_sha, document)
+        operation = item["operation"]
+        document_title = item["title"]
+        if (
+            operation not in {"create", "update"}
+            or not isinstance(document_title, str)
+        ):
+            raise PublicationPreparationError(
+                "Validated document operation or title is invalid"
+            )
+        previous_version, proposed_version = document_versions(
+            root, base_sha, document, operation
+        )
         if item["previous_version"] != previous_version or item["proposed_version"] != proposed_version:
             raise PublicationPreparationError("Validated document versions do not match Git")
         if not isinstance(item["reason"], str) or not isinstance(item["evidence"], str):
             raise PublicationPreparationError("Validated document explanation is invalid")
         publication_documents.append(
             {
+                "operation": operation,
                 "path": document,
+                "title": document_title,
                 "reason": item["reason"],
                 "evidence": item["evidence"],
                 "previous_version": previous_version,

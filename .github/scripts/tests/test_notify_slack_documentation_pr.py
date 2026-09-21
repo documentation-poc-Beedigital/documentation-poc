@@ -32,14 +32,18 @@ class SlackDocumentationNotificationTests(unittest.TestCase):
             "issue_summary": "Automatizar la activación del agente",
             "documents": [
                 {
+                    "operation": "update",
                     "path": "docs/flujo-agente-documentacion.md",
+                    "title": "Flujo del agente",
                     "reason": "Ticket",
                     "evidence": "Docs",
                     "previous_version": "1.0",
                     "proposed_version": "1.1",
                 },
                 {
+                    "operation": "update",
                     "path": "docs/invitaciones.md",
+                    "title": "Invitaciones",
                     "reason": "Coherence",
                     "evidence": "Docs",
                     "previous_version": "2.4",
@@ -226,6 +230,18 @@ class SlackDocumentationNotificationTests(unittest.TestCase):
             ],
         )
         json.loads(request.data.decode("utf-8"))
+
+    def test_message_distinguishes_created_and_updated_documents(self) -> None:
+        fields = self.fields()
+        documents = fields["documents"]
+        assert isinstance(documents, list)
+        documents[0]["operation"] = "create"
+        documents[0]["previous_version"] = None
+        documents[0]["proposed_version"] = "1.0"
+        message = NOTIFIER.build_message(**fields)
+        self.assertIn("Nuevo", message)
+        self.assertIn("nuevo → 1.0", message)
+        self.assertIn("Actualizado", message)
 
 
 if __name__ == "__main__":

@@ -28,6 +28,10 @@ class DocumentationPullRequestPreparationTests(unittest.TestCase):
         self.git("config", "core.autocrlf", "false")
         self.write("docs/one.md", "---\nversion: 1.0\n---\n\n# One\n")
         self.write("docs/two.mdx", "---\nversion: 2.9\n---\n\n# Two\n")
+        self.write(
+            "docs/centro-de-ayuda/cuenta/index.md",
+            "---\nversion: 1.0\n---\n\n# Cuenta\n",
+        )
         self.git("add", ".")
         self.git("commit", "--quiet", "-m", "Initial")
         self.base_sha = self.git("rev-parse", "HEAD").stdout.strip()
@@ -56,8 +60,15 @@ class DocumentationPullRequestPreparationTests(unittest.TestCase):
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(content, encoding="utf-8", newline="")
 
-    def metadata(self, path: str, previous: str, proposed: str) -> dict[str, str]:
-        return {"path": path, "reason": "Affected by ticket", "evidence": "Ticket and docs", "previous_version": previous, "proposed_version": proposed}
+    def metadata(
+        self, path: str, previous: str | None, proposed: str,
+        operation: str = "update", title: str | None = None,
+    ) -> dict[str, object]:
+        return {
+            "operation": operation, "path": path, "title": title or Path(path).stem,
+            "reason": "Affected by ticket", "evidence": "Ticket and docs",
+            "previous_version": previous, "proposed_version": proposed,
+        }
 
     def write_validation(self, decision: str = "proposal", documents: list[dict[str, str]] | None = None, **overrides: object) -> None:
         if documents is None:
@@ -259,6 +270,33 @@ class DocumentationPullRequestPreparationTests(unittest.TestCase):
         self.assertIn("`1.0` → `1.1`", body)
         self.assertIn("`docs/two.mdx`", body)
         self.assertIn("`2.9` → `2.10`", body)
+
+
+    def test_creation_and_update_are_published_in_distinct_sections(self) -> None:
+        self.write("docs/one.md", "---\nversion: 1.1\n---\n\n# One changed\n")
+        created_path = "docs/centro-de-ayuda/cuenta/activar-alertas.md"
+        self.write(
+            created_path,
+            "---\narticle_id: GITHUB-TEST\ntitle: \"Activar alertas\"\n"
+            "version: 1.0\n---\n\n# Activar alertas\n",
+        )
+        documents = [
+            self.metadata("docs/one.md", "1.0", "1.1", title="One"),
+            self.metadata(
+                created_path, None, "1.0", operation="create",
+                title="Activar alertas",
+            ),
+        ]
+        self.write_validation(documents=documents)
+        plan = self.prepare()
+        published = json.loads(plan["documents_json"])
+        self.assertEqual(
+            {"create", "update"}, {item["operation"] for item in published}
+        )
+        body = self.body_file.read_text(encoding="utf-8")
+        self.assertIn("Documentos creados", body)
+        self.assertIn("Documentos actualizados", body)
+        self.assertIn("nuevo", body)
 
 
 if __name__ == "__main__":

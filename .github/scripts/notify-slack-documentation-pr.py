@@ -115,7 +115,7 @@ def escape_slack_text(value: str) -> str:
 def build_message(
     issue_key: str,
     issue_summary: str,
-    documents: Sequence[Mapping[str, str]],
+    documents: Sequence[Mapping[str, object]],
     pr_url: str,
 ) -> str:
     if not ISSUE_KEY_PATTERN.fullmatch(issue_key):
@@ -126,18 +126,32 @@ def build_message(
     document_lines: list[str] = []
     for document in documents:
         if set(document) != {
-            "path", "reason", "evidence", "previous_version", "proposed_version"
+            "operation", "path", "title", "reason", "evidence",
+            "previous_version", "proposed_version"
         }:
             raise SlackNotificationError("Invalid document metadata")
+        operation = document["operation"]
+        if not isinstance(document["path"], str) or not isinstance(document["title"], str):
+            raise SlackNotificationError("Invalid document metadata")
         path = validate_single_line(document["path"], "document")
+        title = validate_single_line(document["title"], "document title")
         previous_version = document["previous_version"]
         proposed_version = document["proposed_version"]
-        if not VERSION_PATTERN.fullmatch(previous_version):
+        if operation not in {"create", "update"}:
+            raise SlackNotificationError("Invalid document operation")
+        if operation == "update" and (
+            not isinstance(previous_version, str)
+            or not VERSION_PATTERN.fullmatch(previous_version)
+        ):
             raise SlackNotificationError("Invalid previous version")
-        if not VERSION_PATTERN.fullmatch(proposed_version):
+        if operation == "create" and previous_version is not None:
+            raise SlackNotificationError("Invalid previous version")
+        if not isinstance(proposed_version, str) or not VERSION_PATTERN.fullmatch(proposed_version):
             raise SlackNotificationError("Invalid proposed version")
         document_lines.append(
-            f"• `{escape_slack_text(path)}`: {previous_version} → {proposed_version}"
+            f"• *{'Nuevo' if operation == 'create' else 'Actualizado'}*: "
+            f"{escape_slack_text(title)} (`{escape_slack_text(path)}`) — "
+            f"{'nuevo' if previous_version is None else previous_version} → {proposed_version}"
         )
     if not pr_url.startswith("https://github.com/"):
         raise SlackNotificationError("Invalid pull request URL")
@@ -155,7 +169,7 @@ def build_payload(
     *,
     issue_key: str,
     issue_summary: str,
-    documents: Sequence[Mapping[str, str]],
+    documents: Sequence[Mapping[str, object]],
     pr_url: str,
 ) -> bytes:
     return json.dumps(
@@ -172,16 +186,16 @@ def build_payload(
     ).encode("utf-8")
 
 
-def parse_documents_json(value: str) -> list[dict[str, str]]:
+def parse_documents_json(value: str) -> list[dict[str, object]]:
     try:
         parsed = json.loads(value)
     except json.JSONDecodeError as error:
         raise SlackNotificationError("Invalid documents JSON") from error
     if not isinstance(parsed, list):
         raise SlackNotificationError("Invalid documents JSON")
-    documents: list[dict[str, str]] = []
+    documents: list[dict[str, object]] = []
     for item in parsed:
-        if not isinstance(item, dict) or any(not isinstance(value, str) for value in item.values()):
+        if not isinstance(item, dict):
             raise SlackNotificationError("Invalid documents JSON")
         documents.append(item)
     return documents

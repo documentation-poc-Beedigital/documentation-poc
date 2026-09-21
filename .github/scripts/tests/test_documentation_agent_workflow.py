@@ -111,6 +111,14 @@ class DocumentationAgentWorkflowTests(unittest.TestCase):
         self.assertLess(gemini, jira)
         self.assertIn('--ticket-file "${RUNNER_TEMP}/documentation-ticket.json"', self.workflow)
 
+    def test_end_to_end_pipeline_supports_created_and_updated_files(self) -> None:
+        self.assertIn("--base-sha", self.workflow)
+        self.assertIn("Validate documentation site after applying proposal", self.workflow)
+        self.assertIn("npm run build", self.workflow)
+        self.assertIn('[ "${status}" != "M" ] && [ "${status}" != "A" ]', self.workflow)
+        self.assertIn('git add -- "${documents[@]}"', self.workflow)
+        self.assertEqual(1, self.workflow.count("gh pr create"))
+
 
 if __name__ == "__main__":
     unittest.main()
