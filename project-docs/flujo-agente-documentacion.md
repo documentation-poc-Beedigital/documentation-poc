@@ -1,7 +1,7 @@
 ---
 article_id: ART-DOC-AGENT-001
 title: Flujo del agente de documentación
-version: 1.1
+version: 1.2
 status: published
 owner: Product
 last_reviewed: 2026-09-02
@@ -21,8 +21,8 @@ flowchart TD
     B --> C["Tarea en In Progress"]
     C --> D["Etiqueta documentation-agent-ready"]
     D --> E["Análisis del ticket y la documentación"]
-    E --> F{"¿Existe un documento aplicable?"}
-    F -->|Sí| G["Rama, commit y pull request"]
+    E --> F{"¿Hay una propuesta segura?"}
+    F -->|Actualizar o crear| G["Rama, commit y pull request"]
     F -->|No| H["Abstención y revisión manual"]
     G --> I["Revisión de los PM"]
     I -->|Aprobada| J["Merge y documentación publicada"]
@@ -33,22 +33,24 @@ flowchart TD
 
 Cuando una tarea con la etiqueta `documentation-task` pasa a **In Progress**, Jira añade automáticamente la etiqueta `documentation-agent-ready`.
 
-La etiqueta inicia el workflow de GitHub Actions. El agente utiliza el ticket como evidencia de negocio, revisa la documentación existente y determina si hay un documento directamente relacionado que pueda actualizarse de forma inequívoca.
+La etiqueta inicia el workflow de GitHub Actions. El agente utiliza el ticket como evidencia de negocio, revisa la documentación existente y determina si debe actualizar artículos existentes, crear artículos nuevos dentro de categorías existentes del Centro de Ayuda o combinar ambas operaciones.
 
 | Resultado del análisis | Acción automática | Decisión humana |
 |---|---|---|
-| Existe un documento aplicable | Crea una rama, realiza el cambio, genera un commit y abre una pull request | Un PM aprueba o rechaza la PR |
-| No existe un documento aplicable | Registra una abstención en Jira y no crea una PR | Se solicita revisión manual |
+| Existe un documento aplicable | Propone actualizarlo y abre una única pull request para toda la propuesta | Un PM aprueba o rechaza la PR |
+| No existe un documento aplicable, pero hay evidencia y categoría suficientes | Propone un artículo nuevo con metadatos deterministas y abre la misma pull request | Un PM aprueba o rechaza la PR |
+| No puede decidir con seguridad entre crear o actualizar | Registra una abstención en Jira y no crea una PR | Se solicita revisión manual |
 | El cambio es ambiguo o insuficiente | Registra una abstención en Jira y no crea una PR | Se aclara o completa el ticket |
 
 ## Controles
 
-- Solo se modifica un documento Markdown existente y directamente relacionado.
+- La propuesta puede crear o actualizar uno o varios documentos Markdown y se aplica de forma atómica.
 - El agente no inventa comportamiento, evidencia ni contenido ausente en el ticket.
-- El agente no crea documentos nuevos automáticamente.
+- Los documentos nuevos solo se ubican en categorías existentes de `docs/centro-de-ayuda/`; el código determinista genera su frontmatter, identificador y versión inicial `1.0`.
 - Una discrepancia con un snapshot se muestra como evidencia, pero el ticket validado sigue siendo la fuente de negocio para preparar la propuesta.
 - El cambio se valida antes de crear la PR.
 - El agente nunca aprueba ni fusiona la PR.
+- Si cualquier operación falla, se restauran las actualizaciones y se eliminan las creaciones de esa ejecución.
 - Si no puede proponer un cambio seguro, se abstiene y solicita revisión manual.
 
 ## Responsabilidades

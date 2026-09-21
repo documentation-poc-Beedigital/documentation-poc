@@ -98,10 +98,12 @@ class PublicHelpCenterStructureTests(unittest.TestCase):
         self.assertIn("repositorio público", readme)
         self.assertIn("repositorio o sistema privado", readme)
 
-    def test_fictitious_poc_content_and_snapshot_are_absent(self) -> None:
+    def test_fictitious_poc_content_is_absent_and_snapshot_is_preserved(self) -> None:
         self.assertFalse((DOCS_ROOT / "archivos-adjuntos.md").exists())
         self.assertFalse((DOCS_ROOT / "invitaciones.md").exists())
-        self.assertFalse((DOCS_ROOT / "production-snapshots").exists())
+        self.assertTrue(
+            (DOCS_ROOT / "production-snapshots" / "invitations.json").is_file()
+        )
 
         generator = (
             REPO_ROOT
@@ -117,6 +119,7 @@ class PublicHelpCenterStructureTests(unittest.TestCase):
             / "test_generate_documentation_proposal.py"
         ).read_text(encoding="utf-8")
         self.assertIn("production-snapshots", generator)
+        self.assertIn("read-only", generator)
         self.assertIn("TemporaryDirectory", generator_tests)
         self.assertIn("production-snapshots", generator_tests)
 

@@ -11,6 +11,7 @@ import os
 import re
 import socket
 import stat
+import subprocess
 import sys
 import tempfile
 import time
@@ -32,13 +33,17 @@ MAX_HTTP_ERROR_MESSAGE_CHARACTERS = 240
 RETRY_DELAYS = (2.0, 5.0)
 TRANSIENT_HTTP_CODES = frozenset({429, 500, 502, 503, 504})
 ROOT_FIELDS = {"decision", "summary", "reason", "evidence", "documents"}
-DOCUMENT_FIELDS = {"path", "reason", "evidence", "proposed_body"}
+DOCUMENT_FIELDS = {"operation", "path", "title", "reason", "evidence", "proposed_body"}
+CREATE_ROOT = PurePosixPath("docs/centro-de-ayuda")
+KEBAB_CASE_NAME = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)*\.md")
 
 DOCUMENT_SCHEMA: dict[str, object] = {
     "type": "object",
     "additionalProperties": False,
     "properties": {
-        "path": {"type": "string", "description": "Existing docs/**/*.md or docs/**/*.mdx path."},
+        "operation": {"type": "string", "enum": ["create", "update"]},
+        "path": {"type": "string", "description": "Allowed public documentation path."},
+        "title": {"type": "string", "description": "Document title."},
         "reason": {"type": "string", "description": "Reason this document changes."},
         "evidence": {"type": "string", "description": "Ticket and local evidence used."},
         "proposed_body": {"type": "string", "description": "Complete final Markdown body without frontmatter."},
@@ -55,7 +60,7 @@ PROPOSAL_SCHEMA: dict[str, object] = {
         "evidence": {"type": "string", "description": "Reviewed docs, snapshots and ticket evidence."},
         "documents": {
             "type": "array",
-            "description": "All existing Markdown documents affected by the proposal.",
+            "description": "All Markdown documents created or updated by the proposal.",
             "items": DOCUMENT_SCHEMA,
         },
     },
@@ -271,27 +276,48 @@ def parse_proposal(output_text: str) -> dict[str, object]:
     for index, item in enumerate(documents):
         if not isinstance(item, dict) or set(item) != DOCUMENT_FIELDS:
             raise ProposalError(f"Document {index} must contain exactly the required fields")
+        operation = item["operation"]
+        if operation not in {"create", "update"}:
+            raise ProposalError(f"documents[{index}].operation must be create or update")
         path = validate_text_field(item["path"], f"documents[{index}].path")
+        title = validate_text_field(item["title"], f"documents[{index}].title")
         reason = validate_text_field(item["reason"], f"documents[{index}].reason")
         evidence = validate_text_field(item["evidence"], f"documents[{index}].evidence")
         body = item["proposed_body"]
-        if not isinstance(body, str):
-            raise ProposalError(f"documents[{index}].proposed_body must be a string")
-        if len(body) > MAX_PROPOSED_BODY_CHARACTERS or "\x00" in body:
-            raise ProposalError(f"documents[{index}].proposed_body is unsafe or too long")
-        first_nonempty_line = next(
-            (line.strip() for line in body.splitlines() if line.strip()), ""
-        )
-        if first_nonempty_line == "---":
-            raise ProposalError(
-                f"documents[{index}].proposed_body must not include frontmatter"
-            )
-        parsed_documents.append({"path": path, "reason": reason, "evidence": evidence, "proposed_body": body})
+        validate_markdown_body(body, f"documents[{index}].proposed_body")
+        parsed_documents.append({
+            "operation": operation, "path": path, "title": title,
+            "reason": reason, "evidence": evidence, "proposed_body": body,
+        })
     value["documents"] = parsed_documents
     return value
 
 
-def resolve_document(repo_root: Path, raw_path: str) -> Path:
+def validate_markdown_body(value: object, label: str) -> str:
+    if not isinstance(value, str) or not value.strip():
+        raise ProposalError(f"{label} must be a non-empty string")
+    if len(value) > MAX_PROPOSED_BODY_CHARACTERS or "\x00" in value:
+        raise ProposalError(f"{label} is unsafe or too long")
+    first_nonempty_line = next((line.strip() for line in value.splitlines() if line.strip()), "")
+    if first_nonempty_line == "---":
+        raise ProposalError(f"{label} must not include frontmatter")
+    if any(re.search(r"[ \t]+$", line) for line in value.splitlines()):
+        raise ProposalError(f"{label} contains trailing whitespace")
+    open_fence: str | None = None
+    for line in value.splitlines():
+        match = re.match(r"^\s*(```|~~~)", line)
+        if match:
+            marker = match.group(1)
+            if open_fence is None:
+                open_fence = marker
+            elif marker == open_fence:
+                open_fence = None
+    if open_fence is not None:
+        raise ProposalError(f"{label} contains an unclosed Markdown fence")
+    return value
+
+
+def safe_relative_path(raw_path: str) -> PurePosixPath:
     if not raw_path or "\\" in raw_path:
         raise ProposalError(f"Unsafe proposal document path: {raw_path!r}")
     relative = PurePosixPath(raw_path)
@@ -303,13 +329,22 @@ def resolve_document(repo_root: Path, raw_path: str) -> Path:
         raise ProposalError(f"production-snapshots is read-only: {raw_path}")
     if relative.suffix.lower() not in {".md", ".mdx"}:
         raise ProposalError(f"Proposal document is not Markdown: {raw_path}")
-    root = repo_root.resolve(strict=True)
-    candidate = root.joinpath(*relative.parts)
+    return relative
+
+
+def ensure_no_symlink(root: Path, relative: PurePosixPath, raw_path: str) -> None:
     cursor = root
     for part in relative.parts:
         cursor = cursor / part
         if cursor.is_symlink():
             raise ProposalError(f"Proposal document path contains a symlink: {raw_path}")
+
+
+def resolve_update_document(repo_root: Path, raw_path: str) -> Path:
+    relative = safe_relative_path(raw_path)
+    root = repo_root.resolve(strict=True)
+    candidate = root.joinpath(*relative.parts)
+    ensure_no_symlink(root, relative, raw_path)
     try:
         candidate.resolve(strict=True).relative_to(root)
     except (OSError, ValueError) as error:
@@ -317,6 +352,69 @@ def resolve_document(repo_root: Path, raw_path: str) -> Path:
     if not candidate.is_file():
         raise ProposalError(f"Proposal document is not a regular file: {raw_path}")
     return candidate
+
+
+def resolve_create_document(repo_root: Path, raw_path: str) -> Path:
+    relative = safe_relative_path(raw_path)
+    if relative.suffix != ".md":
+        raise ProposalError(f"Created document must use the .md extension: {raw_path}")
+    if len(relative.parts) != 4 or PurePosixPath(*relative.parts[:2]) != CREATE_ROOT:
+        raise ProposalError(f"Created document must belong to an existing Help Center category: {raw_path}")
+    if relative.name == "index.md":
+        raise ProposalError(f"Creating category indexes is not allowed: {raw_path}")
+    if not KEBAB_CASE_NAME.fullmatch(relative.name):
+        raise ProposalError(f"Created document name must be kebab-case: {raw_path}")
+    root = repo_root.resolve(strict=True)
+    candidate = root.joinpath(*relative.parts)
+    ensure_no_symlink(root, relative, raw_path)
+    parent = candidate.parent
+    if not parent.is_dir() or not (parent / "index.md").is_file():
+        raise ProposalError(f"Created document category must already exist: {raw_path}")
+    if candidate.exists():
+        raise ProposalError(f"Created document path already exists: {raw_path}")
+    try:
+        parent.resolve(strict=True).relative_to(root)
+    except (OSError, ValueError) as error:
+        raise ProposalError(f"Created document path escapes the repository: {raw_path}") from error
+    return candidate
+
+
+def deterministic_article_id(raw_path: str) -> str:
+    return "GITHUB-" + hashlib.sha256(raw_path.encode("utf-8")).hexdigest()[:32].upper()
+
+
+def create_frontmatter(raw_path: str, title: str) -> str:
+    quoted_title = json.dumps(title, ensure_ascii=False)
+    return (
+        "---\n"
+        f"article_id: {deterministic_article_id(raw_path)}\n"
+        f"title: {quoted_title}\n"
+        "version: 1.0\n"
+        "---\n"
+    )
+
+
+def normalized_purpose(value: str) -> str:
+    return " ".join(re.findall(r"[a-z0-9]+", value.casefold()))
+
+
+def existing_document_purposes(repo_root: Path) -> set[str]:
+    purposes: set[str] = set()
+    help_root = repo_root.joinpath(*CREATE_ROOT.parts)
+    if not help_root.is_dir():
+        return purposes
+    for path in help_root.rglob("*.md"):
+        if path.is_symlink() or path.name == "index.md":
+            continue
+        text = path.read_text(encoding="utf-8")
+        frontmatter, body = split_frontmatter(text, path.as_posix())
+        title_match = re.search(r'^title:\s*["\']?(.*?)["\']?\s*$', frontmatter, re.MULTILINE)
+        if title_match:
+            purposes.add(normalized_purpose(title_match.group(1)))
+        heading = next((line[2:].strip() for line in body.splitlines() if line.startswith("# ")), "")
+        if heading:
+            purposes.add(normalized_purpose(heading))
+    return purposes
 
 
 def split_frontmatter(text: str, path: str = "document") -> tuple[str, str]:
@@ -360,36 +458,57 @@ def prepare_changes(repo_root: Path, proposal: Mapping[str, object]) -> list[dic
     changes: list[dict[str, object]] = []
     seen: set[str] = set()
     seen_targets: set[str] = set()
+    purposes = existing_document_purposes(repo_root)
     for item in documents:
         assert isinstance(item, dict)
         raw_path = str(item["path"])
         if raw_path in seen:
             raise ProposalError(f"Duplicate proposal document path: {raw_path}")
         seen.add(raw_path)
-        document = resolve_document(repo_root, raw_path)
-        target_identity = os.path.normcase(str(document.resolve(strict=True)))
+        operation = str(item["operation"])
+        title = str(item["title"])
+        document = (
+            resolve_create_document(repo_root, raw_path)
+            if operation == "create"
+            else resolve_update_document(repo_root, raw_path)
+        )
+        target_identity = os.path.normcase(str(document.resolve(strict=False)))
         if target_identity in seen_targets:
             raise ProposalError(f"Duplicate proposal document target: {raw_path}")
         seen_targets.add(target_identity)
-        try:
-            before = document.read_text(encoding="utf-8")
-        except (OSError, UnicodeDecodeError) as error:
-            raise ProposalError(f"Could not read proposal document {raw_path}: {error}") from error
-        frontmatter, current_body = split_frontmatter(before, raw_path)
         proposed_body = item["proposed_body"]
         assert isinstance(proposed_body, str)
-        if proposed_body == current_body:
-            raise ProposalError(f"Proposed body is unchanged: {raw_path}")
-        updated_frontmatter, previous_version, proposed_version = increment_frontmatter_version(frontmatter, raw_path)
-        after = updated_frontmatter + proposed_body
+        if operation == "create":
+            purpose = normalized_purpose(title)
+            if purpose in purposes:
+                raise ProposalError(f"Created document duplicates an existing document purpose: {raw_path}")
+            purposes.add(purpose)
+            before = None
+            previous_version = None
+            proposed_version = "1.0"
+            after = create_frontmatter(raw_path, title) + proposed_body
+        else:
+            try:
+                before = document.read_text(encoding="utf-8")
+            except (OSError, UnicodeDecodeError) as error:
+                raise ProposalError(f"Could not read proposal document {raw_path}: {error}") from error
+            frontmatter, current_body = split_frontmatter(before, raw_path)
+            if proposed_body == current_body:
+                raise ProposalError(f"Proposed body is unchanged: {raw_path}")
+            updated_frontmatter, previous_version, proposed_version = increment_frontmatter_version(frontmatter, raw_path)
+            after = updated_frontmatter + proposed_body
         diff = "".join(difflib.unified_diff(
-            before.splitlines(keepends=True), after.splitlines(keepends=True),
-            fromfile=f"a/{raw_path}", tofile=f"b/{raw_path}",
+            before.splitlines(keepends=True) if before is not None else [],
+            after.splitlines(keepends=True),
+            fromfile=f"a/{raw_path}" if before is not None else "/dev/null",
+            tofile=f"b/{raw_path}",
         ))
         changes.append({
-            "path": raw_path, "file": document, "before": before, "after": after,
+            "operation": operation, "path": raw_path, "title": title,
+            "file": document, "before": before, "after": after,
             "proposed_body": proposed_body, "reason": item["reason"], "evidence": item["evidence"],
             "previous_version": previous_version, "proposed_version": proposed_version,
+            "previous_document_sha256": sha256_text(before) if before is not None else None,
             "body_sha256": sha256_text(proposed_body), "document_sha256": sha256_text(after), "diff": diff,
         })
     return changes
@@ -400,8 +519,10 @@ def render_agent_report(proposal: Mapping[str, object], changes: Sequence[Mappin
         "decision": proposal["decision"], "summary": proposal["summary"],
         "reason": proposal["reason"], "evidence": proposal["evidence"],
         "documents": [{
-            "path": change["path"], "reason": change["reason"], "evidence": change["evidence"],
+            "operation": change["operation"], "path": change["path"], "title": change["title"],
+            "reason": change["reason"], "evidence": change["evidence"],
             "previous_version": change["previous_version"], "proposed_version": change["proposed_version"],
+            "previous_document_sha256": change["previous_document_sha256"],
             "proposed_body_sha256": change["body_sha256"],
             "proposed_document_sha256": change["document_sha256"], "diff": change["diff"],
         } for change in changes],
@@ -414,28 +535,42 @@ def render_agent_report(proposal: Mapping[str, object], changes: Sequence[Mappin
 
 def apply_changes_atomically(changes: Sequence[Mapping[str, object]]) -> None:
     staged: list[tuple[Path, Path]] = []
-    replaced: list[tuple[Path, bytes]] = []
+    applied: list[tuple[Path, bytes | None]] = []
     try:
         for change in changes:
             target = change["file"]
             assert isinstance(target, Path)
+            before = change["before"]
+            if before is None and target.exists():
+                raise ProposalError(f"Created document appeared before apply: {change['path']}")
+            if isinstance(before, str):
+                try:
+                    current = target.read_text(encoding="utf-8")
+                except (OSError, UnicodeDecodeError) as error:
+                    raise ProposalError(f"Could not revalidate {change['path']} before apply") from error
+                if current != before:
+                    raise ProposalError(f"Document changed after proposal generation: {change['path']}")
             descriptor, temporary_name = tempfile.mkstemp(prefix=".documentation-proposal-", suffix=".tmp", dir=target.parent)
             temporary = Path(temporary_name)
             with os.fdopen(descriptor, "wb") as stream:
                 stream.write(str(change["after"]).encode("utf-8"))
                 stream.flush()
                 os.fsync(stream.fileno())
-            os.chmod(temporary, stat.S_IMODE(target.stat().st_mode))
+            if target.exists():
+                os.chmod(temporary, stat.S_IMODE(target.stat().st_mode))
             staged.append((temporary, target))
         for temporary, target in staged:
-            original = target.read_bytes()
+            original = target.read_bytes() if target.exists() else None
             os.replace(temporary, target)
-            replaced.append((target, original))
+            applied.append((target, original))
     except OSError as error:
         rollback_errors: list[str] = []
-        for target, original in reversed(replaced):
+        for target, original in reversed(applied):
             try:
-                target.write_bytes(original)
+                if original is None:
+                    target.unlink(missing_ok=True)
+                else:
+                    target.write_bytes(original)
             except OSError as rollback_error:
                 rollback_errors.append(str(rollback_error))
         detail = f"; rollback errors: {'; '.join(rollback_errors)}" if rollback_errors else ""
@@ -453,12 +588,27 @@ def write_agent_report(path: Path, report: str) -> None:
     path.write_text(report, encoding="utf-8", newline="")
 
 
+def verify_head(repo_root: Path, base_sha: str | None) -> None:
+    if base_sha is None:
+        return
+    if not re.fullmatch(r"(?:[0-9a-f]{40}|[0-9a-f]{64})", base_sha):
+        raise ProposalError("base_sha must be a full lowercase commit SHA")
+    process = subprocess.run(
+        ["git", "rev-parse", "--verify", "HEAD^{commit}"], cwd=repo_root,
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False,
+    )
+    if process.returncode != 0 or process.stdout.decode("ascii", errors="ignore").strip() != base_sha:
+        raise ProposalError("HEAD changed after the trusted base was captured")
+
+
 def generate_and_apply(
     repo_root: Path, ticket_file: Path, prompt_file: Path, report_file: Path,
     api_key: str, transport: Transport = http_transport, timeout: float = 120.0,
+    base_sha: str | None = None,
 ) -> dict[str, object]:
     if not api_key:
         raise ProposalError("GEMINI_API_KEY is not configured")
+    verify_head(repo_root, base_sha)
     ticket = load_ticket(ticket_file)
     documents = read_documentation(repo_root)
     try:
@@ -467,8 +617,11 @@ def generate_and_apply(
         raise ProposalError(f"Could not read trusted prompt: {error}") from error
     response = transport(API_URL, api_key, build_request(trusted_prompt, ticket, documents), timeout)
     proposal = parse_proposal(extract_output_text(response))
+    if read_documentation(repo_root) != documents:
+        raise ProposalError("Documentation changed after the Gemini request was built")
     changes = prepare_changes(repo_root, proposal)
     report = render_agent_report(proposal, changes)
+    verify_head(repo_root, base_sha)
     write_agent_report(report_file, report)
     apply_changes_atomically(changes)
     return proposal
@@ -481,6 +634,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--prompt-file", type=Path, required=True)
     parser.add_argument("--agent-report", type=Path, required=True)
     parser.add_argument("--timeout", type=float, default=120.0)
+    parser.add_argument("--base-sha")
     return parser
 
 
@@ -492,6 +646,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         generate_and_apply(
             repo_root=args.repo_root, ticket_file=args.ticket_file, prompt_file=args.prompt_file,
             report_file=args.agent_report, api_key=os.environ.get("GEMINI_API_KEY", ""), timeout=args.timeout,
+            base_sha=args.base_sha,
         )
     except (ProposalError, OSError) as error:
         sys.stderr.write(f"Documentation proposal generation failed: {error}\n")

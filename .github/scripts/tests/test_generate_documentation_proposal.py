@@ -58,6 +58,13 @@ class DocumentationProposalGeneratorTests(unittest.TestCase):
         self.temporary_directory = tempfile.TemporaryDirectory()
         self.root = Path(self.temporary_directory.name) / "repository with spaces"
         (self.root / "docs" / "production-snapshots").mkdir(parents=True)
+        (self.root / "docs" / "centro-de-ayuda" / "cuenta").mkdir(parents=True)
+        (self.root / "docs" / "centro-de-ayuda" / "cuenta" / "index.md").write_text(
+            FRONTMATTER.replace("ART-001", "ART-CATEGORY").replace("Invitations", "Cuenta")
+            + "\n# Cuenta\n",
+            encoding="utf-8",
+            newline="",
+        )
         self.first = self.root / "docs" / "invitaciones.md"
         self.second = self.root / "docs" / "archivos-adjuntos.mdx"
         self.first.write_text(FRONTMATTER + BODY_ONE, encoding="utf-8", newline="")
@@ -82,8 +89,15 @@ class DocumentationProposalGeneratorTests(unittest.TestCase):
     def tearDown(self) -> None:
         self.temporary_directory.cleanup()
 
-    def document(self, path: str, body: str, reason: str = "Keep docs coherent") -> dict[str, str]:
-        return {"path": path, "reason": reason, "evidence": "Ticket DOC-1 and local docs", "proposed_body": body}
+    def document(
+        self, path: str, body: str, reason: str = "Keep docs coherent",
+        operation: str = "update", title: str = "Invitations",
+    ) -> dict[str, str]:
+        return {
+            "operation": operation, "path": path, "title": title,
+            "reason": reason, "evidence": "Ticket DOC-1 and local docs",
+            "proposed_body": body,
+        }
 
     def proposal(self, documents: list[dict[str, str]] | None = None, **overrides: object) -> dict[str, object]:
         value: dict[str, object] = {
@@ -117,6 +131,12 @@ class DocumentationProposalGeneratorTests(unittest.TestCase):
         with self.assertRaisesRegex(GENERATOR.ProposalError, message):
             self.run_generator(proposal)
         self.assertEqual(before, (self.first.read_bytes(), self.second.read_bytes()))
+
+    def assert_create_path_rejected(self, path: str, message: str) -> None:
+        item = self.document(
+            path, "\n# Nuevo\n", operation="create", title="Nuevo seguro"
+        )
+        self.assert_rejected_without_changes(self.proposal([item]), message)
 
     def test_one_document_full_body_rewrite_and_report(self) -> None:
         body = "\n# Invitations\n\n## Expiry\n\nInvitations expire after 48 hours.\n"
@@ -387,6 +407,293 @@ class DocumentationProposalGeneratorTests(unittest.TestCase):
     def test_oversized_report_is_rejected_before_writes(self) -> None:
         with mock.patch.object(GENERATOR, "MAX_REPORT_BYTES", 100):
             self.assert_rejected_without_changes(self.proposal(), "report exceeds")
+
+    def test_valid_creation_has_deterministic_frontmatter_and_report(self) -> None:
+        path = "docs/centro-de-ayuda/cuenta/activar-alertas.md"
+        body = "\n# Activar alertas\n\nSigue los pasos indicados.\n"
+        item = self.document(path, body, operation="create", title="Activar alertas")
+        self.run_generator(self.proposal([item]))
+        created = self.root.joinpath(*Path(path).parts).read_text(encoding="utf-8")
+        self.assertIn(f"article_id: {GENERATOR.deterministic_article_id(path)}", created)
+        self.assertIn('title: "Activar alertas"', created)
+        self.assertIn("version: 1.0", created)
+        self.assertNotIn("notion_id", created)
+        report = json.loads(self.report_file.read_text(encoding="utf-8"))["documents"][0]
+        self.assertEqual("create", report["operation"])
+        self.assertIsNone(report["previous_version"])
+        self.assertIsNone(report["previous_document_sha256"])
+        self.assertRegex(report["proposed_document_sha256"], r"^[0-9a-f]{64}$")
+        self.assertIn("/dev/null", report["diff"])
+
+    def test_creation_is_allowed_in_every_existing_help_center_category(self) -> None:
+        repository = Path(__file__).resolve().parents[3]
+        categories = [
+            path for path in (repository / "docs" / "centro-de-ayuda").iterdir()
+            if path.is_dir() and (path / "index.md").is_file()
+        ]
+        self.assertGreater(len(categories), 1)
+        for category in categories:
+            with self.subTest(category=category.name):
+                candidate = (
+                    f"docs/centro-de-ayuda/{category.name}/"
+                    "articulo-de-prueba-no-existente.md"
+                )
+                self.assertEqual(
+                    repository.joinpath(*Path(candidate).parts),
+                    GENERATOR.resolve_create_document(repository, candidate),
+                )
+
+    def test_article_identifier_is_unique_and_deterministic(self) -> None:
+        path = "docs/centro-de-ayuda/cuenta/uno.md"
+        identifier = GENERATOR.deterministic_article_id(path)
+        self.assertEqual(identifier, GENERATOR.deterministic_article_id(path))
+        self.assertNotEqual(
+            identifier,
+            GENERATOR.deterministic_article_id(
+                "docs/centro-de-ayuda/cuenta/dos.md"
+            ),
+        )
+
+    def test_create_rejects_existing_path(self) -> None:
+        path = "docs/centro-de-ayuda/cuenta/existente.md"
+        self.root.joinpath(*Path(path).parts).write_text(
+            FRONTMATTER + "\n# Existente\n", encoding="utf-8"
+        )
+        item = self.document(path, "\n# Nuevo\n", operation="create", title="Nuevo")
+        self.assert_rejected_without_changes(self.proposal([item]), "already exists")
+
+    def test_create_path_policy_rejects_invalid_targets(self) -> None:
+        cases = (
+            ("docs/centro-de-ayuda/inexistente/nuevo.md", "category"),
+            ("docs/centro-de-ayuda/cuenta/nueva-categoria/nuevo.md", "category"),
+            ("docs/centro-de-ayuda/cuenta/index.md", "indexes"),
+            ("docs/centro-de-ayuda/cuenta/No-Valido.md", "kebab-case"),
+            ("/docs/centro-de-ayuda/cuenta/nuevo.md", "Unsafe"),
+            ("docs/centro-de-ayuda/cuenta/../nuevo.md", "Unsafe"),
+            ("docs/production-snapshots/nuevo.md", "read-only"),
+            ("docs/centro-de-ayuda/cuenta/nuevo.mdx", ".md extension"),
+            ("docs/otro/nuevo.md", "Help Center"),
+        )
+        for path, message in cases:
+            with self.subTest(path=path):
+                item = self.document(
+                    path, "\n# Nuevo\n", operation="create", title="Nuevo seguro"
+                )
+                self.assert_rejected_without_changes(self.proposal([item]), message)
+
+    def test_create_rejects_nonexistent_category(self) -> None:
+        self.assert_create_path_rejected(
+            "docs/centro-de-ayuda/inexistente/nuevo.md", "category"
+        )
+
+    def test_create_rejects_category_creation(self) -> None:
+        self.assert_create_path_rejected(
+            "docs/centro-de-ayuda/cuenta/nueva-categoria/nuevo.md", "category"
+        )
+
+    def test_create_rejects_index(self) -> None:
+        self.assert_create_path_rejected(
+            "docs/centro-de-ayuda/cuenta/index.md", "indexes"
+        )
+
+    def test_create_rejects_non_kebab_case_name(self) -> None:
+        self.assert_create_path_rejected(
+            "docs/centro-de-ayuda/cuenta/No-Valido.md", "kebab-case"
+        )
+
+    def test_create_rejects_absolute_path(self) -> None:
+        self.assert_create_path_rejected(
+            "/docs/centro-de-ayuda/cuenta/nuevo.md", "Unsafe"
+        )
+
+    def test_create_rejects_traversal(self) -> None:
+        self.assert_create_path_rejected(
+            "docs/centro-de-ayuda/cuenta/../nuevo.md", "Unsafe"
+        )
+
+    def test_create_rejects_snapshot(self) -> None:
+        self.assert_create_path_rejected(
+            "docs/production-snapshots/nuevo.md", "read-only"
+        )
+
+    def test_create_rejects_non_markdown_file(self) -> None:
+        self.assert_create_path_rejected(
+            "docs/centro-de-ayuda/cuenta/nuevo.json", "not Markdown"
+        )
+
+    def test_create_rejects_path_outside_help_center(self) -> None:
+        self.assert_create_path_rejected("docs/otro/nuevo.md", "Help Center")
+
+    def test_create_rejects_symlink_parent(self) -> None:
+        linked = self.root / "docs" / "centro-de-ayuda" / "enlace"
+        try:
+            os.symlink(self.root / "docs" / "centro-de-ayuda" / "cuenta", linked)
+        except OSError as error:
+            self.skipTest(f"could not create symlink: {error}")
+        item = self.document(
+            "docs/centro-de-ayuda/enlace/nuevo.md", "\n# Nuevo\n",
+            operation="create", title="Nuevo por enlace",
+        )
+        self.assert_rejected_without_changes(self.proposal([item]), "symlink")
+
+    def test_create_rejects_obvious_duplicate_purpose(self) -> None:
+        existing = self.root / "docs/centro-de-ayuda/cuenta/activar-alertas.md"
+        existing.write_text(
+            FRONTMATTER.replace("Invitations", "Activar alertas")
+            + "\n# Activar alertas\n",
+            encoding="utf-8",
+        )
+        item = self.document(
+            "docs/centro-de-ayuda/cuenta/alertas.md", "\n# Alertas\n",
+            operation="create", title="Activar alertas",
+        )
+        self.assert_rejected_without_changes(self.proposal([item]), "duplicates")
+
+    def test_empty_and_invalid_markdown_are_rejected(self) -> None:
+        for body, message in (("", "non-empty"), ("\n~~~text\nunclosed\n", "unclosed")):
+            with self.subTest(message=message):
+                item = self.document(
+                    "docs/centro-de-ayuda/cuenta/nuevo.md", body,
+                    operation="create", title="Nuevo válido",
+                )
+                self.assert_rejected_without_changes(self.proposal([item]), message)
+
+    def test_only_creations_and_mixed_operations_are_supported(self) -> None:
+        created = self.document(
+            "docs/centro-de-ayuda/cuenta/activar-alertas.md",
+            "\n# Activar alertas\n", operation="create", title="Activar alertas",
+        )
+        self.run_generator(self.proposal([created]))
+        self.assertTrue((self.root / created["path"]).is_file())
+        mixed_create = self.document(
+            "docs/centro-de-ayuda/cuenta/configurar-avisos.md",
+            "\n# Configurar avisos\n", operation="create", title="Configurar avisos",
+        )
+        update = self.document("docs/invitaciones.md", BODY_ONE.replace("24", "48"))
+        self.run_generator(self.proposal([update, mixed_create]))
+        self.assertIn("version: 1.1", self.first.read_text(encoding="utf-8"))
+        self.assertTrue((self.root / mixed_create["path"]).is_file())
+
+    def test_multiple_creations_are_applied_together(self) -> None:
+        documents = [
+            self.document(
+                "docs/centro-de-ayuda/cuenta/uno.md", "\n# Uno\n",
+                operation="create", title="Artículo uno",
+            ),
+            self.document(
+                "docs/centro-de-ayuda/cuenta/dos.md", "\n# Dos\n",
+                operation="create", title="Artículo dos",
+            ),
+        ]
+        self.run_generator(self.proposal(documents))
+        for document in documents:
+            self.assertTrue((self.root / document["path"]).is_file())
+
+    def test_new_document_initial_version_is_one_zero(self) -> None:
+        path = "docs/centro-de-ayuda/cuenta/nuevo.md"
+        self.run_generator(self.proposal([
+            self.document(
+                path, "\n# Nuevo\n", operation="create", title="Nuevo artículo"
+            )
+        ]))
+        self.assertIn(
+            "version: 1.0", self.root.joinpath(*Path(path).parts).read_text(encoding="utf-8")
+        )
+
+    def test_new_document_does_not_have_notion_id(self) -> None:
+        path = "docs/centro-de-ayuda/cuenta/nuevo.md"
+        self.run_generator(self.proposal([
+            self.document(
+                path, "\n# Nuevo\n", operation="create", title="Nuevo artículo"
+            )
+        ]))
+        self.assertNotIn(
+            "notion_id", self.root.joinpath(*Path(path).parts).read_text(encoding="utf-8")
+        )
+
+    def test_write_failure_after_creation_removes_new_documents(self) -> None:
+        proposal = self.proposal([
+            self.document(
+                "docs/centro-de-ayuda/cuenta/uno.md", "\n# Uno\n",
+                operation="create", title="Uno nuevo",
+            ),
+            self.document(
+                "docs/centro-de-ayuda/cuenta/dos.md", "\n# Dos\n",
+                operation="create", title="Dos nuevos",
+            ),
+        ])
+        changes = GENERATOR.prepare_changes(self.root, proposal)
+        real_replace = os.replace
+        calls = 0
+        def fail_second(source: object, target: object) -> None:
+            nonlocal calls
+            calls += 1
+            if calls == 2:
+                raise OSError("failure after first creation")
+            real_replace(source, target)
+        with mock.patch.object(GENERATOR.os, "replace", side_effect=fail_second):
+            with self.assertRaises(GENERATOR.ProposalError):
+                GENERATOR.apply_changes_atomically(changes)
+        self.assertFalse((self.root / "docs/centro-de-ayuda/cuenta/uno.md").exists())
+        self.assertFalse((self.root / "docs/centro-de-ayuda/cuenta/dos.md").exists())
+
+    def test_mixed_write_failure_restores_update_and_removes_creation(self) -> None:
+        proposal = self.proposal([
+            self.document("docs/invitaciones.md", BODY_ONE.replace("24", "48")),
+            self.document(
+                "docs/centro-de-ayuda/cuenta/nuevo.md", "\n# Nuevo\n",
+                operation="create", title="Nuevo combinado",
+            ),
+        ])
+        changes = GENERATOR.prepare_changes(self.root, proposal)
+        before = self.first.read_bytes()
+        real_replace = os.replace
+        calls = 0
+        def fail_second(source: object, target: object) -> None:
+            nonlocal calls
+            calls += 1
+            if calls == 2:
+                raise OSError("failure after update")
+            real_replace(source, target)
+        with mock.patch.object(GENERATOR.os, "replace", side_effect=fail_second):
+            with self.assertRaises(GENERATOR.ProposalError):
+                GENERATOR.apply_changes_atomically(changes)
+        self.assertEqual(before, self.first.read_bytes())
+        self.assertFalse((self.root / "docs/centro-de-ayuda/cuenta/nuevo.md").exists())
+
+    def test_documentation_change_during_gemini_request_prevents_apply(self) -> None:
+        first_before = self.first.read_bytes()
+        proposal = self.proposal()
+        response = {
+            "candidates": [{
+                "content": {"parts": [{"text": json.dumps(proposal)}]}
+            }]
+        }
+
+        def changing_transport(*args: object) -> dict[str, object]:
+            self.second.write_text(
+                self.second.read_text(encoding="utf-8") + "\nConcurrent change.\n",
+                encoding="utf-8",
+            )
+            return response
+
+        with self.assertRaisesRegex(GENERATOR.ProposalError, "Documentation changed"):
+            GENERATOR.generate_and_apply(
+                self.root, self.ticket_file, self.prompt_file, self.report_file,
+                "test-secret-key", changing_transport,
+            )
+        self.assertEqual(first_before, self.first.read_bytes())
+
+    def test_prompt_defines_creation_and_abstention_criteria(self) -> None:
+        prompt = PROMPT_PATH.read_text(encoding="utf-8")
+        for phrase in (
+            "Prefiere ", "Elige ", "ticket sea vago",
+            "no puedas determinar la categoría", "contenido sea interno",
+            "título orientado a la tarea", "resultado esperado",
+        ):
+            self.assertIn(phrase, prompt)
+        self.assertNotIn("old_text", prompt)
+        self.assertNotIn("new_text", prompt)
 
 
 class GeminiTransportRegressionTests(unittest.TestCase):
