@@ -1,8 +1,10 @@
 """UI contract checks. Run: python -B -m unittest discover -s tests."""
 import hashlib
 import json
+import os
 from pathlib import Path
 import re
+import subprocess
 import unittest
 import xml.etree.ElementTree as ET
 
@@ -10,6 +12,37 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class HelpCenterUITests(unittest.TestCase):
+    def load_docusaurus_urls(self, **environment):
+        env = os.environ.copy()
+        env.pop('DOCUSAURUS_URL', None)
+        env.pop('DOCUSAURUS_BASE_URL', None)
+        env.update(environment)
+        result = subprocess.run(
+            ['node', '-e', "const {url, baseUrl} = require('./docusaurus.config'); "
+             "process.stdout.write(JSON.stringify({url, baseUrl}));"],
+            cwd=ROOT,
+            env=env,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        return json.loads(result.stdout)
+
+    def test_docusaurus_urls_default_to_github_pages(self):
+        self.assertEqual({
+            'url': 'https://documentation-poc-beedigital.github.io',
+            'baseUrl': '/documentation-poc/',
+        }, self.load_docusaurus_urls())
+
+    def test_docusaurus_urls_can_be_configured_from_environment(self):
+        self.assertEqual({
+            'url': 'https://preview.example.com',
+            'baseUrl': '/',
+        }, self.load_docusaurus_urls(
+            DOCUSAURUS_URL='https://preview.example.com',
+            DOCUSAURUS_BASE_URL='/',
+        ))
+
     def test_brand_assets_and_configuration(self):
         config = (ROOT / 'docusaurus.config.js').read_text(encoding='utf-8')
         for name in ('logo', 'claro', 'oscuro', 'icon'):
