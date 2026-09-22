@@ -172,10 +172,10 @@ jobs:
               report.write_text(
                   json.dumps(
                       {
-                          "decision": "error",
-                          "summary": "Gemini no produjo un informe",
-                          "reason": "La ejecución de Gemini no produjo un informe",
-                          "evidence": "No existe una respuesta estructurada validable",
+                          "decision": "abstention",
+                          "summary": "No se generó una propuesta documental",
+                          "reason": "El flujo no produjo una propuesta de Gemini validable",
+                          "evidence": "No se aplicaron cambios documentales",
                           "documents": [],
                       },
                       ensure_ascii=False,
@@ -188,7 +188,7 @@ jobs:
 
       - name: Validate the generated proposal
         id: validation
-        if: always()
+        if: always() && steps.gemini.outcome != 'skipped'
         continue-on-error: true
         env:
           BASE_SHA: ${{ steps.base.outputs.sha }}
