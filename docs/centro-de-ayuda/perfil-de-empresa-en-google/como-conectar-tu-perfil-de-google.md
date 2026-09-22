@@ -1,13 +1,12 @@
 ---
 article_id: NOTION-281B7527AC25817081B1D51E45A498C7
 title: "Cómo conectar tu Perfil de Google"
-version: 1.0
+version: 1.1
 status: published
 owner: Product
 last_reviewed: 2026-09-09
 notion_id: 281b7527ac25817081b1d51e45a498c7
 ---
-
 # Cómo conectar tu Perfil de Google
 
 Conectar tu **Perfil de Empresa en Google con la plataforma** es fundamental para que toda la información de tu negocio se sincronice correctamente en Google y otras redes, evitando errores y mejorando tu visibilidad.
@@ -35,7 +34,7 @@ Si tienes problemas para conectar tu perfil de Google o tienes alguna duda, pued
 También puedes consultar la sección de **Preguntas Frecuentes** para acceder a nuestra documentación y guías de ayuda.
 :::
 
-1. Una vez conectes tu perfil, accederás a la plataforma con toda tu **información sincronizada**. Desde ese momento, podrás empezar a utilizar Beesible para gestionar tu información, responder reseñas y gestionar tus publicaciones de forma sencilla.
+3. Una vez conectes tu perfil, accederás a la plataforma con toda tu **información sincronizada**. Desde ese momento, podrás empezar a utilizar Beesible para gestionar tu información, responder reseñas y gestionar tus publicaciones de forma sencilla.
 
 ### 👎 Si pulsas **“No tengo Perfil de Empresa”**
 
@@ -49,7 +48,7 @@ También puedes consultar la sección de **Preguntas Frecuentes** para acceder a
 [**Cómo crear tu Perfil de Empresa en Google**](crear-un-perfil-de-empresa-en-google.md)
 :::
 
-1. Una vez termines la creación en Google, vuelve a la plataforma y **conecta tu Perfil de Empresa con Beesible.**
+2. Una vez termines la creación en Google, vuelve a la plataforma y **conecta tu Perfil de Empresa con Beesible.**
 
 ---
 
