@@ -98,6 +98,21 @@ class DocumentationAgentWorkflowTests(unittest.TestCase):
         positions = [self.workflow.index(f"- name: {name}") for name in expected_steps]
         self.assertEqual(sorted(positions), positions)
 
+    def test_emergency_report_abstains_and_skipped_gemini_is_not_validated(self) -> None:
+        report_step = self.workflow.index("- name: Ensure an agent report exists")
+        validation_step = self.workflow.index("- name: Validate the generated proposal")
+        report = self.workflow[report_step:validation_step]
+        self.assertIn('"decision": "abstention"', report)
+        self.assertNotIn('"decision": "error"', report)
+        self.assertIn("El flujo no produjo una propuesta de Gemini validable", report)
+
+        validation = self.workflow[
+            validation_step:self.workflow.index("- name: Capture generated diff")
+        ]
+        self.assertIn(
+            "if: always() && steps.gemini.outcome != 'skipped'", validation
+        )
+
     def test_multi_document_publication_uses_one_commit_and_one_pr_creation(self) -> None:
         self.assertEqual(1, self.workflow.count('git commit -m "${COMMIT_MESSAGE}"'))
         self.assertEqual(1, self.workflow.count("gh pr create"))

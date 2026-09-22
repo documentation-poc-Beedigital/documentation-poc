@@ -142,7 +142,7 @@ class DocumentationProposalValidatorTests(unittest.TestCase):
         first = self.modify("docs/invitaciones.md", BODY_ONE.replace("24", "48"))
         self.modify("docs/archivos-adjuntos.md", BODY_TWO.replace("50", "60"))
         self.write_report("proposal", [first])
-        self.assert_rejected("must match every modified file exactly")
+        self.assert_rejected("must match every changed file exactly")
 
     def test_duplicate_report_paths_are_rejected(self) -> None:
         item = self.modify("docs/invitaciones.md", BODY_ONE.replace("24", "48"))
