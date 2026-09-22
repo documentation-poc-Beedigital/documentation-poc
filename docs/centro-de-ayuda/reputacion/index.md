@@ -1,14 +1,13 @@
 ---
 article_id: NOTION-365B7527AC25801CB0ADC4C3062368A8
 title: "Reputación"
-version: 1.0
+version: 1.1
 status: published
 owner: Product
 last_reviewed: 2026-09-09
 notion_id: 365b7527ac25801cb0adc4c3062368a8
 sidebar_position: 4
 ---
-
 # Reputación
 
 ## ⭐Reputación
@@ -22,3 +21,5 @@ sidebar_position: 4
 [Solicitar más reseñas por WhatsApp ](solicitar-mas-resenas-por-whatsapp.md)
 
 [Configurar alertas automáticas de nuevas reseñas ](configurar-alertas-automaticas-de-nuevas-resenas.md)
+
+[Exportar reseñas en formato CSV](exportar-resenas-en-formato-csv.md)
