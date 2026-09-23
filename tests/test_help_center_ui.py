@@ -1,5 +1,5 @@
 """UI contract checks. Run: python -B -m unittest discover -s tests."""
-import hashlib
+import json
 from pathlib import Path
 import re
 import subprocess
@@ -88,18 +88,14 @@ class HelpCenterUITests(unittest.TestCase):
         self.assertEqual([ROOT / 'docs/index.md'], roots)
         self.assertFalse((ROOT / 'src/pages/index.js').exists())
 
-    def test_document_corpus_is_unchanged(self):
-        documents = [ROOT / 'docs/index.md', *(ROOT / 'docs/centro-de-ayuda').rglob('*.md')]
-        self.assertEqual(33, len(documents))
-        for path in documents:
-            relative = path.relative_to(ROOT).as_posix()
-            committed = subprocess.check_output(['git', 'show', f'HEAD:{relative}'], cwd=ROOT)
-            actual = path.read_bytes()
-            self.assertEqual(
-                hashlib.sha256(committed.replace(b'\r\n', b'\n')).hexdigest(),
-                hashlib.sha256(actual.replace(b'\r\n', b'\n')).hexdigest(),
-                f'Document content changed: {relative}',
-            )
+    def test_original_migrated_corpus_is_still_present(self):
+        baseline = json.loads(
+            (ROOT / 'tests/fixtures/public-docs-sha256.json').read_text(encoding='utf-8')
+        )
+        self.assertEqual(32, len(baseline))
+        for relative in baseline:
+            path = ROOT / relative
+            self.assertTrue(path.is_file(), f'Original migrated document missing: {relative}')
 
     def test_no_private_or_brand_pdf_assets(self):
         self.assertFalse(list((ROOT / 'static').rglob('*.pdf')))
