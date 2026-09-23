@@ -51,18 +51,22 @@ const config = {
 
   themeConfig: {
     metadata: [{name: 'description', content: 'Centro de Ayuda Beesible: guías públicas para acceder a tu cuenta, gestionar tu presencia digital y utilizar Beelma.'}],
+    colorMode: {
+      defaultMode: 'light',
+      disableSwitch: true,
+      respectPrefersColorScheme: false,
+    },
     navbar: {
       title: 'Centro de Ayuda',
       logo: {
         alt: 'Beesible — Centro de Ayuda',
         src: 'img/brand/beesible-oscuro.svg',
-        srcDark: 'img/brand/beesible-claro.svg',
         href: '/',
       },
       items: [{type: 'search', position: 'right'}],
     },
     footer: {
-      style: 'dark',
+      style: 'light',
       links: [{title: 'Beesible', items: [{label: 'Conoce Beesible', href: 'https://www.beesible.ai/'}]}],
       copyright: `Beesible ${new Date().getFullYear()}`,
     },

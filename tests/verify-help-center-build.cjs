@@ -12,6 +12,11 @@ function files(dir) {
 }
 const output = files(root);
 assert(!output.some(f => /project-docs|production-snapshots|\.pdf$/i.test(f)));
+assert(!output.some(f => /bee-design-system\.json|design-system[\\/]local/i.test(f)));
+for (const file of output.filter(f => /\.(?:css|html|js|json|map)$/i.test(f))) {
+  const content = fs.readFileSync(file, 'utf8');
+  assert(!/bee-design-system\.json|design-system[\\/]local/i.test(content), `${file} leaks the local design-system source path`);
+}
 const pages = new Map(output.filter(f => f.endsWith('.html')).map(f => [f, load(fs.readFileSync(f, 'utf8'))]));
 let links = 0;
 for (const [file, $] of pages) {
