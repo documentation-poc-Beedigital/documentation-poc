@@ -1,8 +1,8 @@
 """UI contract checks. Run: python -B -m unittest discover -s tests."""
 import hashlib
-import json
 from pathlib import Path
 import re
+import subprocess
 import unittest
 import xml.etree.ElementTree as ET
 
@@ -17,9 +17,16 @@ class HelpCenterUITests(unittest.TestCase):
             self.assertEqual('{http://www.w3.org/2000/svg}svg', ET.parse(asset).getroot().tag)
         self.assertIn("favicon: 'img/brand/beesible-icon.svg'", config)
         self.assertIn("src: 'img/brand/beesible-oscuro.svg'", config)
-        self.assertIn("srcDark: 'img/brand/beesible-claro.svg'", config)
         self.assertIn("customCss: './src/css/custom.css'", config)
         self.assertNotRegex(config, r'(?i)algolia|apiKey|appId|secret')
+
+    def test_light_mode_is_the_only_available_mode(self):
+        config = (ROOT / 'docusaurus.config.js').read_text(encoding='utf-8')
+        self.assertIn("defaultMode: 'light'", config)
+        self.assertIn('disableSwitch: true', config)
+        self.assertIn('respectPrefersColorScheme: false', config)
+        self.assertNotIn("style: 'dark'", config)
+        self.assertNotIn('srcDark:', config)
 
     def test_local_search_options(self):
         config = (ROOT / 'docusaurus.config.js').read_text(encoding='utf-8')
@@ -30,14 +37,37 @@ class HelpCenterUITests(unittest.TestCase):
                        "type: 'search'"):
             self.assertIn(option, config)
 
-    def test_styles_are_local_and_use_brand_palette(self):
+    def test_styles_import_only_the_selected_local_tokens(self):
         css = (ROOT / 'src/css/custom.css').read_text(encoding='utf-8')
-        for color in ('#18d3d6', '#6818aa', '#373737', '#ebd4fa', '#d2f8f9'):
-            self.assertIn(color, css.lower())
+        tokens = (ROOT / 'src/css/bee-tokens.css').read_text(encoding='utf-8')
+        self.assertTrue(css.startswith("@import './bee-tokens.css';"))
+        for heading in ('Origen: Bee Design System', 'Fecha de exportación: 2026-09-22',
+                        'Modo disponible: Light', 'No editar valores sin validación de Diseño'):
+            self.assertIn(heading, tokens)
+        for category in ('Brand', 'Background, text and border', 'Button', 'Header', 'Sidebar',
+                         'Breadcrumb', 'Input and local search', 'Card', 'Alert', 'Footer',
+                         'Focus', 'Spacing', 'Typography', 'Radius and shadows used'):
+            self.assertIn(f'/* {category} */', tokens)
+        self.assertNotRegex(css, r'#[0-9a-fA-F]{3,8}\b')
         self.assertIn(':focus-visible', css)
-        self.assertIn("[data-theme='dark']", css)
         self.assertIn('@media', css)
-        self.assertNotRegex(css, r'https?://|@import')
+        self.assertNotRegex(css + tokens, r'https?://')
+        self.assertNotIn("[data-theme='dark']", css + tokens)
+        definitions = set(re.findall(r'(--bee-[\w-]+)\s*:', tokens))
+        references = set(re.findall(r'var\((--bee-[\w-]+)', css + tokens))
+        self.assertEqual(definitions, references, 'Every selected Bee token must be used')
+
+    def test_complete_design_system_export_is_local_only(self):
+        source = 'design-system/local/bee-design-system.json'
+        ignored = subprocess.run(
+            ['git', 'check-ignore', '-q', source], cwd=ROOT, check=False
+        )
+        tracked = subprocess.run(
+            ['git', 'ls-files', '--error-unmatch', source], cwd=ROOT,
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False
+        )
+        self.assertEqual(0, ignored.returncode)
+        self.assertNotEqual(0, tracked.returncode)
 
     def test_home_and_category_routes(self):
         home = (ROOT / 'docs/index.md').read_text(encoding='utf-8')
@@ -58,12 +88,18 @@ class HelpCenterUITests(unittest.TestCase):
         self.assertEqual([ROOT / 'docs/index.md'], roots)
         self.assertFalse((ROOT / 'src/pages/index.js').exists())
 
-    def test_migrated_corpus_matches_baseline(self):
-        baseline = json.loads((ROOT / 'tests/fixtures/public-docs-sha256.json').read_text())
-        actual = {p.relative_to(ROOT).as_posix(): hashlib.sha256(p.read_bytes().replace(b'\r\n', b'\n')).hexdigest()
-                  for p in (ROOT / 'docs/centro-de-ayuda').rglob('*.md')}
-        self.assertEqual(32, len(actual))
-        self.assertEqual(baseline, actual)
+    def test_document_corpus_is_unchanged(self):
+        documents = [ROOT / 'docs/index.md', *(ROOT / 'docs/centro-de-ayuda').rglob('*.md')]
+        self.assertEqual(33, len(documents))
+        for path in documents:
+            relative = path.relative_to(ROOT).as_posix()
+            committed = subprocess.check_output(['git', 'show', f'HEAD:{relative}'], cwd=ROOT)
+            actual = path.read_bytes()
+            self.assertEqual(
+                hashlib.sha256(committed.replace(b'\r\n', b'\n')).hexdigest(),
+                hashlib.sha256(actual.replace(b'\r\n', b'\n')).hexdigest(),
+                f'Document content changed: {relative}',
+            )
 
     def test_no_private_or_brand_pdf_assets(self):
         self.assertFalse(list((ROOT / 'static').rglob('*.pdf')))

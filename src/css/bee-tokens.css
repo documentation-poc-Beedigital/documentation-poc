@@ -1,0 +1,133 @@
+/**
+ * Origen: Bee Design System
+ * Fecha de exportación: 2026-09-22
+ * Modo disponible: Light
+ * No editar valores sin validación de Diseño.
+ *
+ * Dependencia pendiente: Poppins no está disponible como asset local autorizado;
+ * se conserva temporalmente la pila tipográfica del sistema.
+ * Radios: el export no incluye tokens de radio; estos aliases mínimos reutilizan
+ * la escala Bee de 4 px y requieren validación de Diseño.
+ */
+
+:root {
+  /* Brand */
+  --bee-brand-primary: #6818aa;
+  --bee-brand-primary-hover: #501280;
+  --bee-brand-primary-strong: #380c55;
+  --bee-brand-primary-strongest: #20062b;
+  --bee-brand-primary-light: #801dd4;
+  --bee-brand-primary-lighter: #a362ed;
+  --bee-brand-primary-lightest: #ebd4fa;
+  --bee-brand-secondary: #18d3d6;
+
+  /* Background, text and border */
+  --bee-background-default: #ffffff;
+  --bee-background-subtle: #f8f8f8;
+  --bee-background-brand-subtle: #ebd4fa;
+  --bee-background-gradient-start: #f7f3fb;
+  --bee-background-gradient-end: #f3fdfd;
+  --bee-text-default: #373737;
+  --bee-text-subtle: #828282;
+  --bee-text-inverse: #ffffff;
+  --bee-border-default: #cccccc;
+
+  /* Button */
+  --bee-button-primary-background: #6818aa;
+  --bee-button-primary-background-hover: #501280;
+  --bee-button-primary-background-pressed: #a362ed;
+  --bee-button-primary-text: var(--bee-text-inverse);
+
+  /* Header */
+  --bee-header-background: #ffffff;
+  --bee-header-border: #f8f8f8;
+  --bee-header-text: #373737;
+
+  /* Sidebar */
+  --bee-sidebar-background: #ffffff;
+  --bee-sidebar-border: #e2e2e2;
+  --bee-sidebar-item-background-hover: #f8f8f8;
+  --bee-sidebar-item-background-active: #ebd4fa;
+  --bee-sidebar-item-text: #373737;
+
+  /* Breadcrumb */
+  --bee-breadcrumb-link: #a362ed;
+  --bee-breadcrumb-text: #373737;
+
+  /* Input and local search */
+  --bee-input-background: #ffffff;
+  --bee-input-border: #3f3f3f;
+  --bee-input-border-focus: #bd8ef2;
+  --bee-input-text: #373737;
+  --bee-input-placeholder: #828282;
+  --bee-input-focus-shadow: #ebd4fa;
+  --bee-search-brand-rgb: 104, 24, 170;
+  --bee-search-text-rgb: 55, 55, 55;
+  --bee-search-background-rgb: 255, 255, 255;
+  --bee-search-selected-rgb: 235, 212, 250;
+  --bee-search-muted-rgb: 130, 130, 130;
+
+  /* Card */
+  --bee-card-background: #ffffff;
+  --bee-card-border: #cccccc;
+  --bee-card-text: #373737;
+  --bee-card-text-subtle: #828282;
+
+  /* Alert */
+  --bee-alert-info-background: #d2f8f9;
+  --bee-alert-info-border: #008385;
+  --bee-alert-success-background: #dcefe3;
+  --bee-alert-success-border: #134b2c;
+  --bee-alert-warning-background: #ffefe0;
+  --bee-alert-warning-border: #996737;
+  --bee-alert-error-background: #fadbdb;
+  --bee-alert-error-border: #841f29;
+  --bee-alert-text: #373737;
+
+  /* Footer */
+  --bee-footer-background: #ffffff;
+  --bee-footer-border: #ebd4fa;
+  --bee-footer-text: #373737;
+  --bee-footer-text-accent: #6818aa;
+
+  /* Focus */
+  --bee-focus-ring-color: #bd8ef2;
+  --bee-focus-ring-width: 2px;
+  --bee-focus-ring-offset: 2px;
+
+  /* Spacing */
+  --bee-space-1: 4px;
+  --bee-space-2: 8px;
+  --bee-space-3: 12px;
+  --bee-space-4: 16px;
+  --bee-space-5: 24px;
+  --bee-space-6: 32px;
+  --bee-space-7: 40px;
+  --bee-space-8: 48px;
+  --bee-space-9: 64px;
+
+  /* Typography */
+  --bee-font-family-base: system-ui, -apple-system, "Segoe UI", sans-serif;
+  --bee-font-size-h1: 56px;
+  --bee-font-size-h2: 40px;
+  --bee-font-size-h3: 32px;
+  --bee-font-size-h4: 24px;
+  --bee-font-size-body: 16px;
+  --bee-font-size-small: 14px;
+  --bee-font-size-extra-small: 12px;
+  --bee-font-weight-light: 300;
+  --bee-font-weight-semibold: 600;
+  --bee-line-height-h1: 1.35;
+  --bee-line-height-h2: 1.4;
+  --bee-line-height-h3: 1.45;
+  --bee-line-height-h4: 1.35;
+  --bee-line-height-body: 1.35;
+
+  /* Radius and shadows used */
+  --bee-radius-small: 8px;
+  --bee-radius-medium: 12px;
+  --bee-radius-large: 16px;
+  --bee-radius-hero: 24px;
+  --bee-shadow-raised: 0 12px 12px 0 #59516f1a;
+  --bee-shadow-focus: 0 0 0 4px #ebd4fa;
+}
