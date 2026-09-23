@@ -589,6 +589,32 @@ class DocumentationProposalGeneratorTests(unittest.TestCase):
         for document in documents:
             self.assertTrue((self.root / document["path"]).is_file())
 
+    def test_second_creation_succeeds_after_first_is_incorporated(self) -> None:
+        first = self.document(
+            "docs/centro-de-ayuda/cuenta/primer-articulo.md",
+            "\n# Primer artículo\n",
+            operation="create",
+            title="Primer artículo",
+        )
+        self.run_generator(self.proposal([first]))
+        first_path = self.root / first["path"]
+        first_content = first_path.read_bytes()
+
+        second = self.document(
+            "docs/centro-de-ayuda/cuenta/segundo-articulo.md",
+            "\n# Segundo artículo\n",
+            operation="create",
+            title="Segundo artículo",
+        )
+        self.run_generator(self.proposal([second]))
+
+        self.assertEqual(first_content, first_path.read_bytes())
+        self.assertTrue((self.root / second["path"]).is_file())
+        for document in (first, second):
+            content = (self.root / document["path"]).read_text(encoding="utf-8")
+            self.assertIn("article_id: GITHUB-", content)
+            self.assertNotIn("notion_id", content)
+
     def test_new_document_initial_version_is_one_zero(self) -> None:
         path = "docs/centro-de-ayuda/cuenta/nuevo.md"
         self.run_generator(self.proposal([
@@ -694,6 +720,21 @@ class DocumentationProposalGeneratorTests(unittest.TestCase):
             self.assertIn(phrase, prompt)
         self.assertNotIn("old_text", prompt)
         self.assertNotIn("new_text", prompt)
+
+    def test_prompt_defines_technical_writer_editorial_criteria(self) -> None:
+        prompt = PROMPT_PATH.read_text(encoding="utf-8")
+        for phrase in (
+            "## Criterios editoriales de Technical Writer",
+            "### Referencia de estilo local",
+            "### Audiencia y voz",
+            "### Contenido orientado a tareas",
+            "### Control editorial",
+            "conserva literalmente lo no relacionado",
+            "español de España",
+            "Cómo comprobar que ha funcionado",
+            "cada etiqueta de interfaz y afirmación funcional tiene evidencia",
+        ):
+            self.assertIn(phrase, prompt)
 
 
 class GeminiTransportRegressionTests(unittest.TestCase):
