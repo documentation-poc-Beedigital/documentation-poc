@@ -1,7 +1,7 @@
 ---
 article_id: NOTION-281B7527AC25817081B1D51E45A498C7
 title: "Cómo conectar tu Perfil de Google"
-version: 1.1
+version: 1.2
 status: published
 owner: Product
 last_reviewed: 2026-09-09
@@ -26,13 +26,13 @@ Al completar tu contratación, te pediremos que **conectes tu Perfil de Empresa 
     - Elige la que deseas gestionar para completar el proceso.
     - Si ninguna corresponde, selecciona **“Prueba con otra cuenta”** para elegir una diferente.
 
-:::note
-💡
+    :::note
+    💡 **A tener en cuenta:**
 
-Si tienes problemas para conectar tu perfil de Google o tienes alguna duda, puedes acceder al módulo “Necesito ayuda”, donde encontrarás el enlace “**Centro de Ayuda**”. Desde allí podrás contactarnos por email o mediante el formulario de contacto.
+    Si tienes problemas para conectar tu perfil de Google o tienes alguna duda, puedes acceder al módulo “Necesito ayuda”, donde encontrarás el enlace “**Centro de Ayuda**”. Desde allí podrás contactarnos por email o mediante el formulario de contacto.
 
-También puedes consultar la sección de **Preguntas Frecuentes** para acceder a nuestra documentación y guías de ayuda.
-:::
+    También puedes consultar la sección de **Preguntas Frecuentes** para acceder a nuestra documentación y guías de ayuda.
+    :::
 
 3. Una vez conectes tu perfil, accederás a la plataforma con toda tu **información sincronizada**. Desde ese momento, podrás empezar a utilizar Beesible para gestionar tu información, responder reseñas y gestionar tus publicaciones de forma sencilla.
 
@@ -40,13 +40,13 @@ También puedes consultar la sección de **Preguntas Frecuentes** para acceder a
 
 1. Se abrirá la página oficial de Google para iniciar el proceso de creación de un perfil de empresa en Google.
 
-:::note
-ℹ️
+    :::note
+    ℹ️ **Más información:**
 
-**Para más detalles sobre cómo crear un perfil, visita nuestra guía:**
+    **Para más detalles sobre cómo crear un perfil, visita nuestra guía:**
 
-[**Cómo crear tu Perfil de Empresa en Google**](crear-un-perfil-de-empresa-en-google.md)
-:::
+    [**Cómo crear tu Perfil de Empresa en Google**](crear-un-perfil-de-empresa-en-google.md)
+    :::
 
 2. Una vez termines la creación en Google, vuelve a la plataforma y **conecta tu Perfil de Empresa con Beesible.**
 

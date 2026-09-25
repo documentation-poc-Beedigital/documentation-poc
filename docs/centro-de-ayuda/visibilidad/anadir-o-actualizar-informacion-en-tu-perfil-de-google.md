@@ -1,7 +1,7 @@
 ---
 article_id: NOTION-281B7527AC25816F982ADF1D7872261E
 title: "Añadir o actualizar información en tu Perfil de Google"
-version: 1.0
+version: 1.1
 status: published
 owner: Product
 last_reviewed: 2026-09-09
@@ -40,7 +40,7 @@ Pulsa “**Editar**” para:
 - Añadir o actualizar la **descripción de tu negocio** para que los clientes sepan qué ofreces.
 
 :::note
-⚠️
+⚠️ **Importante:**
 
 Modificar la información general puede suspender tu perfil de empresa en Google si el cambio no cumple con sus [**directrices de nombre, categoría y descripción de empresa.**](https://support.google.com/business/answer/3038177?hl=es#zippy=%2Cnombre)
 :::
@@ -54,7 +54,7 @@ Pulsa “**Editar**” para:
 - Añadir o actualizar tu **página web**.
 
 :::note
-⚠️
+⚠️ **Importante:**
 
 Modificar la información de contacto puede suspender tu perfil de empresa en Google si el cambio no cumple con sus [**directrices de contacto.**](https://support.google.com/business/answer/3038177?hl=es#zippy=%2Csitio-web-y-tel%C3%A9fono)
 :::
@@ -66,7 +66,7 @@ Modificar la información de contacto puede suspender tu perfil de empresa en Go
     - **Dirección oculta:** opción para mantener tu privacidad si no atiendes al público o trabajas desde casa. Tu información será visible sin mostrar la ubicación exacta.
 
 :::note
-⚠️
+⚠️ **Importante:**
 
 Modificar la dirección puede suspender tu perfil de empresa en Google si el cambio no cumple con sus [**directrices de ubicación.](https://support.google.com/business/answer/3038177?hl=es#zippy=%2Cdirecci%C3%B3n)**
 :::
@@ -82,7 +82,7 @@ Modificar la dirección puede suspender tu perfil de empresa en Google si el cam
 - Recuerda: los cambios **solo se guardan si das clic en “Guardar cambios”**. Si pulsas **“Cancelar”**, todo volverá al estado anterior.
 
 :::note
-⚠️
+⚠️ **Importante:**
 
 Modificar los horarios puede suspender tu perfil de empresa en Google si el cambio no cumple con sus [**directrices de horarios de apertura.](https://support.google.com/business/answer/3038177?hl=es#zippy=%2Chorario-de-apertura)**
 :::
@@ -112,9 +112,7 @@ Modificar los horarios puede suspender tu perfil de empresa en Google si el camb
 - Pulsa **“Guardar cambios”** para aplicar todas las modificaciones.
 
 :::note
-⚠️
-
-**A tener en cuenta:**
+⚠️ **Importante:**
 
 - Todos los cambios que realices en esta sección, se actualizarán automáticamente en tu perfil de Google y en todas las plataformas conectadas que se muestran en el apartado **“[Expansión](expansion-de-tu-negocio-en-otras-plataformas.md)”.**
 - Cambios repetidos o inconsistentes, información falsa o violaciones de las [**políticas de Google](https://support.google.com/business/answer/3038177?hl=es)** pueden derivar en **suspensión temporal o definitiva de la ficha**, afectando tu visibilidad y posicionamiento online. Si tienes dudas, **[contacta con el equipo de soporte.](../cuenta-y-facturacion/contactar-con-soporte.md)**

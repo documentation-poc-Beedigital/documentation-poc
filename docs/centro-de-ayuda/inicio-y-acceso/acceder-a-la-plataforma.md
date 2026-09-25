@@ -1,7 +1,7 @@
 ---
 article_id: NOTION-29CB7527AC25802184E3E9E42CF145C4
 title: "Acceder a la plataforma"
-version: 1.0
+version: 1.1
 status: published
 owner: Product
 last_reviewed: 2026-09-09
@@ -32,9 +32,7 @@ notion_id: 29cb7527ac25802184e3e9e42cf145c4
 3. Haz clic en “**Continuar**” y accede a la plataforma.
 
 :::note
-💡
-
-**A tener en cuenta:**
+💡 **A tener en cuenta:**
 
 - Si tienes activado el **[2FA (autenticación de doble factor)](configurar-opciones-de-seguridad.md),** tras introducir tus credenciales se te solicitará el **código de verificación** que recibirás por email.
 :::
