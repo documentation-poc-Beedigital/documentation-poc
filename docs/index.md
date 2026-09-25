@@ -20,7 +20,7 @@ import HelpSearch from '@site/src/components/HelpSearch';
 
 # ¿Cómo podemos ayudarte?
 
-####Encuentra respuestas y guías paso a paso para sacar partido a Beesible y gestionar la presencia digital de tu negocio.####
+Encuentra respuestas y guías paso a paso para sacar partido a Beesible y gestionar la presencia digital de tu negocio.
 
 <HelpSearch />
 
