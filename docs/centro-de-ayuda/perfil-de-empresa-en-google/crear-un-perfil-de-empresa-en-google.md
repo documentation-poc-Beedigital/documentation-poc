@@ -37,7 +37,7 @@ Si decidiste saltarte el paso anterior, puedes retomarlo en cualquier momento de
     :::note
     ⚠️ **Importante:**
 
-    **No es necesario que sea una cuenta *@gmail.com*; puedes usar una dirección de correo corporativa (por ejemplo: *@tuempresa.com*) siempre que esté registrada como cuenta de Google.**
+    No es necesario que sea una cuenta *@gmail.com*; puedes usar una dirección de correo corporativa (por ejemplo: *@tuempresa.com*) siempre que esté registrada como cuenta de Google.
     :::
 
 3. Introduce el **nombre de tu empresa**. Si Google encuentra una coincidencia, puedes reclamarla; si no, créala como nueva.
