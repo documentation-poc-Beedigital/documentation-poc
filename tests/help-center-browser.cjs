@@ -24,8 +24,25 @@ const screenshots = process.env.UI_SCREENSHOT_DIR;
         await page.waitForSelector('.aa-DetachedSearchButton');
         assert.equal(await page.locator('html').getAttribute('data-theme'), 'light');
         assert.equal(await page.locator('[class*="colorModeToggle"], [class*="toggleButton"]').count(), 0);
-        assert.equal(await page.locator('.help-categories a').count(), 8);
+        const sidebar = page.locator('.theme-doc-sidebar-menu');
+        assert.equal(await sidebar.locator(':scope > li').count(), 8);
+        const categoryRoutes = await sidebar.locator(':scope > li > .menu__list-item-collapsible > a').evaluateAll(links => links.map(link => link.getAttribute('href')));
+        assert.equal(categoryRoutes.length, 8);
+        assert.equal(await sidebar.locator('a[href="/documentation-poc/"]').count(), 0);
+        assert.equal(await page.locator('.help-categories').count(), 0);
+        assert.equal(await page.locator('.pagination-nav a').count(), 0);
+        if (width >= 600) assert(await sidebar.isVisible());
+        if (width < 600) {
+          await page.locator('.navbar__toggle').click();
+          const mobileSidebar = page.locator('.navbar-sidebar .theme-doc-sidebar-menu');
+          await mobileSidebar.waitFor({state: 'visible'});
+          assert.equal(await mobileSidebar.locator(':scope > li').count(), 8);
+          await mobileSidebar.getByRole('link', {name: 'Visibilidad', exact: true}).click();
+          await page.waitForURL(/centro-de-ayuda\/visibilidad\/$/);
+          await page.goto(url);
+        }
         assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+        assert(await page.evaluate(() => document.querySelector('footer').getBoundingClientRect().bottom >= innerHeight - 1));
         const logo = page.locator('.navbar__logo img:visible');
         assert((await logo.getAttribute('src')).includes('beesible-oscuro.svg'));
         const box = await logo.boundingBox();
@@ -35,10 +52,11 @@ const screenshots = process.env.UI_SCREENSHOT_DIR;
           await page.screenshot({path: path.join(screenshots, `home-${viewportName}.png`), fullPage: true});
         }
         const homeSearch = page.getByRole('button', {name: 'Buscar en el Centro de Ayuda'});
-        for (let tabs = 0; tabs < 20 && !(await homeSearch.evaluate(el => el === document.activeElement)); tabs++) {
+        for (let tabs = 0; tabs < 50 && !(await homeSearch.evaluate(el => el === document.activeElement)); tabs++) {
           await page.keyboard.press('Tab');
         }
         assert(await homeSearch.evaluate(el => el === document.activeElement), 'Home search is not keyboard reachable');
+        assert.notEqual(await homeSearch.evaluate(el => getComputedStyle(el).outlineStyle), 'none', 'Home search focus is not visible');
         await page.keyboard.press('Enter');
         const input = page.locator('.aa-Input:visible');
         await input.waitFor();
@@ -55,6 +73,7 @@ const screenshots = process.env.UI_SCREENSHOT_DIR;
         await page.goto(new URL('centro-de-ayuda/inicio-y-acceso/acceder-a-la-plataforma/', url).href);
         const breadcrumbs = page.locator('.breadcrumbs');
         await breadcrumbs.waitFor({state: 'visible'});
+        assert.deepEqual(await page.locator('.theme-doc-sidebar-menu > li > .menu__list-item-collapsible > a').evaluateAll(links => links.map(link => link.getAttribute('href'))), categoryRoutes);
         assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
         assert.deepEqual(external, [], 'Search or page contacted an external service');
         assert.deepEqual(errors, [], 'Browser errors');

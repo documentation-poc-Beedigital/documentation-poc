@@ -39,7 +39,11 @@ for (const [file, $] of pages) {
   assert(!$('script[src], link[rel="stylesheet"]').toArray().some(e => /^https?:/.test(e.attribs.src || e.attribs.href)));
 }
 const home = pages.get(path.join(root, 'index.html'));
-assert.equal(home('.help-categories a').length, 8);
+assert.equal(home('.theme-doc-sidebar-menu > li').length, 8);
+assert.equal(home('.theme-doc-sidebar-menu a[href="/documentation-poc/"]').length, 0);
+assert.equal(home('.help-categories').length, 0);
+assert.equal(home('.pagination-nav a').length, 0);
+assert.equal(home('.help-search').length, 1);
 assert.equal(home('h1').length, 1);
 assert.equal(home('h1').text(), '¿Cómo podemos ayudarte?');
 const indexes = output.filter(f => /search-index-.*\.json$/.test(f));
@@ -51,5 +55,7 @@ const corpus = Object.keys(require('./fixtures/public-docs-sha256.json'));
 for (const source of corpus) {
   const route = source.replace(/^docs\//, '').replace(/index\.md$/, '').replace(/\.md$/, '/');
   assert(fs.existsSync(path.join(root, route, 'index.html')), `Public URL changed: ${route}`);
+  const indexedRoute = new URL(route, base).pathname;
+  assert(docs.some(doc => doc.sectionRoute.split('#')[0] === indexedRoute), `Search index missing: ${route}`);
 }
 console.log(`Build OK: ${pages.size} HTML pages, ${links} internal links/anchors, ${docs.length} indexed sections, 32 preserved document URLs.`);
