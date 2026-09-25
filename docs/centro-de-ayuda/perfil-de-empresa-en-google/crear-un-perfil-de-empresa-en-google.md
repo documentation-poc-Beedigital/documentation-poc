@@ -1,7 +1,7 @@
 ---
 article_id: NOTION-281B7527AC258075AC6BCA2C4D278384
 title: "Crear un Perfil de Empresa en Google"
-version: 1.0
+version: 1.1
 status: published
 owner: Product
 last_reviewed: 2026-09-09
@@ -35,10 +35,10 @@ Si decidiste saltarte el paso anterior, puedes retomarlo en cualquier momento de
 2. Inicia sesión con una cuenta de Google que esté vinculada a tu empresa.
 
     :::note
-⚠️
+    ⚠️ **Importante:**
 
-**No es necesario que sea una cuenta *@gmail.com*; puedes usar una dirección de correo corporativa (por ejemplo: *@tuempresa.com*) siempre que esté registrada como cuenta de Google.**
-:::
+    **No es necesario que sea una cuenta *@gmail.com*; puedes usar una dirección de correo corporativa (por ejemplo: *@tuempresa.com*) siempre que esté registrada como cuenta de Google.**
+    :::
 
 3. Introduce el **nombre de tu empresa**. Si Google encuentra una coincidencia, puedes reclamarla; si no, créala como nueva.
 4. Elige la **categoría** que mejor describa tu negocio (por ejemplo: “cafetería”, “consultoría de marketing”, “peluquería”, etc.).
@@ -51,18 +51,18 @@ Si decidiste saltarte el paso anterior, puedes retomarlo en cualquier momento de
     - **Por videollamada o grabación**
 
     :::note
-⚠️
+    ⚠️ **Importante:**
 
-**No aparecerás públicamente en Google hasta que verifiques tu empresa.**
-:::
+    **No aparecerás públicamente en Google hasta que verifiques tu empresa.**
+    :::
 
 8. Una vez verificado, tendrás que volver a la plataforma para **[conectar tu perfil de Google con la plataforma](como-conectar-tu-perfil-de-google.md).**
 
     :::note
-⚠️
+    ⚠️ **Importante:**
 
-**Este paso es necesario para gestionar tu Perfil de Empresa en Google de forma centralizada, actualizar información y ampliar tu presencia en otras plataformas.**
-:::
+    **Este paso es necesario para gestionar tu Perfil de Empresa en Google de forma centralizada, actualizar información y ampliar tu presencia en otras plataformas.**
+    :::
 
 
 ---
