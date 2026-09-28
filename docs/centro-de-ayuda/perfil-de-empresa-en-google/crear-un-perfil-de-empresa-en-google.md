@@ -37,7 +37,7 @@ Si decidiste saltarte el paso anterior, puedes retomarlo en cualquier momento de
     :::note
     ⚠️ **Importante:**
 
-    **No es necesario que sea una cuenta *@gmail.com*; puedes usar una dirección de correo corporativa (por ejemplo: *@tuempresa.com*) siempre que esté registrada como cuenta de Google.**
+    No es necesario que sea una cuenta *@gmail.com*; puedes usar una dirección de correo corporativa (por ejemplo: *@tuempresa.com*) siempre que esté registrada como cuenta de Google.
     :::
 
 3. Introduce el **nombre de tu empresa**. Si Google encuentra una coincidencia, puedes reclamarla; si no, créala como nueva.
@@ -53,7 +53,7 @@ Si decidiste saltarte el paso anterior, puedes retomarlo en cualquier momento de
     :::note
     ⚠️ **Importante:**
 
-    **No aparecerás públicamente en Google hasta que verifiques tu empresa.**
+    No aparecerás públicamente en Google hasta que verifiques tu empresa.
     :::
 
 8. Una vez verificado, tendrás que volver a la plataforma para **[conectar tu perfil de Google con la plataforma](como-conectar-tu-perfil-de-google.md).**
@@ -61,7 +61,7 @@ Si decidiste saltarte el paso anterior, puedes retomarlo en cualquier momento de
     :::note
     ⚠️ **Importante:**
 
-    **Este paso es necesario para gestionar tu Perfil de Empresa en Google de forma centralizada, actualizar información y ampliar tu presencia en otras plataformas.**
+    Este paso es necesario para gestionar tu Perfil de Empresa en Google de forma centralizada, actualizar información y ampliar tu presencia en otras plataformas.
     :::
 
 
