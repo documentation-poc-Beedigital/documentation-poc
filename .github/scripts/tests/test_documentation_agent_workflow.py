@@ -87,7 +87,7 @@ class DocumentationAgentWorkflowTests(unittest.TestCase):
 
     def test_current_workflow_contains_complete_agent_pipeline(self) -> None:
         expected_steps = (
-            "Generate documentation proposal with Gemini",
+            "Generate documentation proposal with Claude",
             "Validate the generated proposal",
             "Prepare validated pull request publication",
             "Prepare Jira abstention notification",
@@ -98,19 +98,19 @@ class DocumentationAgentWorkflowTests(unittest.TestCase):
         positions = [self.workflow.index(f"- name: {name}") for name in expected_steps]
         self.assertEqual(sorted(positions), positions)
 
-    def test_emergency_report_abstains_and_skipped_gemini_is_not_validated(self) -> None:
+    def test_emergency_report_abstains_and_skipped_claude_is_not_validated(self) -> None:
         report_step = self.workflow.index("- name: Ensure an agent report exists")
         validation_step = self.workflow.index("- name: Validate the generated proposal")
         report = self.workflow[report_step:validation_step]
         self.assertIn('"decision": "abstention"', report)
         self.assertNotIn('"decision": "error"', report)
-        self.assertIn("El flujo no produjo una propuesta de Gemini validable", report)
+        self.assertIn("El flujo no produjo una propuesta de Claude validable", report)
 
         validation = self.workflow[
             validation_step:self.workflow.index("- name: Capture generated diff")
         ]
         self.assertIn(
-            "if: always() && steps.gemini.outcome != 'skipped'", validation
+            "if: always() && steps.claude.outcome != 'skipped'", validation
         )
 
     def test_multi_document_publication_uses_one_commit_and_one_pr_creation(self) -> None:
@@ -118,12 +118,12 @@ class DocumentationAgentWorkflowTests(unittest.TestCase):
         self.assertEqual(1, self.workflow.count("gh pr create"))
         self.assertEqual(1, self.workflow.count("gh pr view"))
 
-    def test_ticket_inputs_are_serialized_before_gemini_and_reused_for_jira(self) -> None:
+    def test_ticket_inputs_are_serialized_before_claude_and_reused_for_jira(self) -> None:
         serialize = self.workflow.index("Validate and serialize ticket inputs")
-        gemini = self.workflow.index("Generate documentation proposal with Gemini")
+        claude = self.workflow.index("Generate documentation proposal with Claude")
         jira = self.workflow.index("Prepare Jira abstention notification")
-        self.assertLess(serialize, gemini)
-        self.assertLess(gemini, jira)
+        self.assertLess(serialize, claude)
+        self.assertLess(claude, jira)
         self.assertIn('--ticket-file "${RUNNER_TEMP}/documentation-ticket.json"', self.workflow)
 
     def test_end_to_end_pipeline_supports_created_and_updated_files(self) -> None:

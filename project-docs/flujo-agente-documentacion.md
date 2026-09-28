@@ -59,7 +59,7 @@ La etiqueta inicia el workflow de GitHub Actions. El agente utiliza el ticket co
 |---|---|
 | Jira | Registrar la necesidad, iniciar el proceso y mostrar el resultado |
 | GitHub Actions | Orquestar el análisis, la validación y la publicación de la propuesta |
-| Gemini | Analizar el ticket y proponer un cambio documental |
+| Claude | Analizar el ticket y proponer un cambio documental |
 | Validador | Limitar el alcance y comprobar que la propuesta es segura y estructuralmente válida |
 | PM | Revisar la pull request y decidir si se publica |
 

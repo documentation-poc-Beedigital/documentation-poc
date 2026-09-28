@@ -386,7 +386,7 @@ def build_pull_request_body(
         + ("\n".join(updated_sections) if updated_sections else "Ninguno.\n")
         + "\n"
         f"[Ver ejecución de GitHub Actions]({actions_url})\n\n"
-        "> Esta propuesta fue generada por Gemini y validada "
+        "> Esta propuesta fue generada por Claude y validada "
         "determinísticamente antes de su publicación.\n"
     )
 
