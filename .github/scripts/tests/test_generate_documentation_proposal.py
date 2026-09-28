@@ -50,7 +50,7 @@ class FakeResponse:
 
 def response_envelope(proposal: dict[str, object]) -> bytes:
     text = json.dumps(proposal)
-    return json.dumps({"candidates": [{"content": {"parts": [{"text": text}]}}]}).encode()
+    return json.dumps({"content": [{"type": "text", "text": text}]}).encode()
 
 
 class DocumentationProposalGeneratorTests(unittest.TestCase):
@@ -111,7 +111,7 @@ class DocumentationProposalGeneratorTests(unittest.TestCase):
         return value
 
     def transport_for(self, proposal: dict[str, object]):
-        response = {"candidates": [{"content": {"parts": [{"text": json.dumps(proposal)}]}}]}
+        response = {"content": [{"type": "text", "text": json.dumps(proposal)}]}
         def transport(endpoint: str, api_key: str, payload: dict[str, object], timeout: float) -> dict[str, object]:
             self.assertEqual(GENERATOR.API_URL, endpoint)
             self.assertEqual("test-secret-key", api_key)
@@ -228,13 +228,14 @@ class DocumentationProposalGeneratorTests(unittest.TestCase):
     def test_schema_is_strict_nested_and_has_no_tools(self) -> None:
         self.run_generator(self.proposal([], decision="abstention", summary="No change", reason="Insufficient evidence"))
         assert self.captured_request is not None
-        schema = self.captured_request["generationConfig"]["responseFormat"]["text"]["schema"]
+        schema = self.captured_request["output_config"]["format"]["schema"]
         self.assertFalse(schema["additionalProperties"])
         self.assertFalse(schema["properties"]["documents"]["items"]["additionalProperties"])
         self.assertEqual(sorted(GENERATOR.ROOT_FIELDS), schema["required"])
         self.assertEqual(sorted(GENERATOR.DOCUMENT_FIELDS), schema["properties"]["documents"]["items"]["required"])
         self.assertNotIn("tools", self.captured_request)
-        self.assertEqual(65536, self.captured_request["generationConfig"]["maxOutputTokens"])
+        self.assertEqual(16384, self.captured_request["max_tokens"])
+        self.assertEqual("json_schema", self.captured_request["output_config"]["format"]["type"])
 
     def test_malformed_root_nested_and_decision_contracts_are_rejected(self) -> None:
         invalid = [
@@ -298,7 +299,7 @@ class DocumentationProposalGeneratorTests(unittest.TestCase):
         self.first.write_text(FRONTMATTER.replace("version: 1.0", "version: 1.0\nversion: 9.9") + BODY_ONE, encoding="utf-8", newline="")
         self.assert_rejected_without_changes(self.proposal(), "exactly one version")
 
-    def test_gemini_cannot_include_or_modify_frontmatter(self) -> None:
+    def test_claude_cannot_include_or_modify_frontmatter(self) -> None:
         body = "---\nversion: 9.9\nowner: Attacker\n---\n\n# Replaced\n"
         self.assert_rejected_without_changes(self.proposal([self.document("docs/invitaciones.md", body)]), "must not include frontmatter")
 
@@ -339,9 +340,9 @@ class DocumentationProposalGeneratorTests(unittest.TestCase):
         self.assertNotIn(api_key, self.report_file.read_text(encoding="utf-8"))
         self.assertNotIn(api_key, json.dumps(self.captured_request))
 
-    def test_configured_gemini_model_is_used(self) -> None:
-        self.assertEqual("gemini-3.6-flash", GENERATOR.MODEL)
-        self.assertIn(f"/models/{GENERATOR.MODEL}:generateContent", GENERATOR.API_URL)
+    def test_configured_claude_model_is_used(self) -> None:
+        self.assertEqual("claude-haiku-4-5-20251001", GENERATOR.MODEL)
+        self.assertEqual("https://api.anthropic.com/v1/messages", GENERATOR.API_URL)
 
     def test_malicious_ticket_is_only_untrusted_data_and_cannot_create_files(self) -> None:
         malicious = (
@@ -356,8 +357,8 @@ class DocumentationProposalGeneratorTests(unittest.TestCase):
         self.run_generator(self.proposal())
         request = self.captured_request
         assert request is not None
-        self.assertNotIn(malicious, request["systemInstruction"]["parts"][0]["text"])
-        self.assertIn(malicious, request["contents"][0]["parts"][0]["text"])
+        self.assertNotIn(malicious, request["system"])
+        self.assertIn(malicious, request["messages"][0]["content"])
         self.assertNotIn("tools", request)
         self.assertFalse((self.root / "owned.txt").exists())
         self.assertEqual(protected, (self.root / "docs/production-snapshots/state.json").read_bytes())
@@ -687,14 +688,10 @@ class DocumentationProposalGeneratorTests(unittest.TestCase):
         self.assertEqual(before, self.first.read_bytes())
         self.assertFalse((self.root / "docs/centro-de-ayuda/cuenta/nuevo.md").exists())
 
-    def test_documentation_change_during_gemini_request_prevents_apply(self) -> None:
+    def test_documentation_change_during_claude_request_prevents_apply(self) -> None:
         first_before = self.first.read_bytes()
         proposal = self.proposal()
-        response = {
-            "candidates": [{
-                "content": {"parts": [{"text": json.dumps(proposal)}]}
-            }]
-        }
+        response = {"content": [{"type": "text", "text": json.dumps(proposal)}]}
 
         def changing_transport(*args: object) -> dict[str, object]:
             self.second.write_text(
@@ -737,9 +734,9 @@ class DocumentationProposalGeneratorTests(unittest.TestCase):
             self.assertIn(phrase, prompt)
 
 
-class GeminiTransportRegressionTests(unittest.TestCase):
+class ClaudeTransportRegressionTests(unittest.TestCase):
     def setUp(self) -> None:
-        self.payload = {"contents": []}
+        self.payload = {"messages": []}
         self.proposal = {
             "decision": "abstention", "summary": "No change", "reason": "No evidence",
             "evidence": "Reviewed docs", "documents": [],
@@ -759,7 +756,7 @@ class GeminiTransportRegressionTests(unittest.TestCase):
             if isinstance(outcome, BaseException):
                 raise outcome
             return outcome
-        self.assertIn("candidates", self.transport(opener, sleeps.append))
+        self.assertIn("content", self.transport(opener, sleeps.append))
         self.assertEqual([GENERATOR.RETRY_DELAYS[0]], sleeps)
 
     def assert_permanent_status_does_not_retry(self, code: int) -> None:
@@ -772,17 +769,17 @@ class GeminiTransportRegressionTests(unittest.TestCase):
             self.transport(opener)
         self.assertEqual(1, calls)
 
-    def test_valid_gemini_response_is_returned(self) -> None:
+    def test_valid_claude_response_is_returned(self) -> None:
         result = self.transport(lambda *args, **kwargs: FakeResponse(response_envelope(self.proposal)))
-        self.assertIn("candidates", result)
+        self.assertIn("content", result)
 
-    def test_response_without_candidates_is_rejected(self) -> None:
-        with self.assertRaisesRegex(GENERATOR.ProposalError, "no candidates"):
-            GENERATOR.extract_output_text({"candidates": []})
+    def test_response_without_content_blocks_is_rejected(self) -> None:
+        with self.assertRaisesRegex(GENERATOR.ProposalError, "no content blocks"):
+            GENERATOR.extract_output_text({"content": []})
 
     def test_response_without_textual_content_is_rejected(self) -> None:
         with self.assertRaisesRegex(GENERATOR.ProposalError, "no textual content"):
-            GENERATOR.extract_output_text({"candidates": [{"content": {"parts": [{"inlineData": {}}]}}]})
+            GENERATOR.extract_output_text({"content": [{"type": "tool_use", "id": "x"}]})
 
     def test_malformed_json_envelope_is_rejected(self) -> None:
         with self.assertRaisesRegex(GENERATOR.ProposalError, "invalid JSON envelope"):
@@ -827,7 +824,7 @@ class GeminiTransportRegressionTests(unittest.TestCase):
             outcome = outcomes.pop(0)
             if isinstance(outcome, BaseException): raise outcome
             return outcome
-        self.assertIn("candidates", self.transport(opener))
+        self.assertIn("content", self.transport(opener))
 
     def test_read_timeout_retry_exhaustion_is_bounded(self) -> None:
         calls = 0
@@ -845,7 +842,7 @@ class GeminiTransportRegressionTests(unittest.TestCase):
             outcome = outcomes.pop(0)
             if isinstance(outcome, BaseException): raise outcome
             return outcome
-        self.assertIn("candidates", self.transport(opener))
+        self.assertIn("content", self.transport(opener))
 
     def test_temporary_connection_retry_exhaustion_is_bounded(self) -> None:
         calls = 0

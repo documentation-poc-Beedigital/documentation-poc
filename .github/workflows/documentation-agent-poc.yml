@@ -142,11 +142,11 @@ jobs:
           git show "${BASE_SHA}:.github/scripts/notify-slack-documentation-pr.py" \
             > "${RUNNER_TEMP}/notify-slack-documentation-pr.py"
 
-      - name: Generate documentation proposal with Gemini
-        id: gemini
+      - name: Generate documentation proposal with Claude
+        id: claude
         continue-on-error: true
         env:
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         shell: bash
         run: |
           set -euo pipefail
@@ -174,7 +174,7 @@ jobs:
                       {
                           "decision": "abstention",
                           "summary": "No se generó una propuesta documental",
-                          "reason": "El flujo no produjo una propuesta de Gemini validable",
+                          "reason": "El flujo no produjo una propuesta de Claude validable",
                           "evidence": "No se aplicaron cambios documentales",
                           "documents": [],
                       },
@@ -188,7 +188,7 @@ jobs:
 
       - name: Validate the generated proposal
         id: validation
-        if: always() && steps.gemini.outcome != 'skipped'
+        if: always() && steps.claude.outcome != 'skipped'
         continue-on-error: true
         env:
           BASE_SHA: ${{ steps.base.outputs.sha }}
@@ -269,16 +269,16 @@ jobs:
             ${{ runner.temp }}/agent-report.md
             ${{ runner.temp }}/validation-result.json
 
-      - name: Enforce Gemini and validation results
+      - name: Enforce Claude and validation results
         if: always()
         env:
-          GEMINI_OUTCOME: ${{ steps.gemini.outcome }}
+          CLAUDE_OUTCOME: ${{ steps.claude.outcome }}
           VALIDATION_OUTCOME: ${{ steps.validation.outcome }}
         shell: bash
         run: |
           set -euo pipefail
-          if [ "${GEMINI_OUTCOME:-missing}" != "success" ]; then
-            echo "Gemini proposal generation failed with outcome ${GEMINI_OUTCOME:-missing}" >&2
+          if [ "${CLAUDE_OUTCOME:-missing}" != "success" ]; then
+            echo "Claude proposal generation failed with outcome ${CLAUDE_OUTCOME:-missing}" >&2
             exit 1
           fi
           if [ "${VALIDATION_OUTCOME:-missing}" != "success" ]; then

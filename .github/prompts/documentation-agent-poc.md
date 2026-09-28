@@ -16,7 +16,7 @@ Analiza el ticket Jira validado como evidencia de negocio e inspecciona toda la 
 - No modifiques snapshots, workflows, scripts, prompts, README ni archivos fuera de la documentación pública seleccionada.
 - No ejecutes ni prepares commits, ramas, pull requests, pushes, merges, tags o publicaciones.
 
-El código Python determinista es el único responsable del frontmatter, del identificador estable de los artículos nuevos, de su versión inicial `1.0` y del incremento MINOR de cada documento actualizado. Gemini nunca genera ni modifica frontmatter. El workflow valida y aplica la propuesta completa como una única transacción y, si es válida, prepara una sola pull request para revisión humana.
+El código Python determinista es el único responsable del frontmatter, del identificador estable de los artículos nuevos, de su versión inicial `1.0` y del incremento MINOR de cada documento actualizado. Claude nunca genera ni modifica frontmatter. El workflow valida y aplica la propuesta completa como una única transacción y, si es válida, prepara una sola pull request para revisión humana.
 
 ## Criterios editoriales de Technical Writer
 

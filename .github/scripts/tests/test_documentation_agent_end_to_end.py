@@ -104,11 +104,9 @@ class DocumentationAgentEndToEndTests(unittest.TestCase):
 
             def transport(*args: object) -> dict[str, object]:
                 return {
-                    "candidates": [{
-                        "content": {
-                            "parts": [{"text": json.dumps(proposal, ensure_ascii=False)}]
-                        }
-                    }]
+                    "content": [
+                        {"type": "text", "text": json.dumps(proposal, ensure_ascii=False)}
+                    ]
                 }
 
             GENERATOR.generate_and_apply(
