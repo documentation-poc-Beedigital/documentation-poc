@@ -341,7 +341,7 @@ class DocumentationProposalGeneratorTests(unittest.TestCase):
         self.assertNotIn(api_key, json.dumps(self.captured_request))
 
     def test_configured_claude_model_is_used(self) -> None:
-        self.assertEqual("claude-opus-5-5", GENERATOR.MODEL)
+        self.assertEqual("claude-sonnet-5-5", GENERATOR.MODEL)
         self.assertEqual("https://api.anthropic.com/v1/messages", GENERATOR.API_URL)
 
     def test_malicious_ticket_is_only_untrusted_data_and_cannot_create_files(self) -> None:
