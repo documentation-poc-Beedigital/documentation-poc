@@ -1,14 +1,14 @@
 ---
 article_id: NOTION-281B7527AC25816F982ADF1D7872261E
 title: "Añadir o actualizar información en tu Perfil de Google"
-version: 1.0
+version: 1.1
 status: published
 owner: Product
 last_reviewed: 2026-09-09
 notion_id: 281b7527ac25816f982adf1d7872261e
 ---
 
-# Añadir o actualizar información en tu Perfil de Google
+# <HelpIcon name="google" /> Añadir o actualizar información en tu Perfil de Google
 
 La plataforma te permite **añadir o actualizar la información de tu Perfil de Empresa en Google** de forma centralizada, lo que garantiza que tus clientes siempre vean datos correctos sobre tu negocio.
 
@@ -16,7 +16,7 @@ Así puedes mantener actualizados tu **contacto, ubicación y horarios**, gestio
 
 ---
 
-### 🔍 Pasos para editar los datos de tu negocio:
+### <HelpIcon name="steps" />  Pasos para editar los datos de tu negocio:
 
 1. Ve a “**Visibilidad**” en el menú lateral y accede a la sección “**Google**”
 2. Para comprobar cómo se ve tu negocio en Google, haz clic en “**Ver en Google**”.
@@ -40,7 +40,7 @@ Pulsa “**Editar**” para:
 - Añadir o actualizar la **descripción de tu negocio** para que los clientes sepan qué ofreces.
 
 :::note
-⚠️
+<HelpIcon name="warning" />  **Importante:**
 
 Modificar la información general puede suspender tu perfil de empresa en Google si el cambio no cumple con sus [**directrices de nombre, categoría y descripción de empresa.**](https://support.google.com/business/answer/3038177?hl=es#zippy=%2Cnombre)
 :::
@@ -54,7 +54,7 @@ Pulsa “**Editar**” para:
 - Añadir o actualizar tu **página web**.
 
 :::note
-⚠️
+<HelpIcon name="warning" />  **Importante:**
 
 Modificar la información de contacto puede suspender tu perfil de empresa en Google si el cambio no cumple con sus [**directrices de contacto.**](https://support.google.com/business/answer/3038177?hl=es#zippy=%2Csitio-web-y-tel%C3%A9fono)
 :::
@@ -66,7 +66,7 @@ Modificar la información de contacto puede suspender tu perfil de empresa en Go
     - **Dirección oculta:** opción para mantener tu privacidad si no atiendes al público o trabajas desde casa. Tu información será visible sin mostrar la ubicación exacta.
 
 :::note
-⚠️
+<HelpIcon name="warning" />  **Importante:**
 
 Modificar la dirección puede suspender tu perfil de empresa en Google si el cambio no cumple con sus [**directrices de ubicación.](https://support.google.com/business/answer/3038177?hl=es#zippy=%2Cdirecci%C3%B3n)**
 :::
@@ -82,7 +82,7 @@ Modificar la dirección puede suspender tu perfil de empresa en Google si el cam
 - Recuerda: los cambios **solo se guardan si das clic en “Guardar cambios”**. Si pulsas **“Cancelar”**, todo volverá al estado anterior.
 
 :::note
-⚠️
+<HelpIcon name="warning" />  **Importante:**
 
 Modificar los horarios puede suspender tu perfil de empresa en Google si el cambio no cumple con sus [**directrices de horarios de apertura.](https://support.google.com/business/answer/3038177?hl=es#zippy=%2Chorario-de-apertura)**
 :::
@@ -112,9 +112,7 @@ Modificar los horarios puede suspender tu perfil de empresa en Google si el camb
 - Pulsa **“Guardar cambios”** para aplicar todas las modificaciones.
 
 :::note
-⚠️
-
-**A tener en cuenta:**
+<HelpIcon name="warning" />  **Importante:**
 
 - Todos los cambios que realices en esta sección, se actualizarán automáticamente en tu perfil de Google y en todas las plataformas conectadas que se muestran en el apartado **“[Expansión](expansion-de-tu-negocio-en-otras-plataformas.md)”.**
 - Cambios repetidos o inconsistentes, información falsa o violaciones de las [**políticas de Google](https://support.google.com/business/answer/3038177?hl=es)** pueden derivar en **suspensión temporal o definitiva de la ficha**, afectando tu visibilidad y posicionamiento online. Si tienes dudas, **[contacta con el equipo de soporte.](../cuenta-y-facturacion/contactar-con-soporte.md)**
@@ -122,7 +120,7 @@ Modificar los horarios puede suspender tu perfil de empresa en Google si el camb
 
 ---
 
-### ✅ Recomendaciones:
+### <HelpIcon name="recommendations" />  Recomendaciones:
 
 - **Información**: Mantén el nombre, categoría y descripción precisos para que tu negocio sea fácilmente encontrado; actualiza solo con información veraz.
 - **Contacto**: Asegúrate de que los teléfonos, WhatsApp y página web estén correctos y activos para que los clientes puedan comunicarse contigo.
@@ -135,10 +133,10 @@ Modificar los horarios puede suspender tu perfil de empresa en Google si el camb
 
 ### ¿Te resultó útil esta información? También puedes leer:
 
-**👉 [Cómo conectar tu Perfil de Google](../perfil-de-empresa-en-google/como-conectar-tu-perfil-de-google.md)**
+**<HelpIcon name="related" /> [Cómo conectar tu Perfil de Google](../perfil-de-empresa-en-google/como-conectar-tu-perfil-de-google.md)**
 
-**👉 [Crear un Perfil de Empresa en Google](../perfil-de-empresa-en-google/crear-un-perfil-de-empresa-en-google.md)**
+**<HelpIcon name="related" /> [Crear un Perfil de Empresa en Google](../perfil-de-empresa-en-google/crear-un-perfil-de-empresa-en-google.md)**
 
-**👉 [Consultar estadísticas del Perfil de Google](../analitica/consultar-estadisticas-del-perfil-de-google.md)**
+**<HelpIcon name="related" /> [Consultar estadísticas del Perfil de Google](../analitica/consultar-estadisticas-del-perfil-de-google.md)**
 
-**👉 [Crear publicaciones en Google](../fidelizacion/crear-publicaciones-en-google.md)**
+**<HelpIcon name="related" /> [Crear publicaciones en Google](../fidelizacion/crear-publicaciones-en-google.md)**

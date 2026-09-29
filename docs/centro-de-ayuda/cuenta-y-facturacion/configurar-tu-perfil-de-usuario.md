@@ -8,13 +8,13 @@ last_reviewed: 2026-09-09
 notion_id: 293b7527ac2580d2a907fde6e5fe897d
 ---
 
-# Configurar tu perfil de usuario
+# <HelpIcon name="billing" /> Configurar tu perfil de usuario
 
 En la sección **Mi perfil** de la plataforma, puedes modificar tus datos personales más importantes, como tu nombre y apellidos, tu email y tu teléfono móvil.
 
 ---
 
-### 👤 Cómo modificar tus datos personales:
+### <HelpIcon name="profile" />  Cómo modificar tus datos personales:
 
 1. Haz clic en tu **avatar/“Mi cuenta”**, ubicado en la parte inferior del menú lateral izquierdo.
 2. En el **menú desplegable**, selecciona la opción **“Mi perfil”**.
@@ -26,8 +26,8 @@ En la sección **Mi perfil** de la plataforma, puedes modificar tus datos person
 
 ### ¿Te resultó útil esta información? También puedes leer:
 
-**👉 [Gestionar tu plan y tus facturas](gestionar-tu-plan-y-tus-facturas.md)**
+**<HelpIcon name="related" /> [Gestionar tu plan y tus facturas](gestionar-tu-plan-y-tus-facturas.md)**
 
-**👉 [Contactar con soporte](contactar-con-soporte.md)**
+**<HelpIcon name="related" /> [Contactar con soporte](contactar-con-soporte.md)**
 
-**👉 [Enviar sugerencias](enviar-sugerencias.md)**
+**<HelpIcon name="related" /> [Enviar sugerencias](enviar-sugerencias.md)**

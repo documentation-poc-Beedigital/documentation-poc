@@ -9,9 +9,9 @@ notion_id: 365b7527ac2580dca322c8bf8ab512e5
 sidebar_position: 7
 ---
 
-# Analítica
+# <HelpIcon name="analytics" /> Analítica
 
-## 📊 Analítica
+## <HelpIcon name="analytics" />  Analítica
 
 [Consultar estadísticas del Perfil de Google](consultar-estadisticas-del-perfil-de-google.md)
 

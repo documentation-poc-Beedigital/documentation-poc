@@ -8,13 +8,13 @@ last_reviewed: 2026-09-09
 notion_id: 29cb7527ac25805fbca2f3502e47aaf2
 ---
 
-# Configurar opciones de seguridad
+# <HelpIcon name="signIn" /> Configurar opciones de seguridad
 
 En la sección **Seguridad** de la plataforma puedes actualizar tu contraseña y activar el sistema de **autenticación en dos pasos (MFA)**, una capa extra de protección para tu cuenta. Esto ayuda a prevenir accesos no autorizados, incluso si alguien consigue tu contraseña.
 
 ---
 
-### 🔒 Cómo actualizar tu contraseña:
+### <HelpIcon name="password" />  Cómo actualizar tu contraseña:
 
 1. Haz clic en tu **avatar/“Mi cuenta”**, ubicado en la parte inferior del menú lateral izquierdo.
 2. En el **menú desplegable**, selecciona la opción **“Seguridad”**.
@@ -28,7 +28,7 @@ En la sección **Seguridad** de la plataforma puedes actualizar tu contraseña y
 
 ---
 
-### 🛡️ Cómo activar la autenticación en dos pasos (MFA):
+### <HelpIcon name="security" />  Cómo activar la autenticación en dos pasos (MFA):
 
 1. Haz clic en tu **avatar/“Mi cuenta”**, ubicado en la parte inferior del menú lateral izquierdo.
 2. En el **menú desplegable**, selecciona la opción **“Seguridad”**.
@@ -48,8 +48,8 @@ En la sección **Seguridad** de la plataforma puedes actualizar tu contraseña y
 
 ### ¿Te resultó útil esta información? También puedes leer:
 
-**👉 [Acceder a la plataforma](acceder-a-la-plataforma.md)**
+**<HelpIcon name="related" /> [Acceder a la plataforma](acceder-a-la-plataforma.md)**
 
-**👉 [Cerrar sesión en la plataforma](cerrar-sesion-en-la-plataforma.md)**
+**<HelpIcon name="related" /> [Cerrar sesión en la plataforma](cerrar-sesion-en-la-plataforma.md)**
 
-**👉 [Descargar la app](descargar-la-app.md)**
+**<HelpIcon name="related" /> [Descargar la app](descargar-la-app.md)**

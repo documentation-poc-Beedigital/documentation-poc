@@ -8,7 +8,7 @@ last_reviewed: 2026-09-09
 notion_id: 294b7527ac2580d6bf9eff0387ab0a49
 ---
 
-# Expansión de tu negocio en otras plataformas
+# <HelpIcon name="google" /> Expansión de tu negocio en otras plataformas
 
 Con esta funcionalidad, distribuimos la información de tu negocio en diferentes plataformas y directorios relevantes para ayudarte a **ganar mayor visibilidad online**.
 
@@ -18,7 +18,7 @@ Es una parte clave para mantener tu información actualizada y coherente en inte
 
 ---
 
-### 🌐 Cómo consultar el estado de tu negocio en internet:
+### <HelpIcon name="google" />  Cómo consultar el estado de tu negocio en internet:
 
 1. Ve a “**Visibilidad**” en el menú lateral y accede a la sección “**Google**”
 2. En el apartado “**Expansión**”, verás un mensaje informativo que explica cómo se está distribuyendo la información de tu negocio en distintas plataformas digitales, junto con el **estado actual de cada una de ellas:**
@@ -30,14 +30,14 @@ Es una parte clave para mantener tu información actualizada y coherente en inte
 
 ---
 
-### 🔄 Cómo actualizar la información de tu negocio en todas las plataformas conectadas:
+### <HelpIcon name="automation" />  Cómo actualizar la información de tu negocio en todas las plataformas conectadas:
 
 1. Para **actualizar la información de tu negocio** (como nombre, dirección, teléfono o descripción) en todas las plataformas conectadas, haz clic en el botón “[**Editar datos de mi negocio**](anadir-o-actualizar-informacion-en-tu-perfil-de-google.md)”.
 2. Todo lo que modifiques allí se actualizará automáticamente en todas las redes sincronizadas.
 
 ---
 
-### ✅ Recomendaciones:
+### <HelpIcon name="recommendations" />  Recomendaciones:
 
 - **Conectar redes manualmente:** Vincula cuanto antes las plataformas que lo requieran (como Facebook).
 - **Resolver desconexiones:** Si alguna red lleva mucho tiempo sin conexión, revisa o [**contacta con soporte.**](../cuenta-y-facturacion/contactar-con-soporte.md)
@@ -48,4 +48,4 @@ Es una parte clave para mantener tu información actualizada y coherente en inte
 
 ### ¿Te resultó útil esta información? También puedes leer:
 
-**👉 [Añadir o actualizar información en tu Perfil de Google](anadir-o-actualizar-informacion-en-tu-perfil-de-google.md)**
+**<HelpIcon name="related" /> [Añadir o actualizar información en tu Perfil de Google](anadir-o-actualizar-informacion-en-tu-perfil-de-google.md)**

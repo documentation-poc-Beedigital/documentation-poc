@@ -9,8 +9,8 @@ notion_id: 365b7527ac2580c08c26eccd945f3ef5
 sidebar_position: 6
 ---
 
-# Beelma
+# <HelpIcon name="beelma" /> Beelma
 
-## 🤖 Beelma
+## <HelpIcon name="beelma" />  Beelma
 
 [Qué es Beelma y cómo empezar a usarla ](que-es-beelma-y-como-empezar-a-usarla.md)

@@ -8,13 +8,13 @@ last_reviewed: 2026-09-09
 notion_id: 281b7527ac25817690bdf271b522c0a7
 ---
 
-# Consultar estadísticas del Perfil de Google
+# <HelpIcon name="analytics" /> Consultar estadísticas del Perfil de Google
 
 Puedes consultar las estadísticas de tu Perfil de Google desde la plataforma para conocer cuántas personas ven tu negocio, ver qué acciones realizan, analizar el rendimiento en distintos periodos y **tomar decisiones** para mejorar tu visibilidad y presencia online.
 
 ---
 
-### 📊 Pasos para consultar las estadísticas del Perfil de Google:
+### <HelpIcon name="analytics" />  Pasos para consultar las estadísticas del Perfil de Google:
 
 1. Ve a “**Analítica**” en el menú lateral y accede a la sección “Google”.
 2. En esta sección encontrarás un resumen de tus **Interacciones y Visualizaciones** que puedes filtrar por:
@@ -37,7 +37,7 @@ Puedes consultar las estadísticas de tu Perfil de Google desde la plataforma pa
 
 ---
 
-### 🤖 Analizar las estadísticas del Perfil de Google con Beelma:
+### <HelpIcon name="beelma" />  Analizar las estadísticas del Perfil de Google con Beelma:
 
 1. Ve a “**Analítica**” en el menú lateral y accede a la sección “**Google**”.
 2. Haz clic en “**Analizar con Beelma**”
@@ -51,7 +51,7 @@ Gracias a este análisis, puedes detectar fácilmente **qué está funcionando y
 
 ---
 
-### ✅ Recomendaciones:
+### <HelpIcon name="recommendations" />  Recomendaciones:
 
 - **Revisa estas estadísticas** al menos una vez al mes para detectar tendencias.
 - Si ves muchas búsquedas pero pocas interacciones, **revisa tu ficha** (fotos, horarios, descripción).
@@ -61,10 +61,10 @@ Gracias a este análisis, puedes detectar fácilmente **qué está funcionando y
 
 ### ¿Te resultó útil esta información? También puedes leer:
 
-**👉 [Cómo conectar tu Perfil de Google](../perfil-de-empresa-en-google/como-conectar-tu-perfil-de-google.md)**
+**<HelpIcon name="related" /> [Cómo conectar tu Perfil de Google](../perfil-de-empresa-en-google/como-conectar-tu-perfil-de-google.md)**
 
-**👉 [Crear un Perfil de Empresa en Google](../perfil-de-empresa-en-google/crear-un-perfil-de-empresa-en-google.md)**
+**<HelpIcon name="related" /> [Crear un Perfil de Empresa en Google](../perfil-de-empresa-en-google/crear-un-perfil-de-empresa-en-google.md)**
 
-**👉 [Añadir o actualizar información en tu Perfil de Google](../visibilidad/anadir-o-actualizar-informacion-en-tu-perfil-de-google.md)**
+**<HelpIcon name="related" /> [Añadir o actualizar información en tu Perfil de Google](../visibilidad/anadir-o-actualizar-informacion-en-tu-perfil-de-google.md)**
 
-**👉 [Crear publicaciones en Google](../fidelizacion/crear-publicaciones-en-google.md)**
+**<HelpIcon name="related" /> [Crear publicaciones en Google](../fidelizacion/crear-publicaciones-en-google.md)**

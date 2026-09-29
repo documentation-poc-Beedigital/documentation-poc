@@ -9,14 +9,14 @@ notion_id: 33db7527ac258099913de0a2f8d411ce
 sidebar_position: 3
 ---
 
-# Visibilidad
+# <HelpIcon name="google" /> Visibilidad
 
-## 🌐 Google
+## <HelpIcon name="google" />  Google
 
 [Añadir o actualizar información en tu Perfil de Google](anadir-o-actualizar-informacion-en-tu-perfil-de-google.md)
 
 [Expansión de tu negocio en otras plataformas](expansion-de-tu-negocio-en-otras-plataformas.md)
 
-## 💻 Página Web
+## <HelpIcon name="website" /> Página Web
 
 [Cómo crear tu página web](como-crear-tu-pagina-web.md)

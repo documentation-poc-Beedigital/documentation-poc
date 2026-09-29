@@ -9,9 +9,9 @@ notion_id: 365b7527ac258063b166cc696e9e1d76
 sidebar_position: 5
 ---
 
-# Fidelización
+# <HelpIcon name="loyalty" /> Fidelización
 
-## 🎯 Fidelización
+## <HelpIcon name="loyalty" />  Fidelización
 
 [Crear publicaciones en Google](crear-publicaciones-en-google.md)
 

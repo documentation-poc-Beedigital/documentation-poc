@@ -8,7 +8,7 @@ last_reviewed: 2026-09-09
 notion_id: 29cb7527ac258010b98be0b7a8a72476
 ---
 
-# Automatizar respuestas con Beelma
+# <HelpIcon name="reputation" /> Automatizar respuestas con Beelma
 
 Las respuestas automáticas responden todas tus reseñas sin que dediques tiempo extra, mejorando la imagen de tu negocio y fortaleciendo la confianza de tus clientes.
 
@@ -16,7 +16,7 @@ Las respuestas automáticas responden todas tus reseñas sin que dediques tiempo
 
 ---
 
-### ⚡ Cómo configurar respuestas automáticas con IA:
+### <HelpIcon name="automation" />  Cómo configurar respuestas automáticas con IA:
 
 1. Ve a **Reputación** desde el menú lateral.
 2. Haz clic en el botón **Respuestas con Beelma**.
@@ -30,7 +30,7 @@ Las respuestas automáticas responden todas tus reseñas sin que dediques tiempo
 
 ---
 
-### 🧠 Para probar cómo responderá Beelma:
+### <HelpIcon name="beelma" />  Para probar cómo responderá Beelma:
 
 1. Busca el apartado “**Prueba cómo responde nuestra IA**.”
 2. Elige una **tipología de reseña**:
@@ -46,7 +46,7 @@ Las respuestas automáticas responden todas tus reseñas sin que dediques tiempo
 
 ---
 
-### 🔄 ¿Cómo funcionan las respuestas automáticas?
+### <HelpIcon name="automation" />  ¿Cómo funcionan las respuestas automáticas?
 
 Cada vez que un cliente deje una **reseña en tu perfil de Google**, la **IA analizará su contenido** y generará una **respuesta personalizada** adaptada al tono y estilo de tu negocio.
 
@@ -65,7 +65,7 @@ La respuesta automática **no se publicará** si se cumple alguna de estas condi
 
 ---
 
-### ✅ Recomendaciones:
+### <HelpIcon name="recommendations" />  Recomendaciones:
 
 - **Prueba varios escenarios** en el simulador antes de activar las respuestas automáticas.
 - **Activa la opción de responder también a reseñas sin comentario** para no dejar ninguna sin atención.
@@ -75,10 +75,10 @@ La respuesta automática **no se publicará** si se cumple alguna de estas condi
 
 ### ¿Te resultó útil esta información? También puedes leer:
 
-**👉 [Consultar y responder reseñas](consultar-y-responder-resenas.md)**
+**<HelpIcon name="related" /> [Consultar y responder reseñas](consultar-y-responder-resenas.md)**
 
-**👉 [Analizar reseñas con Beelma](analizar-resenas-con-beelma.md)**
+**<HelpIcon name="related" /> [Analizar reseñas con Beelma](analizar-resenas-con-beelma.md)**
 
-**👉 [Solicitar más reseñas por WhatsApp](solicitar-mas-resenas-por-whatsapp.md)**
+**<HelpIcon name="related" /> [Solicitar más reseñas por WhatsApp](solicitar-mas-resenas-por-whatsapp.md)**
 
-**👉 [Configurar alertas automáticas de nuevas reseñas](configurar-alertas-automaticas-de-nuevas-resenas.md)**
+**<HelpIcon name="related" /> [Configurar alertas automáticas de nuevas reseñas](configurar-alertas-automaticas-de-nuevas-resenas.md)**

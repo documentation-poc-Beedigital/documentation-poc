@@ -2,3 +2,8 @@ node_modules/
 build/
 .docusaurus/
 
+# Local Bee Design System source export
+design-system/local/
+
+# Local browser-test artifacts
+test-results/

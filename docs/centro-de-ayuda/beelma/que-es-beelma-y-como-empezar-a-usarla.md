@@ -8,7 +8,7 @@ last_reviewed: 2026-09-09
 notion_id: 365b7527ac25802c9c76db58ee0a3d73
 ---
 
-# Qué es Beelma y cómo empezar a usarla
+# <HelpIcon name="beelma" /> Qué es Beelma y cómo empezar a usarla
 
 **Beelma** es el **agente inteligente de marketing digital** de Beesible. Centraliza en un solo lugar todo lo que necesitas para gestionar tu presencia online: reseñas, publicaciones, estadísticas, datos de tu negocio, soporte y facturación.
 
@@ -138,10 +138,10 @@ Consulta tus facturas por fecha y las descarga al momento.
 
 ### ¿Te resultó útil esta información? También puedes leer:
 
-**👉[Analizar reseñas con Beelma](../reputacion/analizar-resenas-con-beelma.md)**
+**<HelpIcon name="related" />[Analizar reseñas con Beelma](../reputacion/analizar-resenas-con-beelma.md)**
 
-**👉[Automatizar respuestas con Beelma](../reputacion/automatizar-respuestas-con-beelma.md)**
+**<HelpIcon name="related" />[Automatizar respuestas con Beelma](../reputacion/automatizar-respuestas-con-beelma.md)**
 
-**👉[Consultar estadísticas del Perfil de Google](../analitica/consultar-estadisticas-del-perfil-de-google.md)**
+**<HelpIcon name="related" />[Consultar estadísticas del Perfil de Google](../analitica/consultar-estadisticas-del-perfil-de-google.md)**
 
-**👉[Crear publicaciones en Google](../fidelizacion/crear-publicaciones-en-google.md)**
+**<HelpIcon name="related" />[Crear publicaciones en Google](../fidelizacion/crear-publicaciones-en-google.md)**

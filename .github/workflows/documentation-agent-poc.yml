@@ -142,16 +142,17 @@ jobs:
           git show "${BASE_SHA}:.github/scripts/notify-slack-documentation-pr.py" \
             > "${RUNNER_TEMP}/notify-slack-documentation-pr.py"
 
-      - name: Generate documentation proposal with Gemini
-        id: gemini
+      - name: Generate documentation proposal with Claude
+        id: claude
         continue-on-error: true
         env:
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         shell: bash
         run: |
           set -euo pipefail
           python "${RUNNER_TEMP}/generate-documentation-proposal.py" \
             --repo-root "${GITHUB_WORKSPACE}" \
+            --base-sha "${{ steps.base.outputs.sha }}" \
             --ticket-file "${RUNNER_TEMP}/documentation-ticket.json" \
             --prompt-file "${RUNNER_TEMP}/documentation-agent-poc.md" \
             --agent-report "${RUNNER_TEMP}/agent-report.md" \
@@ -171,10 +172,10 @@ jobs:
               report.write_text(
                   json.dumps(
                       {
-                          "decision": "error",
-                          "summary": "Gemini no produjo un informe",
-                          "reason": "La ejecución de Gemini no produjo un informe",
-                          "evidence": "No existe una respuesta estructurada validable",
+                          "decision": "abstention",
+                          "summary": "No se generó una propuesta documental",
+                          "reason": "El flujo no produjo una propuesta de Claude validable",
+                          "evidence": "No se aplicaron cambios documentales",
                           "documents": [],
                       },
                       ensure_ascii=False,
@@ -187,7 +188,7 @@ jobs:
 
       - name: Validate the generated proposal
         id: validation
-        if: always()
+        if: always() && steps.claude.outcome != 'skipped'
         continue-on-error: true
         env:
           BASE_SHA: ${{ steps.base.outputs.sha }}
@@ -248,6 +249,14 @@ jobs:
           git diff --binary "${BASE_SHA}" -- \
             > "${RUNNER_TEMP}/documentation-proposal.diff"
 
+      - name: Validate documentation site after applying proposal
+        if: steps.validation.outcome == 'success'
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm ci
+          npm run build
+
       - name: Upload proposal evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -260,16 +269,16 @@ jobs:
             ${{ runner.temp }}/agent-report.md
             ${{ runner.temp }}/validation-result.json
 
-      - name: Enforce Gemini and validation results
+      - name: Enforce Claude and validation results
         if: always()
         env:
-          GEMINI_OUTCOME: ${{ steps.gemini.outcome }}
+          CLAUDE_OUTCOME: ${{ steps.claude.outcome }}
           VALIDATION_OUTCOME: ${{ steps.validation.outcome }}
         shell: bash
         run: |
           set -euo pipefail
-          if [ "${GEMINI_OUTCOME:-missing}" != "success" ]; then
-            echo "Gemini proposal generation failed with outcome ${GEMINI_OUTCOME:-missing}" >&2
+          if [ "${CLAUDE_OUTCOME:-missing}" != "success" ]; then
+            echo "Claude proposal generation failed with outcome ${CLAUDE_OUTCOME:-missing}" >&2
             exit 1
           fi
           if [ "${VALIDATION_OUTCOME:-missing}" != "success" ]; then
@@ -410,8 +419,8 @@ jobs:
             fi
           done
           while IFS=$'\t' read -r status path; do
-            if [ "${status}" != "M" ]; then
-              echo "The staged Markdown ${path} is not a simple modification" >&2
+            if [ "${status}" != "M" ] && [ "${status}" != "A" ]; then
+              echo "The staged Markdown ${path} is not a validated creation or modification" >&2
               exit 1
             fi
           done < <(git diff --cached --name-status --no-renames -- "${documents[@]}")

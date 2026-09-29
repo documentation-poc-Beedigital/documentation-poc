@@ -9,9 +9,9 @@ notion_id: 293b7527ac25808ab603de04e37fd7fa
 sidebar_position: 8
 ---
 
-# Cuenta y facturación
+# <HelpIcon name="billing" /> Cuenta y facturación
 
-## 💳 Cuenta y facturación
+## <HelpIcon name="billing" /> Cuenta y facturación
 
 [Configurar tu perfil de usuario ](configurar-tu-perfil-de-usuario.md)
 
