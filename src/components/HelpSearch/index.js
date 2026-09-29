@@ -1,4 +1,5 @@
 import React from 'react';
+import HelpIcon from '@site/src/components/HelpIcon';
 
 export default function HelpSearch() {
   function openSearch() {
@@ -10,7 +11,7 @@ export default function HelpSearch() {
 
   return (
     <button className="button button--primary help-search" onClick={openSearch}>
-      <span aria-hidden="true">⌕</span> Buscar en el Centro de Ayuda
+      <HelpIcon name="search" /> Buscar en el Centro de Ayuda
     </button>
   );
 }

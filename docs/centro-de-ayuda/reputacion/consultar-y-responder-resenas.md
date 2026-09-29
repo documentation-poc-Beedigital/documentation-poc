@@ -8,7 +8,7 @@ last_reviewed: 2026-09-09
 notion_id: 29cb7527ac2580adae29d4030612c887
 ---
 
-# Consultar y responder reseñas
+# <HelpIcon name="reputation" /> Consultar y responder reseñas
 
 Responder a las reseñas de tus clientes es clave para **cuidar tu reputación online**: te permite agradecer, gestionar críticas con profesionalismo y mostrar que te importa la experiencia del cliente.
 
@@ -16,7 +16,7 @@ Las reseñas que recibes en tu perfil de Google se gestionan desde un único lug
 
 ---
 
-### 📝 Cómo consultar y responder reseñas:
+### <HelpIcon name="steps" />  Cómo consultar y responder reseñas:
 
 1. En el menú lateral, entra en la sección **“Reputación”.**
 2. Verás todas las opiniones que han dejado los usuarios: su nombre, valoración en estrellas, comentario (si lo dejaron) y fecha. Están ordenadas de **más reciente a más antigua**.
@@ -27,7 +27,7 @@ Las reseñas que recibes en tu perfil de Google se gestionan desde un único lug
 
 ---
 
-### ✅ Recomendaciones:
+### <HelpIcon name="recommendations" />  Recomendaciones:
 
 - **Responde siempre**, tanto a reseñas positivas como negativas.
 - **Usa un tono profesional y cordial**, incluso si el comentario es negativo.
@@ -39,10 +39,10 @@ Las reseñas que recibes en tu perfil de Google se gestionan desde un único lug
 
 ### ¿Te resultó útil esta información? También puedes leer:
 
-**👉 [Automatizar respuestas con Beelma](automatizar-respuestas-con-beelma.md)**
+**<HelpIcon name="related" /> [Automatizar respuestas con Beelma](automatizar-respuestas-con-beelma.md)**
 
-**👉 [Analizar reseñas con Beelma](analizar-resenas-con-beelma.md)**
+**<HelpIcon name="related" /> [Analizar reseñas con Beelma](analizar-resenas-con-beelma.md)**
 
-**👉 [Solicitar más reseñas por WhatsApp](solicitar-mas-resenas-por-whatsapp.md)**
+**<HelpIcon name="related" /> [Solicitar más reseñas por WhatsApp](solicitar-mas-resenas-por-whatsapp.md)**
 
-**👉 [Configurar alertas automáticas de nuevas reseñas](configurar-alertas-automaticas-de-nuevas-resenas.md)**
+**<HelpIcon name="related" /> [Configurar alertas automáticas de nuevas reseñas](configurar-alertas-automaticas-de-nuevas-resenas.md)**

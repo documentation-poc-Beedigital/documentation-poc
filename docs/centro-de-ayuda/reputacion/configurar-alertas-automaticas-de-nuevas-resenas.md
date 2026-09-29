@@ -8,13 +8,13 @@ last_reviewed: 2026-09-09
 notion_id: 29cb7527ac2580709e3dc05a4b94f629
 ---
 
-# Configurar alertas automáticas de nuevas reseñas
+# <HelpIcon name="reputation" /> Configurar alertas automáticas de nuevas reseñas
 
 Estar al tanto de las reseñas que recibes es clave para mantener una buena reputación online y responder a tiempo. Con nuestra plataforma, puedes **activar alertas automáticas** que te notificarán al instante cada vez que un cliente deje una nueva reseña en tu perfil de Google.
 
 ---
 
-### 🔔 Cómo configurar alertas automáticas:
+### <HelpIcon name="alert" />  Cómo configurar alertas automáticas:
 
 1. Accede a la sección “**Notificaciones**” desde el avatar de usuario (parte inferior del menú lateral izquierdo).
 2. Haz clic en el botón **Editar y c**onfigura las alertas por **email** para cada tipología de reseñas:
@@ -26,7 +26,7 @@ Estar al tanto de las reseñas que recibes es clave para mantener una buena repu
 
 ---
 
-### ✅ Recomendaciones:
+### <HelpIcon name="recommendations" />  Recomendaciones:
 
 - **Activa las alertas para reseñas de 1 y 2 estrellas**: son las más sensibles y requieren una respuesta rápida para evitar dañar tu reputación.
 - **Usa un correo que consultes con frecuencia**, así no se te escapa ninguna notificación importante.
@@ -36,10 +36,10 @@ Estar al tanto de las reseñas que recibes es clave para mantener una buena repu
 
 ### ¿Te resultó útil esta información? También puedes leer:
 
-**👉 [Consultar y responder reseñas](consultar-y-responder-resenas.md)**
+**<HelpIcon name="related" /> [Consultar y responder reseñas](consultar-y-responder-resenas.md)**
 
-**👉 [Automatizar respuestas con Beelma](automatizar-respuestas-con-beelma.md)**
+**<HelpIcon name="related" /> [Automatizar respuestas con Beelma](automatizar-respuestas-con-beelma.md)**
 
-**👉 [Analizar reseñas con Beelma](analizar-resenas-con-beelma.md)**
+**<HelpIcon name="related" /> [Analizar reseñas con Beelma](analizar-resenas-con-beelma.md)**
 
-**👉 [Solicitar más reseñas por WhatsApp](solicitar-mas-resenas-por-whatsapp.md)**
+**<HelpIcon name="related" /> [Solicitar más reseñas por WhatsApp](solicitar-mas-resenas-por-whatsapp.md)**

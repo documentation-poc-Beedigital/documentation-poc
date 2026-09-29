@@ -251,9 +251,25 @@ th {
   box-shadow: var(--bee-shadow-focus);
 }
 
-.help-search span {
+.help-icon {
+  display: inline-block;
+  width: 16px;
+  height: 16px;
   margin-right: var(--bee-space-2);
-  font-size: var(--bee-font-size-h4);
+  vertical-align: -0.125em;
+  stroke-width: 1.5;
+}
+
+.help-search .help-icon {
+  flex: none;
+  margin-right: var(--bee-space-2);
+}
+
+@media (min-width: 768px) {
+  .help-icon {
+    width: 40px;
+    height: 40px;
+  }
 }
 
 .help-about {

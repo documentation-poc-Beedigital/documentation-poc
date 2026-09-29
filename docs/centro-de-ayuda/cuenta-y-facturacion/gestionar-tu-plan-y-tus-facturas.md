@@ -8,7 +8,7 @@ last_reviewed: 2026-09-09
 notion_id: 293b7527ac2580198727d2472095cf40
 ---
 
-# Gestionar tu plan y tus facturas
+# <HelpIcon name="billing" /> Gestionar tu plan y tus facturas
 
 En la sección **Plan y facturación** de la plataforma, puedes consultar tu plan contratado, gestionar tu suscripción y visualizar tanto tus facturas ya emitidas como las próximas a emitir. Esta sección centraliza toda la información relacionada con tu facturación y te permite tomar decisiones de forma clara y autónoma.
 
@@ -16,7 +16,7 @@ Además, te permite tener un control claro y ordenado de tu historial de pagos, 
 
 ---
 
-### 💼 Cómo gestionar tu plan:
+### <HelpIcon name="business" />  Cómo gestionar tu plan:
 
 1. Haz clic en tu **avatar/“Mi cuenta”**, ubicado en la parte inferior del menú lateral izquierdo.
 2. En el **menú desplegable**, selecciona la opción **“Plan y facturación”**.
@@ -47,7 +47,7 @@ Además, te permite tener un control claro y ordenado de tu historial de pagos, 
 
 ---
 
-### 🧾 Cómo consultar tus facturas:
+### <HelpIcon name="document" />  Cómo consultar tus facturas:
 
 1. Haz clic en tu **avatar/“Mi cuenta”**, ubicado en la parte inferior del menú lateral izquierdo.
 2. En el **menú desplegable**, selecciona la opción **“Plan y facturación”**.
@@ -67,8 +67,8 @@ Además, te permite tener un control claro y ordenado de tu historial de pagos, 
 
 ### ¿Te resultó útil esta información? También puedes leer:
 
-**👉 [Configurar tu perfil de usuario](configurar-tu-perfil-de-usuario.md)**
+**<HelpIcon name="related" /> [Configurar tu perfil de usuario](configurar-tu-perfil-de-usuario.md)**
 
-**👉 [Contactar con soporte](contactar-con-soporte.md)**
+**<HelpIcon name="related" /> [Contactar con soporte](contactar-con-soporte.md)**
 
-**👉 [Enviar sugerencias](enviar-sugerencias.md)**
+**<HelpIcon name="related" /> [Enviar sugerencias](enviar-sugerencias.md)**

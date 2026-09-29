@@ -7,7 +7,7 @@ owner: Product
 last_reviewed: 2026-09-09
 notion_id: 365b7527ac2580b3bd31c0399509affd
 ---
-# Cómo crear tu página web
+# <HelpIcon name="google" /> Cómo crear tu página web
 
 Durante el proceso de onboarding y desde tu primer acceso a la plataforma, **Beesible** genera automáticamente una primera versión funcional de la web de tu negocio utilizando la información disponible en tu Perfil de Empresa en Google (Google Business Profile), sin necesidad de configuración previa ni intervención manual.
 
@@ -59,7 +59,7 @@ Una vez dentro del editor, podrás personalizar tu sitio paso a paso:
 
 ---
 
-### ✅ Recomendaciones:
+### <HelpIcon name="recommendations" />  Recomendaciones:
 
 - Revisa el nombre de dominio antes de activarlo definitivamente.
 - Completa toda la información del negocio para una web más profesional.
@@ -70,4 +70,4 @@ Una vez dentro del editor, podrás personalizar tu sitio paso a paso:
 
 ### ¿Te resultó útil esta información? También puedes leer:
 
-**👉 [Consultar estadísticas web](../analitica/consultar-estadisticas-web.md)**
+**<HelpIcon name="related" /> [Consultar estadísticas web](../analitica/consultar-estadisticas-web.md)**
