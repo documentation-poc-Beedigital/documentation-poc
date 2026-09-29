@@ -20,7 +20,7 @@ import urllib.request
 from pathlib import Path, PurePosixPath
 from typing import Callable, Mapping, Sequence
 
-MODEL = "claude-haiku-4-5-20251001"
+MODEL = "claude-sonnet-5-5"
 API_URL = "https://api.anthropic.com/v1/messages"
 MAX_DOCUMENTATION_BYTES = 3_000_000
 MAX_TEXT_FIELD_CHARACTERS = 4_000
