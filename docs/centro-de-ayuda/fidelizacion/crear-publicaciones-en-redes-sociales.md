@@ -8,7 +8,7 @@ last_reviewed: 2026-09-09
 notion_id: 365b7527ac25800fbc3dffa089dc28b5
 ---
 
-# Crear publicaciones en Redes Sociales
+# <HelpIcon name="loyalty" /> Crear publicaciones en Redes Sociales
 
 Beesible te permite **organizar y gestionar la actividad de redes sociales desde un mismo lugar**. Facilita la planificación de publicaciones, el control de mensajes y la administración de varias cuentas sin tener que acceder a cada plataforma por separado.
 
@@ -16,7 +16,7 @@ Además, ayuda a publicar de forma más regular, organizar mejor el contenido y 
 
 ---
 
-## 📝 Pasos para gestionar tus perfiles de redes sociales
+## <HelpIcon name="steps" />  Pasos para gestionar tus perfiles de redes sociales
 
 1. Ve a la sección “**Fidelización**” del menú lateral y selecciona el apartado “**Publicaciones en Redes Sociales**”.
 2. Haz clic en “**Activar servicio**” y conecta los perfiles de redes sociales que quieres gestionar.
@@ -73,7 +73,7 @@ Además, ayuda a publicar de forma más regular, organizar mejor el contenido y 
 
 ---
 
-### ✅ Recomendaciones:
+### <HelpIcon name="recommendations" />  Recomendaciones:
 
 - **Publica de forma constante** para mantener la actividad en tus redes sociales.
 - **Usa imágenes o vídeos llamativos** para captar la atención rápidamente.
@@ -86,4 +86,4 @@ Además, ayuda a publicar de forma más regular, organizar mejor el contenido y 
 
 ### ¿Te resultó útil esta información? También puedes leer:
 
-**👉 [Consultar estadísticas de redes sociales](../analitica/consultar-estadisticas-de-redes-sociales.md)**
+**<HelpIcon name="related" /> [Consultar estadísticas de redes sociales](../analitica/consultar-estadisticas-de-redes-sociales.md)**

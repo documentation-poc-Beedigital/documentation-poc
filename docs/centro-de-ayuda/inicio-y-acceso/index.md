@@ -9,9 +9,9 @@ notion_id: 29cb7527ac2580569616cb6ff64994c5
 sidebar_position: 1
 ---
 
-# Inicio y acceso
+# <HelpIcon name="signIn" /> Inicio y acceso
 
-## 🔐 Inicio y acceso
+## <HelpIcon name="security" />  Inicio y acceso
 
 [Acceder a la plataforma ](acceder-a-la-plataforma.md)
 

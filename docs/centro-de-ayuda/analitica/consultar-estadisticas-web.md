@@ -8,13 +8,13 @@ last_reviewed: 2026-09-09
 notion_id: 365b7527ac2580efbfabed7d6303bd08
 ---
 
-# Consultar estadísticas web
+# <HelpIcon name="analytics" /> Consultar estadísticas web
 
 Puedes consultar las estadísticas de tu Perfil de Google desde la plataforma para conocer cuántas personas ven tu negocio, ver qué acciones realizan, analizar el rendimiento en distintos periodos y **tomar decisiones** para mejorar tu visibilidad y presencia online.
 
 ---
 
-### 📊 Pasos para consultar tus estadísticas web
+### <HelpIcon name="analytics" />  Pasos para consultar tus estadísticas web
 
 1. Ve a “**Analítica**” en el menú lateral y accede a la sección “**Web**”.
 2. Elige el periodo que quieres analizar:
@@ -34,7 +34,7 @@ Puedes consultar las estadísticas de tu Perfil de Google desde la plataforma pa
 
 ---
 
-### ✅ Recomendaciones:
+### <HelpIcon name="recommendations" />  Recomendaciones:
 
 - Revisa las estadísticas **una vez al mes** para ver tendencias.
 - Si hay **muchas visitas pero pocas acciones**, mejora diseño y llamadas a la acción.

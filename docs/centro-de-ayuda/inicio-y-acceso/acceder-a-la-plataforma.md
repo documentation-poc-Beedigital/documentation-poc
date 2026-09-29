@@ -8,9 +8,9 @@ last_reviewed: 2026-09-09
 notion_id: 29cb7527ac25802184e3e9e42cf145c4
 ---
 
-# Acceder a la plataforma
+# <HelpIcon name="signIn" /> Acceder a la plataforma
 
-### 🔑 Cómo acceder a la plataforma:
+### <HelpIcon name="signIn" />  Cómo acceder a la plataforma:
 
 ### Acceso con tu correo electrónico
 
@@ -32,14 +32,14 @@ notion_id: 29cb7527ac25802184e3e9e42cf145c4
 3. Haz clic en “**Continuar**” y accede a la plataforma.
 
 :::note
-💡 **A tener en cuenta:**
+<HelpIcon name="information" />  **A tener en cuenta:**
 
 - Si tienes activado el **[2FA (autenticación de doble factor)](configurar-opciones-de-seguridad.md),** tras introducir tus credenciales se te solicitará el **código de verificación** que recibirás por email.
 :::
 
 ---
 
-### 🔒 Cómo restablecer tu contraseña si la has olvidado:
+### <HelpIcon name="password" />  Cómo restablecer tu contraseña si la has olvidado:
 
 1. En la **pantalla de inicio de sesión**, introduce tu **correo electrónico** y pulsa **“Continuar con email”**.
 2. Si no recuerdas tu contraseña, selecciona **“¿Has olvidado tu contraseña?”** y pulsa **Continuar**.
@@ -51,8 +51,8 @@ notion_id: 29cb7527ac25802184e3e9e42cf145c4
 
 ### ¿Te resultó útil esta información? También puedes leer:
 
-**👉 [Configurar opciones de seguridad](configurar-opciones-de-seguridad.md)**
+**<HelpIcon name="related" /> [Configurar opciones de seguridad](configurar-opciones-de-seguridad.md)**
 
-**👉 [Cómo cerrar sesión en la plataforma](cerrar-sesion-en-la-plataforma.md)**
+**<HelpIcon name="related" /> [Cómo cerrar sesión en la plataforma](cerrar-sesion-en-la-plataforma.md)**
 
-**👉 [Descargar la app](descargar-la-app.md)**
+**<HelpIcon name="related" /> [Descargar la app](descargar-la-app.md)**

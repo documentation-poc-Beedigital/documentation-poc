@@ -8,7 +8,7 @@ last_reviewed: 2026-09-09
 notion_id: 281b7527ac258075ac6bca2c4d278384
 ---
 
-# Crear un Perfil de Empresa en Google
+# <HelpIcon name="google" /> Crear un Perfil de Empresa en Google
 
 Tener presencia en Google es esencial para que tus clientes te encuentren fácilmente en búsquedas y en Google Maps.
 
@@ -18,7 +18,7 @@ Lo mejor es que puedes **gestionar tu perfil de forma fácil y centralizada desd
 
 ---
 
-### 🚀 Cómo iniciar el proceso desde la plataforma:
+### <HelpIcon name="gettingStarted" />  Cómo iniciar el proceso desde la plataforma:
 
 Cuando completas la contratación y accedes por primera vez, la plataforma te preguntará si ya tienes creado un Perfil de Empresa en Google para tu negocio.
 
@@ -29,13 +29,13 @@ Si decidiste saltarte el paso anterior, puedes retomarlo en cualquier momento de
 
 ---
 
-### 🔍 Pasos en Google para crear el perfil:
+### <HelpIcon name="steps" />  Pasos en Google para crear el perfil:
 
 1. Una vez estés en el proceso oficial de Google, haz clic en **“Empezar”**.
 2. Inicia sesión con una cuenta de Google que esté vinculada a tu empresa.
 
     :::note
-    ⚠️ **Importante:**
+    <HelpIcon name="warning" />  **Importante:**
 
     No es necesario que sea una cuenta *@gmail.com*; puedes usar una dirección de correo corporativa (por ejemplo: *@tuempresa.com*) siempre que esté registrada como cuenta de Google.
     :::
@@ -51,7 +51,7 @@ Si decidiste saltarte el paso anterior, puedes retomarlo en cualquier momento de
     - **Por videollamada o grabación**
 
     :::note
-    ⚠️ **Importante:**
+    <HelpIcon name="warning" />  **Importante:**
 
     No aparecerás públicamente en Google hasta que verifiques tu empresa.
     :::
@@ -59,7 +59,7 @@ Si decidiste saltarte el paso anterior, puedes retomarlo en cualquier momento de
 8. Una vez verificado, tendrás que volver a la plataforma para **[conectar tu perfil de Google con la plataforma](como-conectar-tu-perfil-de-google.md).**
 
     :::note
-    ⚠️ **Importante:**
+    <HelpIcon name="warning" />  **Importante:**
 
     Este paso es necesario para gestionar tu Perfil de Empresa en Google de forma centralizada, actualizar información y ampliar tu presencia en otras plataformas.
     :::
@@ -67,7 +67,7 @@ Si decidiste saltarte el paso anterior, puedes retomarlo en cualquier momento de
 
 ---
 
-### ✅ Recomendaciones:
+### <HelpIcon name="recommendations" />  Recomendaciones:
 
 - Usa el **nombre real** de tu negocio, sin añadir palabras clave extra.
 - La **categoría** afecta cómo y cuándo apareces en las búsquedas, así que elige la más precisa posible.
@@ -80,10 +80,10 @@ Si decidiste saltarte el paso anterior, puedes retomarlo en cualquier momento de
 
 ### ¿Te resultó útil esta información? También puedes leer:
 
-**👉 [Cómo conectar tu Perfil de Google](como-conectar-tu-perfil-de-google.md)**
+**<HelpIcon name="related" /> [Cómo conectar tu Perfil de Google](como-conectar-tu-perfil-de-google.md)**
 
-**👉 [Consultar estadísticas del Perfil de Google](../analitica/consultar-estadisticas-del-perfil-de-google.md)**
+**<HelpIcon name="related" /> [Consultar estadísticas del Perfil de Google](../analitica/consultar-estadisticas-del-perfil-de-google.md)**
 
-**👉 [Añadir o actualizar información en tu Perfil de Google](../visibilidad/anadir-o-actualizar-informacion-en-tu-perfil-de-google.md)**
+**<HelpIcon name="related" /> [Añadir o actualizar información en tu Perfil de Google](../visibilidad/anadir-o-actualizar-informacion-en-tu-perfil-de-google.md)**
 
-**👉 [Crear publicaciones en Google](../fidelizacion/crear-publicaciones-en-google.md)**
+**<HelpIcon name="related" /> [Crear publicaciones en Google](../fidelizacion/crear-publicaciones-en-google.md)**

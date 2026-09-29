@@ -8,13 +8,13 @@ last_reviewed: 2026-09-09
 notion_id: 29cb7527ac2580f1923ad7b8de4bc730
 ---
 
-# Descargar la app
+# <HelpIcon name="signIn" /> Descargar la app
 
 Puedes descargar la app de **Beesible** desde las principales tiendas de aplicaciones para acceder fácilmente a tu cuenta desde tu dispositivo móvil y gestionar tu negocio en cualquier momento y lugar.
 
 ---
 
-### 📱 Cómo descargar la app
+### <HelpIcon name="mobile" />  Cómo descargar la app
 
 1. Abre la **tienda de aplicaciones** en tu dispositivo:
     - **Google Play Store**, si usas Android.
@@ -32,8 +32,8 @@ Puedes descargar la app de **Beesible** desde las principales tiendas de aplicac
 
 ### ¿Te resultó útil esta información? También puedes leer:
 
-**👉 [Acceder a la plataforma](acceder-a-la-plataforma.md)**
+**<HelpIcon name="related" /> [Acceder a la plataforma](acceder-a-la-plataforma.md)**
 
-**👉 [Configurar opciones de seguridad](configurar-opciones-de-seguridad.md)**
+**<HelpIcon name="related" /> [Configurar opciones de seguridad](configurar-opciones-de-seguridad.md)**
 
-**👉 [Cerrar sesión en la plataforma](cerrar-sesion-en-la-plataforma.md)**
+**<HelpIcon name="related" /> [Cerrar sesión en la plataforma](cerrar-sesion-en-la-plataforma.md)**

@@ -8,13 +8,13 @@ last_reviewed: 2026-09-09
 notion_id: 365b7527ac2580bb95a7c05cb42840a4
 ---
 
-# Consultar estadísticas de Redes Sociales
+# <HelpIcon name="analytics" /> Consultar estadísticas de Redes Sociales
 
 Puedes consultar las estadísticas de tus perfiles en redes sociales para conocer cómo crece tu cuenta, cómo interactúan los usuarios con tu contenido y qué tipo de publicaciones funcionan mejor. Estos datos te ayudan a **mejorar tu estrategia, aumentar el alcance y optimizar tu contenido**.
 
 ---
 
-### 📊 Pasos para consultar las estadísticas en redes sociales:
+### <HelpIcon name="analytics" />  Pasos para consultar las estadísticas en redes sociales:
 
 1. Ve a “**Analítica**” en el menú lateral y accede a la sección “**Redes Sociales**”.
 2. Selecciona la **red social y el periodo** que quieres consultar.
@@ -34,7 +34,7 @@ Puedes consultar las estadísticas de tus perfiles en redes sociales para conoce
 
 ---
 
-### ✅ Recomendaciones:
+### <HelpIcon name="recommendations" />  Recomendaciones:
 
 - Revisa las estadísticas **una vez al mes** para detectar tendencias claras.
 - Si hay **muchas visualizaciones pero pocas interacciones**, mejora el contenido y las llamadas a la acción.
@@ -46,4 +46,4 @@ Puedes consultar las estadísticas de tus perfiles en redes sociales para conoce
 
 ### ¿Te resultó útil esta información? También puedes leer:
 
-**👉 [Crear publicaciones en Redes Sociales](../fidelizacion/crear-publicaciones-en-redes-sociales.md)**
+**<HelpIcon name="related" /> [Crear publicaciones en Redes Sociales](../fidelizacion/crear-publicaciones-en-redes-sociales.md)**

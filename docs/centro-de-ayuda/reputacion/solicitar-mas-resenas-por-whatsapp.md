@@ -8,7 +8,7 @@ last_reviewed: 2026-09-09
 notion_id: 29cb7527ac2580ebb5f8fefe35c75d98
 ---
 
-# Solicitar más reseñas por WhatsApp
+# <HelpIcon name="reputation" /> Solicitar más reseñas por WhatsApp
 
 Solicitar reseñas a tus clientes es una forma directa y eficaz de **mejorar tu reputación online**, ya que cada comentario aumenta tu visibilidad, transmite confianza a futuros clientes, mejora tu posicionamiento local y ofrece información útil sobre tu servicio.
 
@@ -34,7 +34,7 @@ Desde la plataforma, puedes **compartir fácilmente un enlace por WhatsApp** y a
 
 ---
 
-### ✅ Recomendaciones:
+### <HelpIcon name="recommendations" />  Recomendaciones:
 
 - **Comparte el enlace justo después de atender al cliente**, cuando la experiencia está más fresca
 - **Personaliza el mensaje** para que sea cercano.
@@ -45,10 +45,10 @@ Desde la plataforma, puedes **compartir fácilmente un enlace por WhatsApp** y a
 
 ### ¿Te resultó útil esta información? También puedes leer:
 
-**👉 [Consultar y responder reseñas](consultar-y-responder-resenas.md)**
+**<HelpIcon name="related" /> [Consultar y responder reseñas](consultar-y-responder-resenas.md)**
 
-**👉 [Automatizar respuestas con Beelma](automatizar-respuestas-con-beelma.md)**
+**<HelpIcon name="related" /> [Automatizar respuestas con Beelma](automatizar-respuestas-con-beelma.md)**
 
-**👉 [Analizar reseñas con Beelma](analizar-resenas-con-beelma.md)**
+**<HelpIcon name="related" /> [Analizar reseñas con Beelma](analizar-resenas-con-beelma.md)**
 
-**👉 [Configurar alertas automáticas de nuevas reseñas](configurar-alertas-automaticas-de-nuevas-resenas.md)**
+**<HelpIcon name="related" /> [Configurar alertas automáticas de nuevas reseñas](configurar-alertas-automaticas-de-nuevas-resenas.md)**

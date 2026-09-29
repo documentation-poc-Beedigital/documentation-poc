@@ -9,7 +9,7 @@ notion_id: 36eb7527ac25804da424db2e85074be7
 sidebar_position: 2
 ---
 
-# Conexión Perfil de Empresa en Google
+# <HelpIcon name="google" /> Conexión Perfil de Empresa en Google
 
 ## Conexión Perfil de Empresa en Google
 

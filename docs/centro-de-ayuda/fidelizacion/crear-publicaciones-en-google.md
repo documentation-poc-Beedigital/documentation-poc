@@ -8,7 +8,7 @@ last_reviewed: 2026-09-09
 notion_id: 2bdb7527ac2580e2ad53dd358d340739
 ---
 
-# Crear publicaciones en Google
+# <HelpIcon name="loyalty" /> Crear publicaciones en Google
 
 Publicar en tu Perfil de Google te ayuda a **destacar frente a la competencia y mejorar tu visibilidad en búsquedas locales**. Es el lugar ideal para compartir novedades, promociones, eventos o cambios de horario, y mantener tu ficha siempre activa y atractiva.
 
@@ -18,7 +18,7 @@ Además, publicar con frecuencia **aumenta las interacciones**, impulsa visitas 
 
 ### Cómo crear y publicar contenido en tu Perfil de Google:
 
-#### 📝 Crear manualmente
+#### <HelpIcon name="steps" />  Crear manualmente
 
 1. En el menú lateral, entra en **“Fidelización”** y selecciona la pestaña **“Publicaciones en Google”**.
 2. Haz clic en el botón **“Crear manualmente”**.
@@ -32,7 +32,7 @@ Además, publicar con frecuencia **aumenta las interacciones**, impulsa visitas 
     - **Editar la publicación** para modificar texto, imagen o CTA.
     - **Eliminarla** si ya no deseas mantenerla activa.
 
-#### 🤖 Crear con Beelma
+#### <HelpIcon name="beelma" />  Crear con Beelma
 
 1. En el menú lateral, accede a **“Fidelización”** y selecciona la pestaña **“Publicaciones en Google”**.
 2. Haz clic en el botón **“Crear con Beelma”**.
@@ -47,7 +47,7 @@ Además, publicar con frecuencia **aumenta las interacciones**, impulsa visitas 
 
 ---
 
-### ✅ Recomendaciones:
+### <HelpIcon name="recommendations" />  Recomendaciones:
 
 - **Usa imágenes llamativas** que ayuden a captar la atención.
 - **Publica de forma regular** para mantener tu ficha activa y mejorar tu visibilidad.
@@ -59,10 +59,10 @@ Además, publicar con frecuencia **aumenta las interacciones**, impulsa visitas 
 
 ### ¿Te resultó útil esta información? También puedes leer:
 
-**👉 [Cómo conectar tu Perfil de Google](../perfil-de-empresa-en-google/como-conectar-tu-perfil-de-google.md)**
+**<HelpIcon name="related" /> [Cómo conectar tu Perfil de Google](../perfil-de-empresa-en-google/como-conectar-tu-perfil-de-google.md)**
 
-**👉 [Crear un Perfil de Empresa en Google](../perfil-de-empresa-en-google/crear-un-perfil-de-empresa-en-google.md)**
+**<HelpIcon name="related" /> [Crear un Perfil de Empresa en Google](../perfil-de-empresa-en-google/crear-un-perfil-de-empresa-en-google.md)**
 
-**👉 [Consultar estadísticas del Perfil de Google](../analitica/consultar-estadisticas-del-perfil-de-google.md)**
+**<HelpIcon name="related" /> [Consultar estadísticas del Perfil de Google](../analitica/consultar-estadisticas-del-perfil-de-google.md)**
 
-**👉 [Añadir o actualizar información en tu Perfil de Google](../visibilidad/anadir-o-actualizar-informacion-en-tu-perfil-de-google.md)**
+**<HelpIcon name="related" /> [Añadir o actualizar información en tu Perfil de Google](../visibilidad/anadir-o-actualizar-informacion-en-tu-perfil-de-google.md)**

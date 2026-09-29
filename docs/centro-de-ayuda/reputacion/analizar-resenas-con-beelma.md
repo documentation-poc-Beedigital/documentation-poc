@@ -8,7 +8,7 @@ last_reviewed: 2026-09-09
 notion_id: 365b7527ac25803181f0e9eb44032e79
 ---
 
-# Analizar reseñas con Beelma
+# <HelpIcon name="reputation" /> Analizar reseñas con Beelma
 
 Nuestro agente inteligente de marketing digital **analiza automáticamente tus últimas reseñas de Google** y obtener información clave para mejorar la experiencia de tus clientes y tu reputación online.
 
@@ -16,7 +16,7 @@ La IA revisa tus reseñas recientes y genera un análisis claro y accionable con
 
 ---
 
-### 🤖 Cómo analizar reseñas con Beelma
+### <HelpIcon name="beelma" />  Cómo analizar reseñas con Beelma
 
 1. Dirígete a la sección “**Reputación**” desde el menú lateral.
 2. Haz clic en el botón **Analizar con Beelma**.
@@ -31,10 +31,10 @@ La IA revisa tus reseñas recientes y genera un análisis claro y accionable con
 
 ### ¿Te resultó útil esta información? También puedes leer:
 
-**👉 [Consultar y responder reseñas](consultar-y-responder-resenas.md)**
+**<HelpIcon name="related" /> [Consultar y responder reseñas](consultar-y-responder-resenas.md)**
 
-**👉 [Automatizar respuestas con Beelma](automatizar-respuestas-con-beelma.md)**
+**<HelpIcon name="related" /> [Automatizar respuestas con Beelma](automatizar-respuestas-con-beelma.md)**
 
-**👉 [Solicitar más reseñas por WhatsApp](solicitar-mas-resenas-por-whatsapp.md)**
+**<HelpIcon name="related" /> [Solicitar más reseñas por WhatsApp](solicitar-mas-resenas-por-whatsapp.md)**
 
-**👉 [Configurar alertas automáticas de nuevas reseñas](configurar-alertas-automaticas-de-nuevas-resenas.md)**
+**<HelpIcon name="related" /> [Configurar alertas automáticas de nuevas reseñas](configurar-alertas-automaticas-de-nuevas-resenas.md)**

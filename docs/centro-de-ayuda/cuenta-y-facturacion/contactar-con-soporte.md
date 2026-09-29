@@ -8,13 +8,13 @@ last_reviewed: 2026-09-09
 notion_id: 293b7527ac2580559dcaea01d891166f
 ---
 
-# Contactar con soporte
+# <HelpIcon name="billing" /> Contactar con soporte
 
 Si tienes dudas, necesitas ayuda con alguna funcionalidad o quieres hacer una consulta de cualquier tipo, puedes contactar fácilmente con nuestro equipo de soporte desde la sección **Centro de ayuda**.
 
 ---
 
-### 👩‍💻 Cómo enviar una consulta al equipo de soporte:
+### <HelpIcon name="contact" /> Cómo enviar una consulta al equipo de soporte:
 
 1. Haz clic en tu **avatar/“Mi cuenta”**, ubicado en la parte inferior del menú lateral izquierdo.
 2. En el **menú desplegable**, selecciona la opción **“Centro de ayuda”**.
@@ -28,8 +28,8 @@ Si tienes dudas, necesitas ayuda con alguna funcionalidad o quieres hacer una co
 
 ### ¿Te resultó útil esta información? También puedes leer:
 
-**👉 [Configurar tu perfil de usuario](configurar-tu-perfil-de-usuario.md)**
+**<HelpIcon name="related" /> [Configurar tu perfil de usuario](configurar-tu-perfil-de-usuario.md)**
 
-**👉 [Gestionar tu plan y tus facturas](gestionar-tu-plan-y-tus-facturas.md)**
+**<HelpIcon name="related" /> [Gestionar tu plan y tus facturas](gestionar-tu-plan-y-tus-facturas.md)**
 
-**👉 [Enviar sugerencias](enviar-sugerencias.md)**
+**<HelpIcon name="related" /> [Enviar sugerencias](enviar-sugerencias.md)**
