@@ -163,7 +163,7 @@ th {
 
 /* Docusaurus exposes the admonition internals as CSS-module classes. */
 .alert > [class*='admonitionHeading'] {
-  align-items: flex-start;
+  align-items: center;
   display: flex;
   gap: var(--bee-space-2);
   margin-bottom: var(--bee-space-2);
@@ -173,7 +173,7 @@ th {
 .alert [class*='admonitionIcon'] {
   display: inline-flex;
   flex: none;
-  margin-top: var(--bee-space-1);
+  margin-top: 0;
 }
 
 .alert > [class*='admonitionContent'] > :first-child {
@@ -238,19 +238,30 @@ th {
 }
 
 .footer .container {
-  display: grid;
-  grid-template-columns: max-content max-content;
-  gap: var(--bee-space-5);
-  justify-content: start;
+  position: relative;
 }
 
 .footer__links {
-  margin-bottom: 0;
+  display: block;
+  width: max-content;
+  margin: 0;
+}
+
+.footer__links .footer__col {
+  flex: none;
+  width: auto;
+  max-width: none;
+  padding: 0;
 }
 
 .footer__bottom {
-  align-self: end;
-  text-align: left;
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  width: max-content;
+  margin: 0;
+  transform: translateX(-50%);
+  text-align: center;
 }
 
 .help-home {
@@ -555,12 +566,17 @@ th {
     text-align: left;
   }
 
-  .footer .container {
-    grid-template-columns: 1fr;
-    gap: var(--bee-space-3);
+}
+
+@media (max-width: 767px) {
+  .footer__links {
+    width: auto;
   }
 
   .footer__bottom {
-    align-self: auto;
+    position: static;
+    width: auto;
+    margin-top: var(--bee-space-3);
+    transform: none;
   }
 }
