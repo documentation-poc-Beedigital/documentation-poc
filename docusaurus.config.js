@@ -42,6 +42,7 @@ const config = {
           routeBasePath: '/',
           sidebarPath: './sidebars.js',
           exclude: ['production-snapshots/**'],
+          remarkPlugins: [require('./src/remark/remove-help-icons-from-h1')],
         },
         blog: false,
         theme: {customCss: './src/css/custom.css'},

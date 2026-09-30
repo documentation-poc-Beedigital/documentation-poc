@@ -1,5 +1,6 @@
 import React from 'react';
-import HelpIcon from '@site/src/components/HelpIcon';
+import {MagnifyingGlassIcon} from '@heroicons/react/24/outline';
+import BeeButton from '@site/src/components/BeeButton';
 
 export default function HelpSearch() {
   function openSearch() {
@@ -10,8 +11,8 @@ export default function HelpSearch() {
   }
 
   return (
-    <button className="button button--primary help-search" onClick={openSearch}>
-      <HelpIcon name="search" /> Buscar en el Centro de Ayuda
-    </button>
+    <BeeButton className="help-search" leadingIcon={MagnifyingGlassIcon} onClick={openSearch}>
+      Buscar en el Centro de Ayuda
+    </BeeButton>
   );
 }

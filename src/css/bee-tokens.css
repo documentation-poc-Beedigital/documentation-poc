@@ -29,14 +29,24 @@
   --bee-background-gradient-end: #f3fdfd;
   --bee-text-default: #373737;
   --bee-text-subtle: #828282;
-  --bee-text-inverse: #ffffff;
   --bee-border-default: #cccccc;
 
   /* Button */
-  --bee-button-primary-background: #6818aa;
-  --bee-button-primary-background-hover: #501280;
-  --bee-button-primary-background-pressed: #a362ed;
-  --bee-button-primary-text: var(--bee-text-inverse);
+  --bee-button-text-white: #FFFFFF;
+  --bee-button-text-black: #373737;
+  --bee-button-text-disabled: #B6B6B6;
+  --bee-button-light-focus-ring: #BD8EF2;
+  --bee-button-light-primary-default: #6818AA;
+  --bee-button-light-primary-hover: #501280;
+  --bee-button-light-primary-press: #A362ED;
+  --bee-button-light-primary-disabled: #E2E2E2;
+  --bee-button-light-secondary-default: #373737;
+  --bee-button-light-secondary-hover: #616161;
+  --bee-button-light-secondary-press: #828282;
+  --bee-button-light-secondary-disabled: #E2E2E2;
+  --bee-button-light-subtle-hover: #F8F8F8;
+  --bee-button-light-subtle-press: #E2E2E2;
+  --bee-button-light-tertiary-border: #A4A4A4;
 
   /* Header */
   --bee-header-background: #ffffff;
@@ -129,5 +139,4 @@
   --bee-radius-large: 16px;
   --bee-radius-hero: 24px;
   --bee-shadow-raised: 0 12px 12px 0 #59516f1a;
-  --bee-shadow-focus: 0 0 0 4px #ebd4fa;
 }
