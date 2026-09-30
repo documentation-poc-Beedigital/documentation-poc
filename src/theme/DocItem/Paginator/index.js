@@ -27,10 +27,7 @@ function PaginationLink({direction, item}) {
       leadingIcon={isNext ? undefined : ArrowLeftIcon}
       trailingIcon={isNext ? ArrowRightIcon : undefined}
       variant="tertiary">
-      <span className="bee-pagination__content">
-        <span className="bee-pagination__sublabel">{label}</span>
-        <span>{item.title}</span>
-      </span>
+      <span>{label}: {item.title}</span>
     </BeeButton>
   );
 }
