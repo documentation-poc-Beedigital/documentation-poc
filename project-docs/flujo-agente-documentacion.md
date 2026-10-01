@@ -1,7 +1,7 @@
 ---
 article_id: ART-DOC-AGENT-001
 title: Flujo del agente de documentación
-version: 1.2
+version: 1.3
 status: published
 owner: Product
 last_reviewed: 2026-09-02
@@ -29,7 +29,25 @@ flowchart TD
     I -->|Rechazada| K["Tarea de nuevo en In Progress"]
 ```
 
-## Funcionamiento actual
+## Obtención del contexto de Jira
+
+Las tareas funcionales relevantes llevan la etiqueta `documentation-required` y se completan en **Done**. Al añadir `documentation-scope-ready` a la épica, Jira crea una sola tarea documental con `documentation-task`. Su descripción es corta y contiene únicamente este manifiesto:
+
+```yaml
+DOCUMENTATION_SOURCE_V1
+EPIC_KEY: DOC-123
+TASK_KEYS:
+- DOC-124
+- DOC-125
+```
+
+Cuando la tarea documental pasa a **In Progress**, el workflow recupera desde Jira Cloud la épica y las tareas del manifiesto. Antes de usar el contenido, comprueba que la fuente principal es una épica y que cada tarea es hija directa, conserva `documentation-required` y pertenece a la categoría Done. Convierte las descripciones ADF a texto Markdown legible y construye el contexto en el orden épica y tareas, siempre con su clave y resumen.
+
+El acceso usa autenticación básica de Jira Cloud y estos Repository Secrets, configurados solo en el paso que ejecuta el agente: `JIRA_BASE_URL`, `JIRA_API_EMAIL` y `JIRA_API_TOKEN`. Sus valores no se registran ni se incorporan a la tarea documental.
+
+Las tareas documentales antiguas que no contienen `DOCUMENTATION_SOURCE_V1` mantienen el flujo anterior. Si el manifiesto está presente, no hay alternativa: cualquier error de formato, configuración, consulta, relación o validación detiene el flujo antes de llamar a Claude.
+
+## Funcionamiento del agente
 
 Cuando una tarea con la etiqueta `documentation-task` pasa a **In Progress**, Jira añade automáticamente la etiqueta `documentation-agent-ready`.
 
@@ -44,7 +62,7 @@ La etiqueta inicia el workflow de GitHub Actions. El agente utiliza el ticket co
 
 ## Controles
 
-- La descripción consolidada de Jira se conserva completa, sin truncado ni resumen automático, hasta un máximo de 60.000 caracteres.
+- El contexto consolidado recuperado de Jira se conserva completo, sin truncado ni resumen automático, hasta un máximo de 60.000 caracteres; si lo supera, el flujo se detiene antes de Claude.
 - La propuesta puede crear o actualizar uno o varios documentos Markdown y se aplica de forma atómica.
 - El agente no inventa comportamiento, evidencia ni contenido ausente en el ticket.
 - Los documentos nuevos solo se ubican en categorías existentes de `docs/centro-de-ayuda/`; el código determinista genera su frontmatter, identificador y versión inicial `1.0`.
