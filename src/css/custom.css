@@ -121,16 +121,17 @@
 
 .markdown h1 {
   font-size: clamp(var(--bee-font-size-h2), 4vw, var(--bee-font-size-h1));
-  line-height: var(--bee-line-height-h1);
+  line-height: calc(var(--bee-line-height-h1) - 0.15);
 }
 
 .markdown h2 {
-  margin-top: var(--bee-space-7);
-  line-height: var(--bee-line-height-h2);
+  margin-top: var(--bee-space-6);
+  line-height: calc(var(--bee-line-height-h2) - 0.15);
 }
 
 .markdown h3 {
-  line-height: var(--bee-line-height-h3);
+  margin-top: var(--bee-space-5);
+  line-height: calc(var(--bee-line-height-h3) - 0.15);
 }
 
 .markdown h4 {
@@ -156,6 +157,46 @@ th {
   --ifm-alert-foreground-color: var(--bee-alert-text);
   --ifm-alert-border-width: 1px;
   --ifm-alert-border-left-width: var(--bee-space-1);
+  margin-block: var(--bee-space-5);
+  padding: var(--bee-space-4);
+}
+
+/* Docusaurus exposes the admonition internals as CSS-module classes. */
+.alert > [class*='admonitionHeading'] {
+  align-items: center;
+  display: flex;
+  gap: var(--bee-space-2);
+  margin-bottom: var(--bee-space-2);
+  line-height: var(--bee-line-height-body);
+}
+
+.alert [class*='admonitionIcon'] {
+  display: inline-flex;
+  flex: none;
+  margin-top: 0;
+}
+
+.alert > [class*='admonitionContent'] > :first-child {
+  margin-top: 0;
+}
+
+.alert > [class*='admonitionContent'] > :last-child {
+  margin-bottom: 0;
+}
+
+.alert > [class*='admonitionContent'] > * + * {
+  margin-top: var(--bee-space-2);
+}
+
+.alert > [class*='admonitionContent'] > p:first-child:has(> .help-icon:first-child) {
+  align-items: center;
+  display: flex;
+  gap: var(--bee-space-2);
+}
+
+.alert > [class*='admonitionContent'] > p:first-child > .help-icon:first-child {
+  margin-right: 0;
+  vertical-align: middle;
 }
 
 .alert--info {
@@ -179,20 +220,26 @@ th {
 }
 
 .bee-pagination {
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr));
   gap: var(--bee-space-4);
-  justify-content: space-between;
   margin-top: var(--bee-space-6);
 }
 
-.bee-pagination__link {
+.bee-pagination__link.bee-button--tertiary {
+  width: 100%;
   max-width: none;
+  min-width: 0;
   text-align: left;
-  white-space: nowrap;
+  white-space: normal;
+}
+
+.bee-pagination__link span {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .bee-pagination__link--next {
-  margin-left: auto;
   text-align: right;
 }
 
@@ -201,16 +248,44 @@ th {
   padding-block: var(--bee-space-6);
 }
 
+.footer .container {
+  position: relative;
+}
+
 .footer__links {
-  margin-bottom: var(--bee-space-4);
+  display: block;
+  width: max-content;
+  margin: 0;
+}
+
+.footer__links .footer__col {
+  flex: none;
+  width: auto;
+  max-width: none;
+  padding: 0;
+}
+
+.footer__bottom {
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  width: max-content;
+  margin: 0;
+  transform: translateX(-50%);
+  text-align: center;
+}
+
+@media (min-width: 768px) {
+  .footer__copyright {
+    line-height: 2;
+  }
 }
 
 .help-home {
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
-  min-height: max(34rem, calc(100dvh - var(--ifm-navbar-height) - 12rem));
-  padding-block: var(--bee-space-4) var(--bee-space-6);
+  gap: var(--bee-space-5);
+  padding-block: var(--bee-space-4);
 }
 
 .help-hero {
@@ -219,8 +294,8 @@ th {
   justify-content: center;
   position: relative;
   overflow: hidden;
-  min-height: clamp(21rem, 42vh, 27rem);
-  padding: clamp(var(--bee-space-5), 4vw, var(--bee-space-8));
+  min-height: clamp(17rem, 36vh, 22rem);
+  padding: clamp(var(--bee-space-4), 3vw, var(--bee-space-7));
   border-radius: var(--bee-radius-hero);
   background: linear-gradient(115deg, var(--bee-background-gradient-start), var(--bee-background-gradient-end));
   color: var(--bee-text-default);
@@ -236,6 +311,20 @@ th {
 
 .help-hero p {
   max-width: 60ch;
+}
+
+.help-hero > :first-child {
+  margin-top: 0;
+}
+
+.help-hero > :last-child {
+  margin-bottom: 0;
+}
+
+.help-hero h1 {
+  font-size: clamp(var(--bee-font-size-h2), 3.2vw, 48px);
+  line-height: calc(var(--bee-line-height-h1) - 0.15);
+  margin-bottom: var(--bee-space-3);
 }
 
 .help-eyebrow {
@@ -269,29 +358,29 @@ th {
   display: inline-flex;
   align-items: center;
   gap: var(--bee-space-2);
-  background: #6818AA;
-  color: #FFFFFF;
+  background: var(--bee-button-light-primary-default);
+  color: var(--bee-button-text-white);
 }
 
 .bee-button--primary:hover {
-  background: #501280;
-  color: #FFFFFF;
+  background: var(--bee-button-light-primary-hover);
+  color: var(--bee-button-text-white);
 }
 
 .bee-button--primary:active,
 .bee-button--primary[aria-pressed='true'] {
-  background: #A362ED;
+  background: var(--bee-button-light-primary-press);
 }
 
 .bee-button--primary:focus-visible {
-  outline: 2px solid #BD8EF2;
-  outline-offset: 2px;
+  outline: var(--bee-focus-ring-width) solid var(--bee-button-light-focus-ring);
+  outline-offset: var(--bee-focus-ring-offset);
 }
 
 .bee-button--primary:disabled,
 .bee-button--primary[aria-disabled='true'] {
-  background: #E2E2E2;
-  color: #B6B6B6;
+  background: var(--bee-button-light-primary-disabled);
+  color: var(--bee-button-text-disabled);
 }
 
 .bee-button--primary .bee-button__icon--leading,
@@ -321,12 +410,12 @@ th {
   min-height: 40px;
   width: fit-content;
   padding: 8px 16px;
-  border: 1px solid #A4A4A4;
+  border: 1px solid var(--bee-button-light-tertiary-border);
   border-radius: 56px;
   display: inline-flex;
   align-items: center;
   background: var(--bee-background-default);
-  color: #373737;
+  color: var(--bee-button-text-black);
 }
 
 .bee-button--ghost {
@@ -417,7 +506,7 @@ th {
 }
 
 .help-about {
-  padding: var(--bee-space-5);
+  padding: var(--bee-space-4);
   border-left: var(--bee-space-1) solid var(--bee-brand-secondary);
   border-radius: 0 var(--bee-radius-large) var(--bee-radius-large) 0;
   background: var(--bee-background-default);
@@ -425,7 +514,12 @@ th {
 
 .help-about h2 {
   margin-top: 0;
+  margin-bottom: var(--bee-space-2);
   font-size: var(--bee-font-size-h4);
+}
+
+.help-about p {
+  margin-bottom: var(--bee-space-3);
 }
 
 .help-about a {
@@ -481,14 +575,25 @@ th {
   }
 
   .bee-pagination {
-    display: flex;
-    flex-direction: column;
-    gap: var(--bee-space-4);
+    grid-template-columns: 1fr;
   }
 
   .bee-pagination__link,
   .bee-pagination__link--next {
-    margin-left: 0;
     text-align: left;
+  }
+
+}
+
+@media (max-width: 767px) {
+  .footer__links {
+    width: auto;
+  }
+
+  .footer__bottom {
+    position: static;
+    width: auto;
+    margin-top: var(--bee-space-3);
+    transform: none;
   }
 }
