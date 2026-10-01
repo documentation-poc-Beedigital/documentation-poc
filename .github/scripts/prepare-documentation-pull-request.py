@@ -26,6 +26,7 @@ ALLOWED_SUFFIXES = {".md", ".mdx"}
 CREATE_ROOT = PurePosixPath("docs/centro-de-ayuda")
 KEBAB_CASE_NAME = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)*\.md")
 MAX_AGENT_REPORT_BYTES = 262_144
+MAX_ISSUE_DESCRIPTION_CHARACTERS = 60_000
 FRONTMATTER_VERSION_PATTERN = re.compile(
     r"^version: ([0-9]+\.[0-9]+)\r?$", re.MULTILINE
 )
@@ -70,13 +71,17 @@ def load_ticket(path: Path) -> dict[str, str]:
     if (
         not isinstance(issue_description, str)
         or not issue_description.strip()
-        or len(issue_description) > 20_000
         or any(
             ord(character) < 32 and character not in "\r\n\t"
             for character in issue_description
         )
     ):
         raise PublicationPreparationError("issue_description is not a safe Jira description")
+    if len(issue_description) > MAX_ISSUE_DESCRIPTION_CHARACTERS:
+        raise PublicationPreparationError(
+            "issue_description must contain at most "
+            f"{MAX_ISSUE_DESCRIPTION_CHARACTERS} characters"
+        )
     return {
         "issue_key": issue_key,
         "issue_summary": issue_summary,

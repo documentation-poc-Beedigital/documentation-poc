@@ -126,6 +126,11 @@ class DocumentationAgentWorkflowTests(unittest.TestCase):
         self.assertLess(claude, jira)
         self.assertIn('--ticket-file "${RUNNER_TEMP}/documentation-ticket.json"', self.workflow)
 
+    def test_jira_description_limit_is_60000_characters(self) -> None:
+        self.assertIn("max_issue_description_characters = 60_000", self.workflow)
+        self.assertIn("between 1 and 60000 characters", self.workflow)
+        self.assertNotIn("len(issue_description) <= 20_000", self.workflow)
+
     def test_end_to_end_pipeline_supports_created_and_updated_files(self) -> None:
         self.assertIn("--base-sha", self.workflow)
         self.assertIn("Validate documentation site after applying proposal", self.workflow)

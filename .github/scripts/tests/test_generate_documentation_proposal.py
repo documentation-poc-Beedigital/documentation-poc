@@ -237,6 +237,36 @@ class DocumentationProposalGeneratorTests(unittest.TestCase):
         self.assertEqual(16384, self.captured_request["max_tokens"])
         self.assertEqual("json_schema", self.captured_request["output_config"]["format"]["type"])
 
+    def test_issue_description_at_60000_characters_is_sent_to_claude_complete(self) -> None:
+        description = "x" * GENERATOR.MAX_ISSUE_DESCRIPTION_CHARACTERS
+        self.ticket_file.write_text(json.dumps({
+            "issue_key": "DOC-1", "issue_summary": "Update documentation",
+            "issue_description": description,
+        }), encoding="utf-8")
+
+        self.run_generator(
+            self.proposal([], decision="abstention", summary="No change", reason="Insufficient evidence")
+        )
+
+        assert self.captured_request is not None
+        request_ticket = json.loads(self.captured_request["messages"][0]["content"])["ticket"]
+        self.assertEqual(description, request_ticket["issue_description"])
+
+    def test_issue_description_over_60000_characters_is_rejected_before_http(self) -> None:
+        self.ticket_file.write_text(json.dumps({
+            "issue_key": "DOC-1", "issue_summary": "Update documentation",
+            "issue_description": "x" * (GENERATOR.MAX_ISSUE_DESCRIPTION_CHARACTERS + 1),
+        }), encoding="utf-8")
+        transport = mock.Mock()
+
+        with self.assertRaisesRegex(GENERATOR.ProposalError, "60000"):
+            GENERATOR.generate_and_apply(
+                self.root, self.ticket_file, self.prompt_file, self.report_file,
+                "test-secret-key", transport,
+            )
+
+        transport.assert_not_called()
+
     def test_malformed_root_nested_and_decision_contracts_are_rejected(self) -> None:
         invalid = [
             {**self.proposal(), "extra": "forbidden"},

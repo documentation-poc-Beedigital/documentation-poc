@@ -44,6 +44,7 @@ La etiqueta inicia el workflow de GitHub Actions. El agente utiliza el ticket co
 
 ## Controles
 
+- La descripción consolidada de Jira se conserva completa, sin truncado ni resumen automático, hasta un máximo de 60.000 caracteres.
 - La propuesta puede crear o actualizar uno o varios documentos Markdown y se aplica de forma atómica.
 - El agente no inventa comportamiento, evidencia ni contenido ausente en el ticket.
 - Los documentos nuevos solo se ubican en categorías existentes de `docs/centro-de-ayuda/`; el código determinista genera su frontmatter, identificador y versión inicial `1.0`.

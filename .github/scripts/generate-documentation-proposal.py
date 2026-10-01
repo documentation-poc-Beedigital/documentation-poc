@@ -23,6 +23,7 @@ from typing import Callable, Mapping, Sequence
 MODEL = "claude-sonnet-5-5"
 API_URL = "https://api.anthropic.com/v1/messages"
 MAX_DOCUMENTATION_BYTES = 3_000_000
+MAX_ISSUE_DESCRIPTION_CHARACTERS = 60_000
 MAX_TEXT_FIELD_CHARACTERS = 4_000
 MAX_PROPOSED_BODY_CHARACTERS = 1_000_000
 MAX_PROPOSED_DOCUMENTS = 50
@@ -85,6 +86,11 @@ def load_ticket(path: Path) -> dict[str, str]:
         raise ProposalError("Ticket JSON must contain exactly the three expected fields")
     if any(not isinstance(value[name], str) or not value[name].strip() for name in expected):
         raise ProposalError("Ticket fields must be non-empty strings")
+    if len(value["issue_description"]) > MAX_ISSUE_DESCRIPTION_CHARACTERS:
+        raise ProposalError(
+            "issue_description must contain at most "
+            f"{MAX_ISSUE_DESCRIPTION_CHARACTERS} characters"
+        )
     return {name: value[name] for name in sorted(expected)}
 
 
