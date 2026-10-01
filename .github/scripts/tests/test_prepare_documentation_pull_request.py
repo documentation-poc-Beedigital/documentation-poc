@@ -231,10 +231,19 @@ class DocumentationPullRequestPreparationTests(unittest.TestCase):
     def test_jira_description_length_is_revalidated(self) -> None:
         self.ticket_file.write_text(json.dumps({
             "issue_key": "DOC-1", "issue_summary": "Update",
-            "issue_description": "x" * 20_001,
+            "issue_description": "x" * (PREPARER.MAX_ISSUE_DESCRIPTION_CHARACTERS + 1),
         }), encoding="utf-8")
-        with self.assertRaisesRegex(PREPARER.PublicationPreparationError, "safe Jira description"):
+        with self.assertRaisesRegex(PREPARER.PublicationPreparationError, "60000"):
             PREPARER.load_ticket(self.ticket_file)
+
+    def test_jira_description_at_60000_characters_is_revalidated(self) -> None:
+        description = "x" * PREPARER.MAX_ISSUE_DESCRIPTION_CHARACTERS
+        self.ticket_file.write_text(json.dumps({
+            "issue_key": "DOC-1", "issue_summary": "Update",
+            "issue_description": description,
+        }), encoding="utf-8")
+
+        self.assertEqual(description, PREPARER.load_ticket(self.ticket_file)["issue_description"])
 
     def test_jira_description_control_characters_are_revalidated(self) -> None:
         self.ticket_file.write_text(json.dumps({

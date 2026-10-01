@@ -68,6 +68,7 @@ jobs:
           issue_key = os.environ["ISSUE_KEY"]
           issue_summary = os.environ["ISSUE_SUMMARY"]
           issue_description = os.environ["ISSUE_DESCRIPTION"]
+          max_issue_description_characters = 60_000
 
           errors = []
           if not re.fullmatch(r"[A-Z][A-Z0-9]*(?:-[A-Z0-9]+)*-[1-9][0-9]*", issue_key):
@@ -82,9 +83,9 @@ jobs:
               errors.append("issue_summary must not be blank")
           if any(ord(character) < 32 for character in issue_summary):
               errors.append("issue_summary must not contain control characters")
-          if not 1 <= len(issue_description) <= 20_000:
+          if not 1 <= len(issue_description) <= max_issue_description_characters:
               errors.append(
-                  "issue_description must contain between 1 and 20000 characters"
+                  "issue_description must contain between 1 and 60000 characters"
               )
           if not issue_description.strip():
               errors.append("issue_description must not be blank")
