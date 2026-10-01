@@ -275,6 +275,12 @@ th {
   text-align: center;
 }
 
+@media (min-width: 768px) {
+  .footer__copyright {
+    line-height: 2;
+  }
+}
+
 .help-home {
   display: flex;
   flex-direction: column;
