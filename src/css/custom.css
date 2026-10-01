@@ -188,6 +188,17 @@ th {
   margin-top: var(--bee-space-2);
 }
 
+.alert > [class*='admonitionContent'] > p:first-child:has(> .help-icon:first-child) {
+  align-items: center;
+  display: flex;
+  gap: var(--bee-space-2);
+}
+
+.alert > [class*='admonitionContent'] > p:first-child > .help-icon:first-child {
+  margin-right: 0;
+  vertical-align: middle;
+}
+
 .alert--info {
   --ifm-alert-background-color: var(--bee-alert-info-background);
   --ifm-alert-border-color: var(--bee-alert-info-border);
