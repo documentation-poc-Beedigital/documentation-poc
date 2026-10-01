@@ -764,6 +764,111 @@ class DocumentationProposalGeneratorTests(unittest.TestCase):
             self.assertIn(phrase, prompt)
 
 
+class JiraSourceManifestTests(unittest.TestCase):
+    configuration = {
+        "base_url": "https://example.atlassian.net",
+        "email": "agent@example.invalid",
+        "token": "simulated-token",
+    }
+    manifest = "DOCUMENTATION_SOURCE_V1\nEPIC_KEY: DOC-123\nTASK_KEYS:\n- DOC-124\n- DOC-125\n"
+
+    def issue(self, key: str, summary: str, *, issue_type: str = "Task", parent: str | None = "DOC-123", done: bool = True, labels: list[str] | None = None, description: object | None = None) -> dict[str, object]:
+        fields: dict[str, object] = {
+            "summary": summary,
+            "description": description if description is not None else {"type": "doc", "content": [{"type": "paragraph", "content": [{"type": "text", "text": summary}]}]},
+            "issuetype": {"name": issue_type}, "status": {"statusCategory": {"key": "done" if done else "indeterminate"}},
+            "labels": ["documentation-required"] if labels is None else labels,
+        }
+        if parent is not None:
+            fields["parent"] = {"key": parent}
+        return {"key": key, "fields": fields}
+
+    def source_transport(self, overrides: dict[str, dict[str, object]] | None = None):
+        responses = {
+            "DOC-123": self.issue("DOC-123", "Epic summary", issue_type="Epic", parent=None),
+            "DOC-124": self.issue("DOC-124", "First task"),
+            "DOC-125": self.issue("DOC-125", "Second task"),
+        }
+        responses.update(overrides or {})
+        calls: list[str] = []
+        def transport(endpoint: str, email: str, token: str, timeout: float) -> dict[str, object]:
+            self.assertEqual(self.configuration["email"], email)
+            self.assertEqual(self.configuration["token"], token)
+            self.assertLessEqual(timeout, GENERATOR.JIRA_REQUEST_TIMEOUT)
+            key = endpoint.split("/issue/", 1)[1].split("?", 1)[0]
+            calls.append(key)
+            return responses[key]
+        return transport, calls
+
+    def test_valid_manifest_fetches_epic_then_tasks_and_converts_adf(self) -> None:
+        adf = {"type": "doc", "content": [
+            {"type": "heading", "attrs": {"level": 2}, "content": [{"type": "text", "text": "Details"}]},
+            {"type": "paragraph", "content": [{"type": "text", "text": "Bold", "marks": [{"type": "strong"}]}, {"type": "hardBreak"}, {"type": "text", "text": "link", "marks": [{"type": "link", "attrs": {"href": "https://example.invalid"}}]}]},
+            {"type": "bulletList", "content": [{"type": "listItem", "content": [{"type": "paragraph", "content": [{"type": "text", "text": "Item"}]}]}]},
+        ]}
+        transport, calls = self.source_transport({"DOC-123": self.issue("DOC-123", "Epic summary", issue_type="Epic", parent=None, description=adf)})
+        ticket = GENERATOR.resolve_jira_source({"issue_key": "DOC-999", "issue_summary": "Documentation", "issue_description": self.manifest}, self.configuration, transport, 120)
+        self.assertEqual(["DOC-123", "DOC-124", "DOC-125"], calls)
+        self.assertTrue(ticket["issue_description"].startswith("Epic DOC-123: Epic summary"))
+        self.assertIn("## Details", ticket["issue_description"])
+        self.assertIn("**Bold**\n[link](https://example.invalid)", ticket["issue_description"])
+        self.assertIn("- Item", ticket["issue_description"])
+        self.assertLess(ticket["issue_description"].index("Epic DOC-123"), ticket["issue_description"].index("Task DOC-124"))
+
+    def test_duplicate_task_keys_are_removed_preserving_order(self) -> None:
+        transport, calls = self.source_transport()
+        manifest = self.manifest.replace("- DOC-125", "- DOC-124\n- DOC-125\n- DOC-124")
+        GENERATOR.resolve_jira_source({"issue_key": "DOC-999", "issue_summary": "Documentation", "issue_description": manifest}, self.configuration, transport, 30)
+        self.assertEqual(["DOC-123", "DOC-124", "DOC-125"], calls)
+
+    def test_invalid_manifest_never_falls_back(self) -> None:
+        with self.assertRaisesRegex(GENERATOR.ProposalError, "Invalid DOCUMENTATION_SOURCE_V1"):
+            GENERATOR.resolve_jira_source({"issue_key": "DOC-999", "issue_summary": "Documentation", "issue_description": "DOCUMENTATION_SOURCE_V1\nEPIC_KEY: bad"}, self.configuration, mock.Mock(), 30)
+
+    def test_source_validation_failures_abort_before_claude(self) -> None:
+        cases = {
+            "missing configuration": ({}, {}),
+            "HTTP failure": (self.configuration, {"DOC-123": urllib.error.HTTPError("url", 500, "error", {}, io.BytesIO())}),
+            "not a direct child": (self.configuration, {"DOC-124": self.issue("DOC-124", "First task", parent="DOC-777")}),
+            "not in the Done": (self.configuration, {"DOC-124": self.issue("DOC-124", "First task", done=False)}),
+            "does not have documentation-required": (self.configuration, {"DOC-124": self.issue("DOC-124", "First task", labels=[])}),
+        }
+        for expected, (configuration, overrides) in cases.items():
+            with self.subTest(expected=expected):
+                transport, _ = self.source_transport({key: value for key, value in overrides.items() if isinstance(value, dict)})
+                if "HTTP failure" in expected:
+                    transport = mock.Mock(side_effect=GENERATOR.ProposalError("Jira API returned HTTP 500"))
+                claude = mock.Mock()
+                ticket = {"issue_key": "DOC-999", "issue_summary": "Documentation", "issue_description": self.manifest}
+                with self.assertRaises(GENERATOR.ProposalError):
+                    resolved = GENERATOR.resolve_jira_source(ticket, configuration, transport, 30)
+                    claude(GENERATOR.build_request("prompt", resolved, []))
+                claude.assert_not_called()
+
+    def test_generate_and_apply_does_not_call_claude_when_manifest_resolution_fails(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            temporary_root = Path(temporary)
+            ticket_file = temporary_root / "ticket.json"
+            ticket_file.write_text(json.dumps({
+                "issue_key": "DOC-999", "issue_summary": "Documentation",
+                "issue_description": self.manifest,
+            }), encoding="utf-8")
+            prompt_file = temporary_root / "prompt.md"
+            prompt_file.write_text("trusted", encoding="utf-8")
+            claude = mock.Mock()
+            with self.assertRaisesRegex(GENERATOR.ProposalError, "requires JIRA_BASE_URL"):
+                GENERATOR.generate_and_apply(
+                    temporary_root, ticket_file, prompt_file, temporary_root / "report.json",
+                    "fake-anthropic-key", claude, jira_configuration={},
+                )
+            claude.assert_not_called()
+
+    def test_oversized_consolidated_context_is_rejected_before_claude(self) -> None:
+        transport, _ = self.source_transport({"DOC-124": self.issue("DOC-124", "First task", description={"type": "doc", "content": [{"type": "paragraph", "content": [{"type": "text", "text": "x" * GENERATOR.MAX_ISSUE_DESCRIPTION_CHARACTERS}]}]})})
+        with self.assertRaisesRegex(GENERATOR.ProposalError, "Consolidated Jira source exceeds"):
+            GENERATOR.resolve_jira_source({"issue_key": "DOC-999", "issue_summary": "Documentation", "issue_description": self.manifest}, self.configuration, transport, 30)
+
+
 class ClaudeTransportRegressionTests(unittest.TestCase):
     def setUp(self) -> None:
         self.payload = {"messages": []}

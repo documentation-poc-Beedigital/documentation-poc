@@ -131,6 +131,11 @@ class DocumentationAgentWorkflowTests(unittest.TestCase):
         self.assertIn("between 1 and 60000 characters", self.workflow)
         self.assertNotIn("len(issue_description) <= 20_000", self.workflow)
 
+    def test_jira_cloud_secrets_are_scoped_to_the_agent_step(self) -> None:
+        claude_step = self.workflow[self.workflow.index("- name: Generate documentation proposal with Claude"):]
+        for secret in ("JIRA_BASE_URL", "JIRA_API_EMAIL", "JIRA_API_TOKEN"):
+            self.assertIn(f"{secret}: ${{{{ secrets.{secret} }}}}", claude_step)
+
     def test_end_to_end_pipeline_supports_created_and_updated_files(self) -> None:
         self.assertIn("--base-sha", self.workflow)
         self.assertIn("Validate documentation site after applying proposal", self.workflow)

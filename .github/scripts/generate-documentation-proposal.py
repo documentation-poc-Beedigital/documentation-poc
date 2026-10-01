@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import base64
 import difflib
 import hashlib
 import json
@@ -16,6 +17,7 @@ import sys
 import tempfile
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from pathlib import Path, PurePosixPath
 from typing import Callable, Mapping, Sequence
@@ -29,6 +31,8 @@ MAX_PROPOSED_BODY_CHARACTERS = 1_000_000
 MAX_PROPOSED_DOCUMENTS = 50
 MAX_REPORT_BYTES = 262_144
 MAX_API_RESPONSE_BYTES = 2_000_000
+MAX_JIRA_RESPONSE_BYTES = 2_000_000
+JIRA_REQUEST_TIMEOUT = 30.0
 MAX_HTTP_ERROR_BODY_BYTES = 2_048
 MAX_HTTP_ERROR_MESSAGE_CHARACTERS = 240
 RETRY_DELAYS = (2.0, 5.0)
@@ -37,6 +41,8 @@ ROOT_FIELDS = {"decision", "summary", "reason", "evidence", "documents"}
 DOCUMENT_FIELDS = {"operation", "path", "title", "reason", "evidence", "proposed_body"}
 CREATE_ROOT = PurePosixPath("docs/centro-de-ayuda")
 KEBAB_CASE_NAME = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)*\.md")
+JIRA_KEY = re.compile(r"[A-Z][A-Z0-9]*(?:-[A-Z0-9]+)*-[1-9][0-9]*")
+DOCUMENTATION_SOURCE_MARKER = "DOCUMENTATION_SOURCE_V1"
 
 DOCUMENT_SCHEMA: dict[str, object] = {
     "type": "object",
@@ -74,6 +80,7 @@ class ProposalError(ValueError):
 
 
 Transport = Callable[[str, str, dict[str, object], float], dict[str, object]]
+JiraTransport = Callable[[str, str, str, float], dict[str, object]]
 
 
 def load_ticket(path: Path) -> dict[str, str]:
@@ -92,6 +99,193 @@ def load_ticket(path: Path) -> dict[str, str]:
             f"{MAX_ISSUE_DESCRIPTION_CHARACTERS} characters"
         )
     return {name: value[name] for name in sorted(expected)}
+
+
+def parse_documentation_source_manifest(description: str) -> tuple[str, list[str]] | None:
+    """Parse the deliberately small Jira source manifest without accepting YAML variants."""
+    if DOCUMENTATION_SOURCE_MARKER not in description:
+        return None
+    normalized = description.replace("\r\n", "\n").replace("\r", "\n")
+    match = re.fullmatch(
+        rf"{DOCUMENTATION_SOURCE_MARKER}\nEPIC_KEY: ({JIRA_KEY.pattern})\nTASK_KEYS:\n"
+        rf"((?:- {JIRA_KEY.pattern}(?:\n|$))+)",
+        normalized,
+    )
+    if match is None:
+        raise ProposalError("Invalid DOCUMENTATION_SOURCE_V1 manifest")
+    epic_key = match.group(1)
+    task_keys: list[str] = []
+    seen: set[str] = set()
+    for line in match.group(2).splitlines():
+        key = line[2:]
+        if key not in seen:
+            seen.add(key)
+            task_keys.append(key)
+    if not task_keys:
+        raise ProposalError("DOCUMENTATION_SOURCE_V1 must contain at least one TASK_KEY")
+    return epic_key, task_keys
+
+
+def jira_configuration_from_environment(environ: Mapping[str, str] | None = None) -> dict[str, str]:
+    source = os.environ if environ is None else environ
+    return {
+        "base_url": source.get("JIRA_BASE_URL", ""),
+        "email": source.get("JIRA_API_EMAIL", ""),
+        "token": source.get("JIRA_API_TOKEN", ""),
+    }
+
+
+def validate_jira_configuration(configuration: Mapping[str, str]) -> tuple[str, str, str]:
+    base_url = configuration.get("base_url", "")
+    email = configuration.get("email", "")
+    token = configuration.get("token", "")
+    if not all(isinstance(value, str) and value.strip() for value in (base_url, email, token)):
+        raise ProposalError("Jira source manifest requires JIRA_BASE_URL, JIRA_API_EMAIL and JIRA_API_TOKEN")
+    parsed = urllib.parse.urlsplit(base_url)
+    if parsed.scheme != "https" or not parsed.netloc or parsed.username or parsed.password or parsed.query or parsed.fragment:
+        raise ProposalError("JIRA_BASE_URL must be an absolute HTTPS URL without credentials, query or fragment")
+    return base_url.rstrip("/"), email, token
+
+
+def jira_http_transport(endpoint: str, email: str, token: str, timeout: float, *, opener: Callable[..., object] | None = None) -> dict[str, object]:
+    credentials = base64.b64encode(f"{email}:{token}".encode("utf-8")).decode("ascii")
+    request = urllib.request.Request(
+        endpoint,
+        headers={"Accept": "application/json", "Authorization": f"Basic {credentials}"},
+        method="GET",
+    )
+    try:
+        with (opener or urllib.request.urlopen)(request, timeout=timeout) as response:
+            raw_response = response.read(MAX_JIRA_RESPONSE_BYTES + 1)
+    except urllib.error.HTTPError as error:
+        raise ProposalError(f"Jira API returned HTTP {error.code}") from error
+    except (TimeoutError, socket.timeout) as error:
+        raise ProposalError("Jira API request timed out") from error
+    except urllib.error.URLError as error:
+        if is_read_timeout(error):
+            raise ProposalError("Jira API request timed out") from error
+        raise ProposalError("Jira API connection failed") from error
+    if len(raw_response) > MAX_JIRA_RESPONSE_BYTES:
+        raise ProposalError(f"Jira API response exceeds {MAX_JIRA_RESPONSE_BYTES} bytes")
+    try:
+        value = json.loads(raw_response.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise ProposalError("Jira API returned invalid JSON") from error
+    if not isinstance(value, dict):
+        raise ProposalError("Jira API response must be an object")
+    return value
+
+
+def adf_to_markdown(value: object) -> str:
+    """Render the subset of Atlassian Document Format useful as ticket evidence."""
+    def inline(node: object) -> str:
+        if not isinstance(node, dict):
+            return ""
+        kind = node.get("type")
+        if kind == "text":
+            text = node.get("text") if isinstance(node.get("text"), str) else ""
+            marks = node.get("marks")
+            if isinstance(marks, list):
+                for mark in marks:
+                    if not isinstance(mark, dict):
+                        continue
+                    if mark.get("type") == "strong":
+                        text = f"**{text}**"
+                    elif mark.get("type") == "link" and isinstance(mark.get("attrs"), dict):
+                        href = mark["attrs"].get("href")
+                        if isinstance(href, str) and href:
+                            text = f"[{text}]({href})"
+            return text
+        if kind == "hardBreak":
+            return "\n"
+        return "".join(inline(child) for child in node.get("content", []) if isinstance(node.get("content"), list))
+
+    def block(node: object, depth: int = 0) -> str:
+        if not isinstance(node, dict):
+            return ""
+        kind = node.get("type")
+        children = node.get("content", [])
+        if not isinstance(children, list):
+            children = []
+        if kind == "doc":
+            return "\n\n".join(part for part in (block(child, depth) for child in children) if part)
+        if kind == "paragraph":
+            return "".join(inline(child) for child in children).strip()
+        if kind == "heading":
+            attrs = node.get("attrs")
+            level = attrs.get("level", 1) if isinstance(attrs, dict) else 1
+            level = level if isinstance(level, int) and 1 <= level <= 6 else 1
+            return "#" * level + " " + "".join(inline(child) for child in children).strip()
+        if kind in {"bulletList", "orderedList"}:
+            prefix = "- " if kind == "bulletList" else "1. "
+            lines: list[str] = []
+            for child in children:
+                item = block(child, depth + 1)
+                if item:
+                    lines.append("  " * depth + prefix + item.replace("\n", "\n" + "  " * (depth + 1)))
+            return "\n".join(lines)
+        if kind == "listItem":
+            return "\n".join(part for part in (block(child, depth) for child in children) if part)
+        return "\n\n".join(part for part in (block(child, depth) for child in children) if part)
+
+    if value is None:
+        return ""
+    if not isinstance(value, dict) or value.get("type") != "doc":
+        raise ProposalError("Jira issue description must be ADF")
+    return block(value).strip()
+
+
+def jira_issue(endpoint_base: str, key: str, email: str, token: str, timeout: float, transport: JiraTransport) -> dict[str, object]:
+    fields = "summary,description,issuetype,parent,status,labels"
+    endpoint = f"{endpoint_base}/rest/api/3/issue/{urllib.parse.quote(key, safe='')}?{urllib.parse.urlencode({'fields': fields})}"
+    return transport(endpoint, email, token, timeout)
+
+
+def validated_jira_issue(issue: Mapping[str, object], expected_key: str) -> tuple[str, str, dict[str, object]]:
+    key = issue.get("key")
+    fields = issue.get("fields")
+    if key != expected_key or not isinstance(fields, dict):
+        raise ProposalError(f"Jira API returned an invalid issue for {expected_key}")
+    summary = fields.get("summary")
+    if not isinstance(summary, str) or not summary.strip():
+        raise ProposalError(f"Jira issue {expected_key} has no usable summary")
+    return key, summary.strip(), fields
+
+
+def resolve_jira_source(ticket: dict[str, str], configuration: Mapping[str, str], transport: JiraTransport, timeout: float) -> dict[str, str]:
+    manifest = parse_documentation_source_manifest(ticket["issue_description"])
+    if manifest is None:
+        return ticket
+    base_url, email, token = validate_jira_configuration(configuration)
+    epic_key, task_keys = manifest
+    request_timeout = min(timeout, JIRA_REQUEST_TIMEOUT)
+    epic = jira_issue(base_url, epic_key, email, token, request_timeout, transport)
+    resolved_epic_key, epic_summary, epic_fields = validated_jira_issue(epic, epic_key)
+    issue_type = epic_fields.get("issuetype")
+    if not isinstance(issue_type, dict) or not isinstance(issue_type.get("name"), str) or issue_type["name"].casefold() != "epic":
+        raise ProposalError(f"Jira source {epic_key} is not an epic")
+    sections = [f"Epic {resolved_epic_key}: {epic_summary}\n\n{adf_to_markdown(epic_fields.get('description'))}".rstrip()]
+    for task_key in task_keys:
+        task = jira_issue(base_url, task_key, email, token, request_timeout, transport)
+        resolved_task_key, task_summary, task_fields = validated_jira_issue(task, task_key)
+        parent = task_fields.get("parent")
+        if not isinstance(parent, dict) or parent.get("key") != epic_key:
+            raise ProposalError(f"Jira task {task_key} is not a direct child of epic {epic_key}")
+        labels = task_fields.get("labels")
+        if not isinstance(labels, list) or "documentation-required" not in labels:
+            raise ProposalError(f"Jira task {task_key} does not have documentation-required")
+        status = task_fields.get("status")
+        category = status.get("statusCategory") if isinstance(status, dict) else None
+        category_key = category.get("key") if isinstance(category, dict) else None
+        if not isinstance(category_key, str) or category_key.casefold() != "done":
+            raise ProposalError(f"Jira task {task_key} is not in the Done status category")
+        sections.append(f"Task {resolved_task_key}: {task_summary}\n\n{adf_to_markdown(task_fields.get('description'))}".rstrip())
+    context = "\n\n".join(sections)
+    if len(context) > MAX_ISSUE_DESCRIPTION_CHARACTERS:
+        raise ProposalError(f"Consolidated Jira source exceeds {MAX_ISSUE_DESCRIPTION_CHARACTERS} characters")
+    resolved = dict(ticket)
+    resolved["issue_description"] = context
+    return resolved
 
 
 def read_documentation(repo_root: Path) -> list[dict[str, str]]:
@@ -615,12 +809,17 @@ def verify_head(repo_root: Path, base_sha: str | None) -> None:
 def generate_and_apply(
     repo_root: Path, ticket_file: Path, prompt_file: Path, report_file: Path,
     api_key: str, transport: Transport = http_transport, timeout: float = 120.0,
-    base_sha: str | None = None,
+    base_sha: str | None = None, jira_configuration: Mapping[str, str] | None = None,
+    jira_transport: JiraTransport = jira_http_transport,
 ) -> dict[str, object]:
     if not api_key:
         raise ProposalError("ANTHROPIC_API_KEY is not configured")
     verify_head(repo_root, base_sha)
     ticket = load_ticket(ticket_file)
+    ticket = resolve_jira_source(
+        ticket, jira_configuration_from_environment() if jira_configuration is None else jira_configuration,
+        jira_transport, timeout,
+    )
     documents = read_documentation(repo_root)
     try:
         trusted_prompt = prompt_file.read_text(encoding="utf-8")
@@ -657,7 +856,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         generate_and_apply(
             repo_root=args.repo_root, ticket_file=args.ticket_file, prompt_file=args.prompt_file,
             report_file=args.agent_report, api_key=os.environ.get("ANTHROPIC_API_KEY", ""), timeout=args.timeout,
-            base_sha=args.base_sha,
+            base_sha=args.base_sha, jira_configuration=jira_configuration_from_environment(),
         )
     except (ProposalError, OSError) as error:
         sys.stderr.write(f"Documentation proposal generation failed: {error}\n")
