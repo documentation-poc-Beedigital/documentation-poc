@@ -43,9 +43,9 @@ Al completar tu contratación, te pediremos que **conectes tu Perfil de Empresa 
     :::note
     <HelpIcon name="information" />  **Más información:**
 
-    **Para más detalles sobre cómo crear un perfil, visita nuestra guía:**
+    Para más detalles sobre cómo crear un perfil, visita nuestra guía:
 
-    [**Cómo crear tu Perfil de Empresa en Google**](crear-un-perfil-de-empresa-en-google.md)
+    [Cómo crear tu Perfil de Empresa en Google](crear-un-perfil-de-empresa-en-google.md)
     :::
 
 2. Una vez termines la creación en Google, vuelve a la plataforma y **conecta tu Perfil de Empresa con Beesible.**
