@@ -546,12 +546,14 @@ th {
 }
 
 .bee-navbar-search__field {
+  display: none;
   min-width: 0;
   width: 0;
   visibility: hidden;
 }
 
 .bee-navbar-search--expanded .bee-navbar-search__field {
+  display: block;
   width: 100%;
   visibility: visible;
 }
