@@ -10,24 +10,26 @@ function PaginationLink({direction, item}) {
     <Translate
       id="theme.docs.paginator.next"
       description="The label used to navigate to the next doc">
-      Next
+      Siguiente
     </Translate>
   ) : (
     <Translate
       id="theme.docs.paginator.previous"
       description="The label used to navigate to the previous doc">
-      Previous
+      Anterior
     </Translate>
   );
 
   return (
     <BeeButton
+      aria-label={`${isNext ? 'Ir al artículo siguiente' : 'Ir al artículo anterior'}: ${item.title}`}
       className={`bee-pagination__link bee-pagination__link--${direction}`}
       href={item.permalink}
       leadingIcon={isNext ? undefined : ArrowLeftIcon}
+      size="small"
       trailingIcon={isNext ? ArrowRightIcon : undefined}
-      variant="tertiary">
-      <span>{label}: {item.title}</span>
+      variant={isNext ? 'secondary' : 'tertiary'}>
+      <span>{label}</span>
     </BeeButton>
   );
 }
