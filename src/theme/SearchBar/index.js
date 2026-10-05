@@ -18,6 +18,45 @@ export default function SearchBar() {
     };
   }, []);
 
+  useLayoutEffect(() => {
+    const root = rootRef.current;
+    if (!expanded || !root) {
+      root?.style.removeProperty('--help-search-available-width');
+      root?.style.removeProperty('--help-search-inline-offset');
+      return undefined;
+    }
+
+    const fitToNavbar = () => {
+      const documentWidth = document.documentElement.clientWidth;
+      const navbar = root.closest('.navbar__inner');
+      const navbarRect = navbar?.getBoundingClientRect();
+      const leftItems = navbar?.querySelector('.navbar__items:not(.navbar__items--right)');
+      const leftRect = leftItems?.getBoundingClientRect();
+      const rightEdge = Math.min(navbarRect?.right ?? documentWidth, documentWidth);
+      const leftEdge = Math.max(navbarRect?.left ?? 0, leftRect?.right ?? navbarRect?.left ?? 0);
+
+      // Keep the local search end inside the useful document width. The
+      // navbar can be laid out against the CSS viewport (including its
+      // scrollbar), while clientWidth is the actual visible boundary.
+      root.style.setProperty(
+        '--help-search-available-width',
+        `${Math.max(0, rightEdge - leftEdge)}px`,
+      );
+      root.style.setProperty('--help-search-inline-offset', '0px');
+      const overflow = Math.max(0, root.getBoundingClientRect().right - rightEdge);
+      root.style.setProperty('--help-search-inline-offset', `${overflow}px`);
+    };
+
+    fitToNavbar();
+    window.addEventListener('resize', fitToNavbar);
+    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(fitToNavbar);
+    if (observer) observer.observe(root);
+    return () => {
+      window.removeEventListener('resize', fitToNavbar);
+      observer?.disconnect();
+    };
+  }, [expanded]);
+
   useEffect(() => {
     if (!expanded) return undefined;
     const frame = window.requestAnimationFrame(() => {

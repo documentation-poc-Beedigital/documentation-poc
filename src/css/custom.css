@@ -508,7 +508,8 @@ th {
 }
 
 .bee-navbar-search--expanded {
-  width: min(20rem, calc(100vw - 12rem));
+  width: min(20rem, var(--help-search-available-width, 20rem));
+  inset-inline-end: var(--help-search-inline-offset, 0px);
 }
 
 .bee-navbar-search__trigger,
@@ -671,7 +672,7 @@ th {
   }
 
   .bee-navbar-search--expanded {
-    width: min(100%, calc(100vw - 11rem));
+    width: min(20rem, var(--help-search-available-width, 100%));
   }
 
   .bee-navbar-search__trigger span {

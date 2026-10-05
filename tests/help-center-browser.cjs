@@ -45,6 +45,17 @@ async function diagnoseHorizontalOverflow(page, label) {
   return offenders;
 }
 
+async function assertDocumentFitsViewport(page, label) {
+  const dimensions = await page.evaluate(() => ({
+    clientWidth: document.documentElement.clientWidth,
+    scrollWidth: document.documentElement.scrollWidth,
+  }));
+  if (dimensions.scrollWidth !== dimensions.clientWidth) {
+    await diagnoseHorizontalOverflow(page, label);
+  }
+  assert.equal(dimensions.scrollWidth, dimensions.clientWidth, `${label} has horizontal overflow`);
+}
+
 (async () => {
   const browser = await chromium.launch({channel: process.env.UI_BROWSER || 'chrome', headless: true});
   try {
@@ -79,8 +90,7 @@ async function diagnoseHorizontalOverflow(page, label) {
           await page.waitForURL(/centro-de-ayuda\/visibilidad\/$/);
           await page.goto(url);
         }
-        assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
-        await diagnoseHorizontalOverflow(page, `Home ${viewportName}`);
+        await assertDocumentFitsViewport(page, `Home ${viewportName} (closed search)`);
         assert(await page.evaluate(() => document.querySelector('footer').getBoundingClientRect().bottom >= innerHeight - 1));
         const logo = page.locator('.navbar__logo img:visible');
         assert((await logo.getAttribute('src')).includes('beesible-oscuro.svg'));
@@ -99,7 +109,7 @@ async function diagnoseHorizontalOverflow(page, label) {
         await page.keyboard.press('Enter');
         const input = page.locator('.aa-Input:visible');
         await input.waitFor();
-        await diagnoseHorizontalOverflow(page, `Expanded home search ${viewportName}`);
+        await assertDocumentFitsViewport(page, `Home ${viewportName} (expanded search)`);
         assert.equal(await input.evaluate(el => el === document.activeElement), true, 'Inline search did not receive focus');
         assert.equal(await page.locator('.aa-DetachedOverlay').count(), 0, 'Search rendered a detached overlay');
         assert.equal(await page.locator('body.aa-Detached').count(), 0, 'Search blocked the page in detached mode');
@@ -123,13 +133,12 @@ async function diagnoseHorizontalOverflow(page, label) {
         assert.match(await note.innerText(), /A tener en cuenta:/);
         assert.equal(await note.locator('.help-icon').count(), 1, 'Semantic note icon was removed');
         assert.deepEqual(await page.locator('.theme-doc-sidebar-menu > li > .menu__list-item-collapsible > a').evaluateAll(links => links.map(link => link.getAttribute('href'))), categoryRoutes);
-        assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
-        await diagnoseHorizontalOverflow(page, `Article with closed search ${viewportName}`);
+        await assertDocumentFitsViewport(page, `Article with closed search ${viewportName}`);
         assert.deepEqual(external, [], 'Search or page contacted an external service');
         assert.deepEqual(errors, [], 'Browser errors');
         if (screenshots) await page.screenshot({path: path.join(screenshots, `article-${viewportName}.png`), fullPage: true});
         await page.locator('.navbar .bee-navbar-search__trigger').click();
-        await diagnoseHorizontalOverflow(page, `Article with expanded search ${viewportName}`);
+        await assertDocumentFitsViewport(page, `Article with expanded search ${viewportName}`);
         await page.locator('.aa-Input:visible').fill('zzzxqvnonexistent');
         await page.getByText('No se han encontrado resultados.', {exact: true}).waitFor();
         await page.locator('.aa-Input:visible').press('Escape');
@@ -141,8 +150,7 @@ async function diagnoseHorizontalOverflow(page, label) {
         assert.deepEqual(await paginator.locator('a').allInnerTexts(), ['Anterior', 'Siguiente']);
         assert.match(await paginator.locator('.bee-pagination__link--previous').getAttribute('aria-label'), /^Ir al artículo anterior: .+/);
         assert.match(await paginator.locator('.bee-pagination__link--next').getAttribute('aria-label'), /^Ir al artículo siguiente: .+/);
-        assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
-        await diagnoseHorizontalOverflow(page, `Paginated article ${viewportName}`);
+        await assertDocumentFitsViewport(page, `Paginated article ${viewportName}`);
         if (width < 600) {
           await page.locator('.navbar__toggle').click();
           await page.locator('.navbar-sidebar .menu:not([inert])').waitFor();
