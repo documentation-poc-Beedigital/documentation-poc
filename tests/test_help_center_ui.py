@@ -97,6 +97,7 @@ class HelpCenterUITests(unittest.TestCase):
                          'Focus', 'Spacing', 'Typography', 'Radius and shadows used'):
             self.assertIn(f'/* {category} */', tokens)
         self.assertNotRegex(css, r'#[0-9a-fA-F]{3,8}\b')
+        self.assertNotIn('100vw', css)
         self.assertIn(':focus-visible', css)
         self.assertIn('@media', css)
         self.assertNotRegex(css + tokens, r'https?://')
@@ -108,6 +109,8 @@ class HelpCenterUITests(unittest.TestCase):
         self.assertEqual(definitions - retired_cards, references,
                          'Every token used by the current interface must be defined')
         self.assertIn(".alert--secondary > [class*='admonitionHeading']", css)
+        self.assertIn('align-items: flex-start', css)
+        self.assertIn('.main-wrapper .col', css)
 
     def test_complete_design_system_export_is_local_only(self):
         source = 'design-system/local/bee-design-system.json'

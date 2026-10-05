@@ -7,11 +7,26 @@ const fs = require('node:fs');
 const url = process.env.HELP_CENTER_URL || 'http://localhost:3000/documentation-poc/';
 const screenshots = process.env.UI_SCREENSHOT_DIR;
 
+async function assertNoHorizontalOverflow(page, label) {
+  const dimensions = await page.evaluate(() => ({
+    clientWidth: document.documentElement.clientWidth,
+    scrollWidth: document.documentElement.scrollWidth,
+  }));
+  assert(
+    dimensions.scrollWidth <= dimensions.clientWidth,
+    `${label} overflows horizontally: ${dimensions.scrollWidth}px > ${dimensions.clientWidth}px`,
+  );
+}
+
 (async () => {
   const browser = await chromium.launch({channel: process.env.UI_BROWSER || 'chrome', headless: true});
   try {
-    for (const [width, viewportName] of [[1440, 'desktop'], [390, 'mobile']]) {
-        const context = await browser.newContext({viewport: {width, height: 960}, colorScheme: 'dark'});
+    for (const [width, height, viewportName] of [
+      [1440, 960, 'desktop'],
+      [1280, 720, 'laptop'],
+      [390, 844, 'mobile'],
+    ]) {
+        const context = await browser.newContext({viewport: {width, height}, colorScheme: 'dark'});
         await context.addInitScript(() => localStorage.setItem('theme', 'dark'));
         const page = await context.newPage();
         const external = [];
@@ -41,7 +56,14 @@ const screenshots = process.env.UI_SCREENSHOT_DIR;
           await page.waitForURL(/centro-de-ayuda\/visibilidad\/$/);
           await page.goto(url);
         }
-        assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+        await assertNoHorizontalOverflow(page, `Home ${viewportName}`);
+        if (width >= 997) {
+          assert.equal(
+            await page.evaluate(() => document.documentElement.scrollHeight <= document.documentElement.clientHeight),
+            true,
+            `Home ${viewportName} has unnecessary vertical scroll`,
+          );
+        }
         assert(await page.evaluate(() => document.querySelector('footer').getBoundingClientRect().bottom >= innerHeight - 1));
         const logo = page.locator('.navbar__logo img:visible');
         assert((await logo.getAttribute('src')).includes('beesible-oscuro.svg'));
@@ -60,6 +82,7 @@ const screenshots = process.env.UI_SCREENSHOT_DIR;
         await page.keyboard.press('Enter');
         const input = page.locator('.aa-Input:visible');
         await input.waitFor();
+        await assertNoHorizontalOverflow(page, `Expanded home search ${viewportName}`);
         assert.equal(await input.evaluate(el => el === document.activeElement), true, 'Inline search did not receive focus');
         assert.equal(await page.locator('.aa-DetachedOverlay').count(), 0, 'Search rendered a detached overlay');
         assert.equal(await page.locator('body.aa-Detached').count(), 0, 'Search blocked the page in detached mode');
@@ -81,13 +104,26 @@ const screenshots = process.env.UI_SCREENSHOT_DIR;
         assert.equal(await note.locator(':scope > [class*="admonitionHeading"]').count(), 1);
         assert.equal(await note.locator(':scope > [class*="admonitionHeading"]').isVisible(), false);
         assert.match(await note.innerText(), /A tener en cuenta:/);
-        assert.equal(await note.locator('.help-icon').count(), 1, 'Semantic note icon was removed');
+        const noteIcon = note.locator('.help-icon');
+        assert.equal(await noteIcon.count(), 1, 'Semantic note icon was removed');
+        assert(await noteIcon.isVisible(), 'Semantic note icon is clipped');
+        const noteHeading = note.locator('p').first().locator('strong');
+        const [noteBox, iconBox, headingBox, articleClientWidth] = await Promise.all([
+          note.boundingBox(),
+          noteIcon.boundingBox(),
+          noteHeading.boundingBox(),
+          page.evaluate(() => document.documentElement.clientWidth),
+        ]);
+        assert(noteBox && iconBox && iconBox.y >= noteBox.y && iconBox.y < noteBox.y + noteBox.height, 'Semantic note icon falls outside its card');
+        assert(noteBox.x >= 0 && noteBox.x + noteBox.width <= articleClientWidth, 'Note card is clipped by the viewport');
+        assert(iconBox && headingBox && Math.abs(iconBox.y - headingBox.y) <= 6, 'Semantic note icon is not aligned with the first text line');
         assert.deepEqual(await page.locator('.theme-doc-sidebar-menu > li > .menu__list-item-collapsible > a').evaluateAll(links => links.map(link => link.getAttribute('href'))), categoryRoutes);
-        assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+        await assertNoHorizontalOverflow(page, `Article with closed search ${viewportName}`);
         assert.deepEqual(external, [], 'Search or page contacted an external service');
         assert.deepEqual(errors, [], 'Browser errors');
         if (screenshots) await page.screenshot({path: path.join(screenshots, `article-${viewportName}.png`), fullPage: true});
         await page.locator('.navbar .bee-navbar-search__trigger').click();
+        await assertNoHorizontalOverflow(page, `Article with expanded search ${viewportName}`);
         await page.locator('.aa-Input:visible').fill('zzzxqvnonexistent');
         await page.getByText('No se han encontrado resultados.', {exact: true}).waitFor();
         await page.locator('.aa-Input:visible').press('Escape');
@@ -99,7 +135,7 @@ const screenshots = process.env.UI_SCREENSHOT_DIR;
         assert.deepEqual(await paginator.locator('a').allInnerTexts(), ['Anterior', 'Siguiente']);
         assert.match(await paginator.locator('.bee-pagination__link--previous').getAttribute('aria-label'), /^Ir al artículo anterior: .+/);
         assert.match(await paginator.locator('.bee-pagination__link--next').getAttribute('aria-label'), /^Ir al artículo siguiente: .+/);
-        assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+        await assertNoHorizontalOverflow(page, `Paginated article ${viewportName}`);
         if (width < 600) {
           await page.locator('.navbar__toggle').click();
           await page.locator('.navbar-sidebar .menu:not([inert])').waitFor();
@@ -108,5 +144,19 @@ const screenshots = process.env.UI_SCREENSHOT_DIR;
         console.log(`PASS ${width}px light-only: responsive layout, logo, Spanish search, <=8 results, keyboard navigation, local-only requests`);
         await context.close();
     }
+
+    const shortContext = await browser.newContext({viewport: {width: 1280, height: 480}});
+    const shortPage = await shortContext.newPage();
+    await shortPage.goto(url);
+    await assertNoHorizontalOverflow(shortPage, 'Short desktop home');
+    const shortHomeScroll = await shortPage.evaluate(() => {
+      const root = document.documentElement;
+      const overflows = root.scrollHeight > root.clientHeight;
+      window.scrollTo(0, root.scrollHeight);
+      return {overflows, scrollY: window.scrollY};
+    });
+    assert(shortHomeScroll.overflows, 'Short desktop fixture no longer exercises vertical overflow');
+    assert(shortHomeScroll.scrollY > 0, 'Short desktop home prevents necessary vertical scrolling');
+    await shortContext.close();
   } finally { await browser.close(); }
 })().catch(error => { console.error(error); process.exitCode = 1; });
