@@ -18,6 +18,9 @@ for (const file of output.filter(f => /\.(?:css|html|js|json|map)$/i.test(f))) {
   assert(!/bee-design-system\.json|design-system[\\/]local/i.test(content), `${file} leaks the local design-system source path`);
 }
 const pages = new Map(output.filter(f => f.endsWith('.html')).map(f => [f, load(fs.readFileSync(f, 'utf8'))]));
+const retiredSource = 'docs/centro-de-ayuda/visibilidad/como-crear-tu-pagina-web.md';
+const retiredRoute = 'centro-de-ayuda/visibilidad/como-crear-tu-pagina-web/';
+const retiredPath = path.join(root, retiredRoute, 'index.html');
 function headingText($, element) {
   return $(element).clone().find('a.hash-link').remove().end().text().replace(/\s+/g, ' ').trim();
 }
@@ -63,18 +66,35 @@ assert.deepEqual(
   ['Cómo conectar tu Perfil de Google', 'Crear un Perfil de Empresa en Google'],
 );
 const visibility = pages.get(path.join(root, 'centro-de-ayuda/visibilidad/index.html'));
-assert.deepEqual(visibility('h2').toArray().map(element => headingText(visibility, element)), ['Google', 'Página Web']);
-assert.deepEqual(visibility('h2 > a.hash-link').toArray().map(element => visibility(element).attr('href')), ['#--google', '#-página-web']);
+assert.deepEqual(visibility('h2').toArray().map(element => headingText(visibility, element)), ['Google']);
+assert.deepEqual(visibility('h2 > a.hash-link').toArray().map(element => visibility(element).attr('href')), ['#--google']);
+assert.deepEqual(
+  visibility('.theme-doc-markdown > p > a').toArray().map(element => ({
+    text: visibility(element).text().trim(),
+    href: visibility(element).attr('href'),
+  })),
+  [
+    {text: 'Añadir o actualizar información en tu Perfil de Google', href: '/documentation-poc/centro-de-ayuda/visibilidad/anadir-o-actualizar-informacion-en-tu-perfil-de-google/'},
+    {text: 'Expansión de tu negocio en otras plataformas', href: '/documentation-poc/centro-de-ayuda/visibilidad/expansion-de-tu-negocio-en-otras-plataformas/'},
+  ],
+);
+assert(!fs.existsSync(retiredPath), `Retired route was generated: ${retiredRoute}`);
+for (const [file, $] of pages) {
+  assert.equal($(`.theme-doc-sidebar-menu a[href$="/${retiredRoute}"]`).length, 0, `${file}: retired article remains in sidebar`);
+  assert.equal($(`.bee-pagination a[href$="/${retiredRoute}"]`).length, 0, `${file}: paginator points to retired article`);
+}
 const indexes = output.filter(f => /search-index-.*\.json$/.test(f));
 assert(indexes.length > 0);
 const docs = indexes.flatMap(f => JSON.parse(fs.readFileSync(f)).documents);
 assert(docs.length > 24);
 assert(!JSON.stringify(docs).match(/project-docs|production-snapshots/));
 const corpus = Object.keys(require('./fixtures/public-docs-sha256.json'));
-for (const source of corpus) {
+assert(!docs.some(doc => doc.sectionRoute.split('#')[0].endsWith(`/${retiredRoute}`)));
+assert(!docs.some(doc => /Cómo crear tu página web/i.test(JSON.stringify(doc))));
+for (const source of corpus.filter(source => source !== retiredSource)) {
   const route = source.replace(/^docs\//, '').replace(/index\.md$/, '').replace(/\.md$/, '/');
   assert(fs.existsSync(path.join(root, route, 'index.html')), `Public URL changed: ${route}`);
   const indexedRoute = new URL(route, base).pathname;
   assert(docs.some(doc => doc.sectionRoute.split('#')[0] === indexedRoute), `Search index missing: ${route}`);
 }
-console.log(`Build OK: ${pages.size} HTML pages, ${links} internal links/anchors, ${docs.length} indexed sections, 32 preserved document URLs.`);
+console.log(`Build OK: ${pages.size} HTML pages, ${links} internal links/anchors, ${docs.length} indexed sections, 31 public document URLs and 1 retained draft.`);
