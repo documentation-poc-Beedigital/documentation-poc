@@ -20,7 +20,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from pathlib import Path, PurePosixPath
-from typing import Callable, Mapping, Sequence
+from typing import Callable, Iterator, Mapping, Sequence
 
 MODEL = "claude-sonnet-5-5"
 API_URL = "https://api.anthropic.com/v1/messages"
@@ -43,7 +43,10 @@ CREATE_ROOT = PurePosixPath("docs/centro-de-ayuda")
 KEBAB_CASE_NAME = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)*\.md")
 JIRA_KEY = re.compile(r"[A-Z][A-Z0-9]*(?:-[A-Z0-9]+)*-[1-9][0-9]*")
 DOCUMENTATION_SOURCE_MARKER = "DOCUMENTATION_SOURCE_V1"
-DIAGNOSTIC_DESCRIPTION_FIELDS = ("key", "description_characters", "description_sha256")
+DIAGNOSTIC_DESCRIPTION_FIELDS = (
+    "key", "adf_text_characters", "adf_code_block_count",
+    "description_characters", "description_sha256",
+)
 DIAGNOSTIC_CONTEXT_FIELDS = ("characters", "sha256")
 DIAGNOSTIC_REPORT_FIELDS = (
     "epic", "tasks", "context", "request_context", "contexts_match",
@@ -206,6 +209,17 @@ def jira_http_transport(endpoint: str, email: str, token: str, timeout: float, *
     return value
 
 
+def adf_nodes(value: object) -> Iterator[dict[str, object]]:
+    """Walk ADF content in order, without interpreting text or attributes."""
+    if not isinstance(value, dict):
+        return
+    yield value
+    children = value.get("content")
+    if isinstance(children, list):
+        for child in children:
+            yield from adf_nodes(child)
+
+
 def adf_to_markdown(value: object) -> str:
     """Render the subset of Atlassian Document Format useful as ticket evidence."""
     def inline(node: object) -> str:
@@ -241,6 +255,17 @@ def adf_to_markdown(value: object) -> str:
             return "\n\n".join(part for part in (block(child, depth) for child in children) if part)
         if kind == "paragraph":
             return "".join(inline(child) for child in children).strip()
+        if kind == "codeBlock":
+            # Literal evidence: ignore marks and keep every text character in order.
+            text = "".join(
+                child["text"] for child in adf_nodes(node)
+                if child.get("type") == "text" and isinstance(child.get("text"), str)
+            )
+            if not text.strip():
+                return ""
+            # A longer fence keeps pasted Markdown/backticks inside the code block.
+            fence = "`" * max(3, 1 + max((len(run) for run in re.findall(r"`+", text)), default=0))
+            return f"{fence}\n{text}\n{fence}"
         if kind == "heading":
             attrs = node.get("attrs")
             level = attrs.get("level", 1) if isinstance(attrs, dict) else 1
@@ -263,6 +288,30 @@ def adf_to_markdown(value: object) -> str:
     if not isinstance(value, dict) or value.get("type") != "doc":
         raise ProposalError("Jira issue description must be ADF")
     return block(value).strip()
+
+
+def convert_jira_description(value: object, key: str) -> tuple[str, dict[str, object]]:
+    """Reject silent text loss and expose only safe description metrics."""
+    text_characters = 0
+    code_block_count = 0
+    has_text = False
+    for node in adf_nodes(value):
+        if node.get("type") == "codeBlock":
+            code_block_count += 1
+        if node.get("type") == "text" and isinstance(node.get("text"), str):
+            text = node["text"]
+            text_characters += len(text)
+            has_text = has_text or bool(text.strip())
+    description = adf_to_markdown(value)
+    if has_text and not description.strip():
+        raise ProposalError(f"Jira issue {key}: ADF text was lost during Markdown conversion")
+    return description, {
+        "key": key,
+        "adf_text_characters": text_characters,
+        "adf_code_block_count": code_block_count,
+        "description_characters": len(description),
+        "description_sha256": sha256_text(description),
+    }
 
 
 def jira_issue(endpoint_base: str, key: str, email: str, token: str, timeout: float, transport: JiraTransport) -> dict[str, object]:
@@ -299,7 +348,7 @@ def resolve_jira_source_with_diagnostics(
     issue_type = epic_fields.get("issuetype")
     if not isinstance(issue_type, dict) or not isinstance(issue_type.get("name"), str) or issue_type["name"].casefold() != "epic":
         raise ProposalError(f"Jira source {epic_key} is not an epic")
-    epic_description = adf_to_markdown(epic_fields.get("description"))
+    epic_description, epic_diagnostics = convert_jira_description(epic_fields.get("description"), resolved_epic_key)
     sections = [f"Epic {resolved_epic_key}: {epic_summary}\n\n{epic_description}".rstrip()]
     task_diagnostics: list[dict[str, object]] = []
     for task_key in task_keys:
@@ -316,24 +365,16 @@ def resolve_jira_source_with_diagnostics(
         category_key = category.get("key") if isinstance(category, dict) else None
         if not isinstance(category_key, str) or category_key.casefold() != "done":
             raise ProposalError(f"Jira task {task_key} is not in the Done status category")
-        task_description = adf_to_markdown(task_fields.get("description"))
+        task_description, task_diagnostic = convert_jira_description(task_fields.get("description"), resolved_task_key)
         sections.append(f"Task {resolved_task_key}: {task_summary}\n\n{task_description}".rstrip())
-        task_diagnostics.append({
-            "key": resolved_task_key,
-            "description_characters": len(task_description),
-            "description_sha256": sha256_text(task_description),
-        })
+        task_diagnostics.append(task_diagnostic)
     context = "\n\n".join(sections)
     if len(context) > MAX_ISSUE_DESCRIPTION_CHARACTERS:
         raise ProposalError(f"Consolidated Jira source exceeds {MAX_ISSUE_DESCRIPTION_CHARACTERS} characters")
     resolved = dict(ticket)
     resolved["issue_description"] = context
     diagnostics: dict[str, object] = {
-        "epic": {
-            "key": resolved_epic_key,
-            "description_characters": len(epic_description),
-            "description_sha256": sha256_text(epic_description),
-        },
+        "epic": epic_diagnostics,
         "tasks": task_diagnostics,
         "context": {
             "characters": len(context),

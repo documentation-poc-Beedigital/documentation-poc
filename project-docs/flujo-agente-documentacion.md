@@ -1,7 +1,7 @@
 ---
 article_id: ART-DOC-AGENT-001
 title: Flujo del agente de documentación
-version: 1.5
+version: 1.6
 status: published
 owner: Product
 last_reviewed: 2026-10-06
@@ -43,6 +43,10 @@ TASK_KEYS:
 
 Cuando la tarea documental pasa a **In Progress**, el workflow recupera desde Jira Cloud la épica y las tareas del manifiesto. Antes de usar el contenido, comprueba que la fuente principal es una épica y que cada tarea es hija directa, conserva `documentation-required` y pertenece a la categoría Done. Convierte las descripciones ADF a texto Markdown legible y construye el contexto en el orden épica y tareas, siempre con su clave y resumen.
 
+Los nodos `codeBlock` se convierten en bloques Markdown delimitados, concatenando sus nodos `text` en orden y conservando literalmente el contenido, los saltos de línea y los espacios. El delimitador usa más backticks que cualquier secuencia del contenido para conservar también Markdown pegado dentro del bloque. Este texto se trata como evidencia y no se ejecuta ni se interpreta como instrucciones operativas.
+
+Tanto el diagnóstico como el flujo normal comprueban cada descripción antes de preparar la petición a Claude. Si el ADF contiene texto distinto de espacios en blanco y el Markdown convertido queda vacío, el flujo falla con un error de pérdida de texto que identifica solo la clave Jira afectada. Una descripción ausente, sin texto o formada únicamente por espacios en blanco se considera realmente vacía y no provoca ese error.
+
 El acceso usa autenticación básica de Jira Cloud y estos Repository Secrets, configurados solo en el paso que ejecuta el agente: `JIRA_BASE_URL`, `JIRA_API_EMAIL` y `JIRA_API_TOKEN`. Sus valores no se registran ni se incorporan a la tarea documental.
 
 Las tareas documentales antiguas que no contienen `DOCUMENTATION_SOURCE_V1` mantienen el flujo anterior. Si el manifiesto está presente, no hay alternativa: cualquier error de formato, configuración, consulta, relación o validación detiene el flujo antes de llamar a Claude.
@@ -74,8 +78,8 @@ El informe usa listas explícitas de campos permitidos, también para los objeto
 
 | Campo JSON | Contenido |
 |---|---|
-| `epic` | `key`, `description_characters`, `description_sha256` de la descripción convertida a Markdown |
-| `tasks` | Lista ordenada con esos mismos tres campos para cada tarea |
+| `epic` | `key`, `adf_text_characters`, `adf_code_block_count`, `description_characters`, `description_sha256` |
+| `tasks` | Lista ordenada con esos mismos cinco campos para cada tarea |
 | `context` | `characters` y `sha256` del contexto Jira consolidado |
 | `request_context` | `characters` y `sha256` de `ticket.issue_description` extraído del JSON del mensaje de usuario |
 | `contexts_match` | Booleano de igualdad exacta entre los dos contextos |
@@ -83,6 +87,8 @@ El informe usa listas explícitas de campos permitidos, también para los objeto
 | `prompt_characters` | Longitud del prompt leído, antes de añadir las instrucciones del sistema de `build_request` |
 | `user_message_characters` | Longitud del mensaje de usuario JSON serializado completo |
 | `commit_sha` | SHA completo del commit verificado para el diagnóstico |
+
+`adf_text_characters` suma las longitudes de todos los nodos `text` del ADF original, incluidos espacios y saltos de línea presentes en esos textos; no incluye sintaxis Markdown añadida durante la conversión. `adf_code_block_count` cuenta sus nodos `codeBlock`, también los vacíos. `description_characters` y `description_sha256` siguen midiendo el Markdown convertido completo, incluidos los delimitadores de código.
 
 Todas las longitudes cuentan caracteres del texto Python, no bytes ni tokens; las huellas SHA-256 se calculan sobre su codificación UTF-8. No se registran estados o etiquetas arbitrarios, textos de descripciones, resúmenes, prompts, documentos, respuestas Jira ni credenciales. El informe tampoco contiene el payload completo.
 
