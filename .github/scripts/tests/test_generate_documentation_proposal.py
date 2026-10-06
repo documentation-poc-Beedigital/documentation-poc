@@ -5,10 +5,12 @@ import io
 import json
 import os
 import socket
+import subprocess
 import sys
 import tempfile
 import unittest
 import urllib.error
+from contextlib import ExitStack
 from pathlib import Path
 from unittest import mock
 
@@ -866,8 +868,7 @@ class JiraSourceManifestTests(unittest.TestCase):
         self.assertEqual(GENERATOR.sha256_text(epic_markdown), diagnostics["epic"]["description_sha256"])
         self.assertEqual(len(first_markdown), diagnostics["tasks"][0]["description_characters"])
         self.assertEqual(GENERATOR.sha256_text(first_markdown), diagnostics["tasks"][0]["description_sha256"])
-        self.assertEqual("Done", diagnostics["tasks"][0]["status"])
-        self.assertEqual(["documentation-required", "release"], diagnostics["tasks"][0]["labels"])
+        self.assertEqual(set(GENERATOR.DIAGNOSTIC_DESCRIPTION_FIELDS), set(diagnostics["tasks"][0]))
         self.assertEqual(len(resolved["issue_description"]), diagnostics["context"]["characters"])
         self.assertEqual(GENERATOR.sha256_text(resolved["issue_description"]), diagnostics["context"]["sha256"])
 
@@ -876,6 +877,7 @@ class JiraSourceManifestTests(unittest.TestCase):
             "epic": {"key": "DOC-123", "description_characters": 1, "description_sha256": "a" * 64},
             "tasks": [],
             "context": {"characters": 1, "sha256": "b" * 64},
+            "contexts_match": True,
         }
         claude = mock.Mock()
         stdout = io.StringIO()
@@ -884,6 +886,7 @@ class JiraSourceManifestTests(unittest.TestCase):
              mock.patch("sys.stdout", stdout):
             result = GENERATOR.main([
                 "--ticket-file", "unused.json", "--diagnose-jira-context",
+                "--prompt-file", "unused.md", "--base-sha", "a" * 40,
             ])
         self.assertEqual(0, result)
         self.assertEqual(safe_result, json.loads(stdout.getvalue()))
@@ -897,10 +900,215 @@ class JiraSourceManifestTests(unittest.TestCase):
                 "issue_summary": "Documentation",
                 "issue_description": "Legacy ticket description",
             }), encoding="utf-8")
-            with self.assertRaisesRegex(GENERATOR.ProposalError, "requires DOCUMENTATION_SOURCE_V1"):
+            with mock.patch.object(GENERATOR, "verify_head"), \
+                 self.assertRaisesRegex(GENERATOR.ProposalError, "requires DOCUMENTATION_SOURCE_V1"):
                 GENERATOR.diagnose_jira_context(
                     ticket_file, self.configuration, mock.Mock(), 30,
+                    repo_root=Path(temporary), prompt_file=Path(temporary) / "prompt.md", base_sha="a" * 40,
                 )
+
+    def test_diagnostic_manifest_uses_the_existing_strict_key_contract(self) -> None:
+        self.assertEqual(self.manifest, GENERATOR.build_diagnostic_manifest("DOC-123", " DOC-124 , DOC-125 "))
+        manifest = GENERATOR.build_diagnostic_manifest("A2-OPS-123", "A2-OPS-124,A2-OPS-124,A2-OPS-125")
+        self.assertEqual(("A2-OPS-123", ["A2-OPS-124", "A2-OPS-125"]), GENERATOR.parse_documentation_source_manifest(manifest))
+
+    def test_invalid_diagnostic_keys_fail_before_jira(self) -> None:
+        cases = (
+            ("", "DOC-124"), ("DOC-123", ""), ("DOC-123", "  "),
+            ("DOC-123", ",DOC-124"), ("DOC-123", "DOC-124,"),
+            ("DOC-123", "DOC-124, ,DOC-125"),
+            ("doc-123", "DOC-124"), ("DOC-0", "DOC-124"),
+            ("DOC-123", "doc-124"), ("DOC-123", "DOC-0124"),
+            ("DOC-123", "DOC-124 PRIVATE_INPUT"),
+            ("DOC-123", "DOC-124\nPRIVATE_INPUT"),
+            ("DOC-123 PRIVATE_INPUT", "DOC-124"),
+            ("DOC-123", "DOC-124;PRIVATE_INPUT"),
+        )
+        for epic, tasks in cases:
+            jira = mock.Mock()
+            with self.subTest(epic=epic, tasks=tasks), self.assertRaises(GENERATOR.ProposalError) as raised:
+                description = GENERATOR.build_diagnostic_manifest(epic, tasks)
+                GENERATOR.resolve_jira_source({
+                    "issue_key": "DOC-999", "issue_summary": "Documentation",
+                    "issue_description": description,
+                }, self.configuration, jira, 30)
+            jira.assert_not_called()
+            self.assertNotIn("PRIVATE_INPUT", str(raised.exception))
+
+    def diagnostic_files(self, temporary: str) -> tuple[Path, Path, Path]:
+        root = Path(temporary)
+        (root / "docs").mkdir()
+        (root / "docs" / "guide.md").write_text("DOCUMENT_SECRET á\ncomplete document", encoding="utf-8")
+        (root / "docs" / "snapshot.json").write_text('{"value":"SNAPSHOT_SECRET"}', encoding="utf-8")
+        ticket_file = root / "ticket.json"
+        ticket_file.write_text(json.dumps({
+            "issue_key": "DOC-999", "issue_summary": "TICKET_SUMMARY_SECRET",
+            "issue_description": GENERATOR.build_diagnostic_manifest("DOC-123", "DOC-124,DOC-125"),
+        }), encoding="utf-8")
+        prompt_file = root / "prompt.md"
+        prompt_file.write_text("PROMPT_SECRET instrucciones á\nsegunda línea", encoding="utf-8")
+        return root, ticket_file, prompt_file
+
+    def test_diagnosis_prepares_complete_request_and_reports_only_allowed_metadata(self) -> None:
+        texts = {
+            "DOC-123": "EPIC_SECRET\n" + "á" * 12_000 + "\nFINAL_EPIC_SECRET",
+            "DOC-124": "TASK_ONE_SECRET\n" + "β" * 12_000 + "\nFINAL_TASK_ONE_SECRET",
+            "DOC-125": "TASK_TWO_SECRET\n" + "漢" * 12_000 + "\nFINAL_TASK_TWO_SECRET",
+        }
+        issues = {
+            key: self.issue(key, f"SUMMARY_SECRET_{key}", issue_type="Epic" if key == "DOC-123" else "Task", description={
+                "type": "doc", "content": [{"type": "paragraph", "content": [
+                    {"type": "text", "text": text},
+                ]}],
+            }, labels=["documentation-required", "LABEL_SECRET"])
+            for key, text in texts.items()
+        }
+        for issue in issues.values():
+            issue["fields"]["status"]["name"] = "STATUS_SECRET"
+            issue["private_response"] = "JIRA_RESPONSE_SECRET"
+        transport, calls = self.source_transport(issues)
+        forbidden = (
+            "http_transport", "generate_and_apply", "prepare_changes",
+            "apply_changes_atomically", "write_agent_report",
+        )
+        with tempfile.TemporaryDirectory() as temporary:
+            root, ticket_file, prompt_file = self.diagnostic_files(temporary)
+            before = {path.relative_to(root): path.read_bytes() for path in root.rglob("*") if path.is_file()}
+            sentinels = ["PROMPT_SECRET", "DOCUMENT_SECRET", "SNAPSHOT_SECRET", "TICKET_SUMMARY_SECRET",
+                         "SUMMARY_SECRET", "LABEL_SECRET", "STATUS_SECRET", "JIRA_RESPONSE_SECRET",
+                         "EPIC_SECRET", "TASK_ONE_SECRET", "TASK_TWO_SECRET", "REPORT_EXTRA_SECRET",
+                         "ANTHROPIC_SECRET", self.configuration["email"], self.configuration["token"]]
+            stdout, stderr = io.StringIO(), io.StringIO()
+            build_request = GENERATOR.build_request
+            diagnose = GENERATOR.diagnose_jira_context
+            resolve = GENERATOR.resolve_jira_source_with_diagnostics
+            def extended_diagnostics(*args, **kwargs):
+                resolved, diagnostics = resolve(*args, **kwargs)
+                for value in [diagnostics, diagnostics["epic"], *diagnostics["tasks"], diagnostics["context"]]:
+                    value["private_text"] = "REPORT_EXTRA_SECRET"
+                return resolved, diagnostics
+            environment_values = {
+                "JIRA_BASE_URL": self.configuration["base_url"],
+                "JIRA_API_EMAIL": self.configuration["email"], "JIRA_API_TOKEN": self.configuration["token"],
+                "ANTHROPIC_API_KEY": "ANTHROPIC_SECRET",
+            }
+            environment = mock.MagicMock(spec=dict, wraps=environment_values)
+            environment.__getitem__.side_effect = environment_values.__getitem__
+            with ExitStack() as guards, mock.patch.object(GENERATOR, "verify_head") as verify, \
+                 mock.patch.object(GENERATOR, "build_request", wraps=build_request) as build, \
+                 mock.patch.object(GENERATOR, "resolve_jira_source_with_diagnostics", side_effect=extended_diagnostics), \
+                 mock.patch.object(GENERATOR, "diagnose_jira_context", side_effect=lambda **kwargs: diagnose(jira_transport=transport, **kwargs)), \
+                 mock.patch.object(GENERATOR.urllib.request, "urlopen", side_effect=AssertionError("Real HTTP forbidden")), \
+                 mock.patch.object(os, "environ", environment), \
+                 mock.patch("sys.stdout", stdout), mock.patch("sys.stderr", stderr):
+                blocked = [guards.enter_context(mock.patch.object(
+                    GENERATOR, name, side_effect=AssertionError(f"Forbidden call: {name}"),
+                )) for name in forbidden]
+                result = GENERATOR.main([
+                    "--repo-root", str(root), "--ticket-file", str(ticket_file),
+                    "--prompt-file", str(prompt_file), "--base-sha", "a" * 40,
+                    "--diagnose-jira-context",
+                ])
+            self.assertEqual(0, result)
+            self.assertEqual([
+                mock.call("JIRA_BASE_URL", ""), mock.call("JIRA_API_EMAIL", ""), mock.call("JIRA_API_TOKEN", ""),
+            ], [call for call in environment.get.call_args_list if call.args[0].startswith(("JIRA_", "ANTHROPIC_"))])
+            self.assertEqual("", stderr.getvalue())
+            report = json.loads(stdout.getvalue())
+            self.assertEqual(["DOC-123", "DOC-124", "DOC-125"], calls)
+            verify.assert_has_calls([mock.call(root, "a" * 40), mock.call(root, "a" * 40)])
+            prompt, resolved, documents = build.call_args.args
+            request = build_request(prompt, resolved, documents)
+            user_message = request["messages"][0]["content"]
+            payload = json.loads(user_message)
+            context = "\n\n".join(
+                f"{'Epic' if key == 'DOC-123' else 'Task'} {key}: SUMMARY_SECRET_{key}\n\n{text}"
+                for key, text in texts.items()
+            )
+            self.assertEqual(context, resolved["issue_description"])
+            self.assertEqual(context, payload["ticket"]["issue_description"])
+            for text in texts.values():
+                self.assertIn(text, payload["ticket"]["issue_description"])
+            self.assertEqual(GENERATOR.MODEL, request["model"])
+            self.assertEqual(16384, request["max_tokens"])
+            self.assertEqual(set(GENERATOR.DIAGNOSTIC_REPORT_FIELDS), set(report))
+            for item in [report["epic"], *report["tasks"]]:
+                self.assertEqual(set(GENERATOR.DIAGNOSTIC_DESCRIPTION_FIELDS), set(item))
+                self.assertEqual(len(texts[item["key"]]), item["description_characters"])
+                self.assertEqual(GENERATOR.sha256_text(texts[item["key"]]), item["description_sha256"])
+            for name in ("context", "request_context"):
+                self.assertEqual({"characters": len(context), "sha256": GENERATOR.sha256_text(context)}, report[name])
+            self.assertTrue(report["contexts_match"])
+            self.assertEqual(2, report["documents_count"])
+            self.assertEqual(len(prompt), report["prompt_characters"])
+            self.assertEqual(len(user_message), report["user_message_characters"])
+            self.assertEqual("a" * 40, report["commit_sha"])
+            for sentinel in sentinels:
+                self.assertNotIn(sentinel, stdout.getvalue() + stderr.getvalue())
+            for call in blocked:
+                call.assert_not_called()
+            self.assertEqual(before, {path.relative_to(root): path.read_bytes() for path in root.rglob("*") if path.is_file()})
+
+    def test_context_mismatch_is_reported_and_fails_the_diagnostic(self) -> None:
+        build_request = GENERATOR.build_request
+        diagnose = GENERATOR.diagnose_jira_context
+        transport, _ = self.source_transport()
+        def corrupt_request(*args):
+            request = build_request(*args)
+            payload = json.loads(request["messages"][0]["content"])
+            context = payload["ticket"]["issue_description"]
+            payload["ticket"]["issue_description"] = context[:-1] + "!"
+            request["messages"][0]["content"] = json.dumps(payload)
+            return request
+        with tempfile.TemporaryDirectory() as temporary:
+            root, ticket_file, prompt_file = self.diagnostic_files(temporary)
+            stdout = io.StringIO()
+            with mock.patch.object(GENERATOR, "verify_head"), \
+                 mock.patch.object(GENERATOR, "build_request", side_effect=corrupt_request), \
+                 mock.patch.object(GENERATOR, "diagnose_jira_context", side_effect=lambda **kwargs: diagnose(jira_transport=transport, **kwargs)), \
+                 mock.patch.object(GENERATOR, "jira_configuration_from_environment", return_value=self.configuration), \
+                 mock.patch("sys.stdout", stdout):
+                result = GENERATOR.main([
+                    "--repo-root", str(root), "--ticket-file", str(ticket_file),
+                    "--prompt-file", str(prompt_file), "--base-sha", "a" * 40, "--diagnose-jira-context",
+                ])
+            report = json.loads(stdout.getvalue())
+            self.assertEqual(1, result)
+            self.assertFalse(report["contexts_match"])
+            self.assertEqual(report["context"]["characters"], report["request_context"]["characters"])
+            self.assertNotEqual(report["context"]["sha256"], report["request_context"]["sha256"])
+
+    def test_diagnostic_verifies_actual_commit_without_changing_git_state(self) -> None:
+        root = Path(__file__).resolve().parents[3]
+        def git(*args):
+            return subprocess.run(["git", *args], cwd=root, check=True, capture_output=True, text=True).stdout.strip()
+        sha = git("rev-parse", "HEAD")
+        before = (git("status", "--porcelain"), git("for-each-ref", "--format=%(refname) %(objectname)"))
+        transport, _ = self.source_transport()
+        with tempfile.TemporaryDirectory() as temporary:
+            _, ticket_file, prompt_file = self.diagnostic_files(temporary)
+            report = GENERATOR.diagnose_jira_context(
+                ticket_file, self.configuration, transport,
+                repo_root=root, prompt_file=prompt_file, base_sha=sha,
+            )
+        self.assertEqual(sha, report["commit_sha"])
+        self.assertTrue(report["contexts_match"])
+        self.assertEqual(before, (git("status", "--porcelain"), git("for-each-ref", "--format=%(refname) %(objectname)")))
+
+    def test_diagnostic_rejects_untrusted_commit_before_jira(self) -> None:
+        jira = mock.Mock()
+        with self.assertRaisesRegex(GENERATOR.ProposalError, "HEAD changed"):
+            GENERATOR.diagnose_jira_context(
+                Path("unused.json"), self.configuration, jira,
+                repo_root=Path(__file__).resolve().parents[3], prompt_file=Path("unused.md"), base_sha="a" * 40,
+            )
+        jira.assert_not_called()
+
+    def test_diagnostic_cli_requires_prompt_and_commit(self) -> None:
+        for extra in ([], ["--prompt-file", "unused.md"], ["--base-sha", "a" * 40]):
+            with self.subTest(extra=extra), mock.patch("sys.stderr", io.StringIO()), self.assertRaises(SystemExit) as raised:
+                GENERATOR.main(["--ticket-file", "unused.json", "--diagnose-jira-context", *extra])
+            self.assertEqual(2, raised.exception.code)
 
     def test_duplicate_task_keys_are_removed_preserving_order(self) -> None:
         transport, calls = self.source_transport()

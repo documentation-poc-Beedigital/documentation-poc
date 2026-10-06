@@ -13,10 +13,18 @@ on:
         type: string
       issue_description:
         description: Jira task description and evidence
-        required: true
+        required: false
+        type: string
+      jira_epic_key:
+        description: Jira epic key (required only for diagnose_only)
+        required: false
+        type: string
+      jira_task_keys:
+        description: Comma-separated Jira task keys (required only for diagnose_only)
+        required: false
         type: string
       diagnose_only:
-        description: Diagnose the Jira context without Claude or repository changes
+        description: Diagnose the prepared request without Claude or repository changes
         required: false
         default: false
         type: boolean
@@ -36,33 +44,51 @@ jobs:
       contents: read
 
     steps:
-      - name: Checkout main without persisted credentials
+      - name: Checkout selected ref without persisted credentials
         uses: actions/checkout@v5
         with:
-          ref: main
           persist-credentials: false
 
+      - name: Capture diagnostic commit SHA
+        id: base
+        shell: bash
+        run: |
+          set -euo pipefail
+          base_sha="$(git rev-parse --verify 'HEAD^{commit}')"
+          if [[ ! "${base_sha}" =~ ^([0-9a-f]{40}|[0-9a-f]{64})$ ]]; then
+            echo "Checkout produced an invalid commit SHA" >&2
+            exit 1
+          fi
+          echo "sha=${base_sha}" >> "${GITHUB_OUTPUT}"
+
       - name: Serialize diagnostic ticket input
-        env:
-          ISSUE_KEY: ${{ inputs.issue_key }}
-          ISSUE_SUMMARY: ${{ inputs.issue_summary }}
-          ISSUE_DESCRIPTION: ${{ inputs.issue_description }}
         shell: bash
         run: |
           set -euo pipefail
           python - <<'PY'
+          import importlib.util
           import json
           import os
           from pathlib import Path
 
-          description = os.environ["ISSUE_DESCRIPTION"]
-          if "DOCUMENTATION_SOURCE_V1" not in description:
-              raise SystemExit(
-                  "diagnose_only requires issue_description with DOCUMENTATION_SOURCE_V1"
+          spec = importlib.util.spec_from_file_location(
+              "generator", ".github/scripts/generate-documentation-proposal.py"
+          )
+          generator = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(generator)
+          # Read the event locally so Actions does not log the summary as step env.
+          inputs = json.loads(
+              Path(os.environ["GITHUB_EVENT_PATH"]).read_text(encoding="utf-8")
+          )["inputs"]
+          try:
+              description = generator.build_diagnostic_manifest(
+                  inputs.get("jira_epic_key", ""), inputs.get("jira_task_keys", "")
               )
+          except generator.ProposalError as error:
+              raise SystemExit(f"Invalid diagnostic inputs: {error}") from None
           ticket = {
-              "issue_key": os.environ["ISSUE_KEY"],
-              "issue_summary": os.environ["ISSUE_SUMMARY"],
+              "issue_key": inputs["issue_key"],
+              "issue_summary": inputs["issue_summary"],
               "issue_description": description,
           }
           (Path(os.environ["RUNNER_TEMP"]) / "documentation-ticket.json").write_text(
@@ -71,7 +97,7 @@ jobs:
           )
           PY
 
-      - name: Diagnose validated Jira context
+      - name: Diagnose validated Jira context in the prepared request
         env:
           JIRA_BASE_URL: ${{ secrets.JIRA_BASE_URL }}
           JIRA_API_EMAIL: ${{ secrets.JIRA_API_EMAIL }}
@@ -80,7 +106,10 @@ jobs:
         run: |
           set -euo pipefail
           python ".github/scripts/generate-documentation-proposal.py" \
+            --repo-root "${GITHUB_WORKSPACE}" \
+            --base-sha "${{ steps.base.outputs.sha }}" \
             --ticket-file "${RUNNER_TEMP}/documentation-ticket.json" \
+            --prompt-file ".github/prompts/documentation-agent-poc.md" \
             --diagnose-jira-context \
             --timeout 300
 
