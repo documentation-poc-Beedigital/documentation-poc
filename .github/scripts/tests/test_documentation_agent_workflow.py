@@ -66,8 +66,29 @@ class DocumentationAgentWorkflowTests(unittest.TestCase):
         dispatch = self.workflow[: self.workflow.index("concurrency:")]
         for field in ("issue_key", "issue_summary", "issue_description"):
             self.assertIn(f"      {field}:\n", dispatch)
+        self.assertIn("      diagnose_only:\n", dispatch)
+        self.assertIn("        type: boolean", dispatch)
+        self.assertIn("        default: false", dispatch)
         self.assertNotIn("old_text", dispatch)
         self.assertNotIn("new_text", dispatch)
+
+    def test_diagnostic_job_is_isolated_from_claude_and_publication(self) -> None:
+        diagnostic_start = self.workflow.index("  diagnose-jira-context:")
+        proposal_start = self.workflow.index("  prepare-proposal:")
+        diagnostic = self.workflow[diagnostic_start:proposal_start]
+        self.assertIn("if: ${{ inputs.diagnose_only }}", diagnostic)
+        self.assertIn("contents: read", diagnostic)
+        self.assertIn("--diagnose-jira-context", diagnostic)
+        self.assertIn("DOCUMENTATION_SOURCE_V1", diagnostic)
+        for secret in ("JIRA_BASE_URL", "JIRA_API_EMAIL", "JIRA_API_TOKEN"):
+            self.assertIn(f"{secret}: ${{{{ secrets.{secret} }}}}", diagnostic)
+        for forbidden in (
+            "ANTHROPIC_API_KEY", "Claude", "git commit", "git push", "gh pr create",
+            "prepare-documentation-pull-request.py",
+        ):
+            self.assertNotIn(forbidden, diagnostic)
+        proposal_header = self.workflow[proposal_start:self.workflow.index("    steps:", proposal_start)]
+        self.assertIn("if: ${{ !inputs.diagnose_only }}", proposal_header)
 
     def test_unsafe_legacy_parallel_workflow_is_removed(self) -> None:
         self.assertFalse(LEGACY_WORKFLOW.exists())

@@ -252,10 +252,15 @@ def validated_jira_issue(issue: Mapping[str, object], expected_key: str) -> tupl
     return key, summary.strip(), fields
 
 
-def resolve_jira_source(ticket: dict[str, str], configuration: Mapping[str, str], transport: JiraTransport, timeout: float) -> dict[str, str]:
+def resolve_jira_source_with_diagnostics(
+    ticket: dict[str, str], configuration: Mapping[str, str], transport: JiraTransport,
+    timeout: float, *, require_manifest: bool = False,
+) -> tuple[dict[str, str], dict[str, object] | None]:
     manifest = parse_documentation_source_manifest(ticket["issue_description"])
     if manifest is None:
-        return ticket
+        if require_manifest:
+            raise ProposalError("Jira context diagnosis requires DOCUMENTATION_SOURCE_V1")
+        return ticket, None
     base_url, email, token = validate_jira_configuration(configuration)
     epic_key, task_keys = manifest
     request_timeout = min(timeout, JIRA_REQUEST_TIMEOUT)
@@ -264,7 +269,9 @@ def resolve_jira_source(ticket: dict[str, str], configuration: Mapping[str, str]
     issue_type = epic_fields.get("issuetype")
     if not isinstance(issue_type, dict) or not isinstance(issue_type.get("name"), str) or issue_type["name"].casefold() != "epic":
         raise ProposalError(f"Jira source {epic_key} is not an epic")
-    sections = [f"Epic {resolved_epic_key}: {epic_summary}\n\n{adf_to_markdown(epic_fields.get('description'))}".rstrip()]
+    epic_description = adf_to_markdown(epic_fields.get("description"))
+    sections = [f"Epic {resolved_epic_key}: {epic_summary}\n\n{epic_description}".rstrip()]
+    task_diagnostics: list[dict[str, object]] = []
     for task_key in task_keys:
         task = jira_issue(base_url, task_key, email, token, request_timeout, transport)
         resolved_task_key, task_summary, task_fields = validated_jira_issue(task, task_key)
@@ -279,13 +286,56 @@ def resolve_jira_source(ticket: dict[str, str], configuration: Mapping[str, str]
         category_key = category.get("key") if isinstance(category, dict) else None
         if not isinstance(category_key, str) or category_key.casefold() != "done":
             raise ProposalError(f"Jira task {task_key} is not in the Done status category")
-        sections.append(f"Task {resolved_task_key}: {task_summary}\n\n{adf_to_markdown(task_fields.get('description'))}".rstrip())
+        task_description = adf_to_markdown(task_fields.get("description"))
+        sections.append(f"Task {resolved_task_key}: {task_summary}\n\n{task_description}".rstrip())
+        status_name = status.get("name") if isinstance(status, dict) else None
+        task_diagnostics.append({
+            "key": resolved_task_key,
+            "status": status_name if isinstance(status_name, str) else category_key,
+            "labels": [label for label in labels if isinstance(label, str)],
+            "description_characters": len(task_description),
+            "description_sha256": sha256_text(task_description),
+        })
     context = "\n\n".join(sections)
     if len(context) > MAX_ISSUE_DESCRIPTION_CHARACTERS:
         raise ProposalError(f"Consolidated Jira source exceeds {MAX_ISSUE_DESCRIPTION_CHARACTERS} characters")
     resolved = dict(ticket)
     resolved["issue_description"] = context
+    diagnostics: dict[str, object] = {
+        "epic": {
+            "key": resolved_epic_key,
+            "description_characters": len(epic_description),
+            "description_sha256": sha256_text(epic_description),
+        },
+        "tasks": task_diagnostics,
+        "context": {
+            "characters": len(context),
+            "sha256": sha256_text(context),
+        },
+    }
+    return resolved, diagnostics
+
+
+def resolve_jira_source(
+    ticket: dict[str, str], configuration: Mapping[str, str], transport: JiraTransport,
+    timeout: float,
+) -> dict[str, str]:
+    resolved, _ = resolve_jira_source_with_diagnostics(
+        ticket, configuration, transport, timeout,
+    )
     return resolved
+
+
+def diagnose_jira_context(
+    ticket_file: Path, configuration: Mapping[str, str],
+    jira_transport: JiraTransport = jira_http_transport, timeout: float = 120.0,
+) -> dict[str, object]:
+    ticket = load_ticket(ticket_file)
+    _, diagnostics = resolve_jira_source_with_diagnostics(
+        ticket, configuration, jira_transport, timeout, require_manifest=True,
+    )
+    assert diagnostics is not None
+    return diagnostics
 
 
 def read_documentation(repo_root: Path) -> list[dict[str, str]]:
@@ -841,18 +891,32 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--repo-root", type=Path, default=Path.cwd())
     parser.add_argument("--ticket-file", type=Path, required=True)
-    parser.add_argument("--prompt-file", type=Path, required=True)
-    parser.add_argument("--agent-report", type=Path, required=True)
+    parser.add_argument("--prompt-file", type=Path)
+    parser.add_argument("--agent-report", type=Path)
     parser.add_argument("--timeout", type=float, default=120.0)
     parser.add_argument("--base-sha")
+    parser.add_argument("--diagnose-jira-context", action="store_true")
     return parser
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    args = build_parser().parse_args(argv)
+    parser = build_parser()
+    args = parser.parse_args(argv)
     if args.timeout <= 0:
-        build_parser().error("--timeout must be positive")
+        parser.error("--timeout must be positive")
+    if not args.diagnose_jira_context and (args.prompt_file is None or args.agent_report is None):
+        parser.error("--prompt-file and --agent-report are required unless --diagnose-jira-context is used")
     try:
+        if args.diagnose_jira_context:
+            diagnostics = diagnose_jira_context(
+                ticket_file=args.ticket_file,
+                configuration=jira_configuration_from_environment(),
+                timeout=args.timeout,
+            )
+            sys.stdout.write(json.dumps(diagnostics, ensure_ascii=False, sort_keys=True, separators=(",", ":")) + "\n")
+            return 0
+        assert args.prompt_file is not None
+        assert args.agent_report is not None
         generate_and_apply(
             repo_root=args.repo_root, ticket_file=args.ticket_file, prompt_file=args.prompt_file,
             report_file=args.agent_report, api_key=os.environ.get("ANTHROPIC_API_KEY", ""), timeout=args.timeout,

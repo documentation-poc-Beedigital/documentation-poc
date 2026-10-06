@@ -776,7 +776,11 @@ class JiraSourceManifestTests(unittest.TestCase):
         fields: dict[str, object] = {
             "summary": summary,
             "description": description if description is not None else {"type": "doc", "content": [{"type": "paragraph", "content": [{"type": "text", "text": summary}]}]},
-            "issuetype": {"name": issue_type}, "status": {"statusCategory": {"key": "done" if done else "indeterminate"}},
+            "issuetype": {"name": issue_type},
+            "status": {
+                "name": "Done" if done else "In Progress",
+                "statusCategory": {"key": "done" if done else "indeterminate"},
+            },
             "labels": ["documentation-required"] if labels is None else labels,
         }
         if parent is not None:
@@ -815,6 +819,89 @@ class JiraSourceManifestTests(unittest.TestCase):
         self.assertIn("- Item", ticket["issue_description"])
         self.assertLess(ticket["issue_description"].index("Epic DOC-123"), ticket["issue_description"].index("Task DOC-124"))
 
+    def test_diagnosis_uses_complete_adf_context_and_emits_only_safe_metadata(self) -> None:
+        epic_text = "EPIC_SECRET full description ending"
+        first_text = "TASK_ONE_SECRET complete task description"
+        second_text = "TASK_TWO_SECRET final line"
+        epic_adf = {"type": "doc", "content": [
+            {"type": "heading", "attrs": {"level": 2}, "content": [{"type": "text", "text": "Scope"}]},
+            {"type": "paragraph", "content": [{"type": "text", "text": epic_text}]},
+        ]}
+        first_adf = {"type": "doc", "content": [
+            {"type": "paragraph", "content": [{"type": "text", "text": first_text}]},
+            {"type": "orderedList", "content": [{"type": "listItem", "content": [
+                {"type": "paragraph", "content": [{"type": "text", "text": "last item"}]},
+            ]}]},
+        ]}
+        second_adf = {"type": "doc", "content": [
+            {"type": "paragraph", "content": [{"type": "text", "text": second_text}]},
+        ]}
+        transport, calls = self.source_transport({
+            "DOC-123": self.issue("DOC-123", "Private epic title", issue_type="Epic", parent=None, description=epic_adf),
+            "DOC-124": self.issue("DOC-124", "Private first title", labels=["documentation-required", "release"], description=first_adf),
+            "DOC-125": self.issue("DOC-125", "Private second title", description=second_adf),
+        })
+        ticket = {"issue_key": "DOC-999", "issue_summary": "Documentation", "issue_description": self.manifest}
+
+        resolved, diagnostics = GENERATOR.resolve_jira_source_with_diagnostics(
+            ticket, self.configuration, transport, 120, require_manifest=True,
+        )
+
+        self.assertEqual(["DOC-123", "DOC-124", "DOC-125"], calls)
+        self.assertIn(epic_text, resolved["issue_description"])
+        self.assertIn(first_text, resolved["issue_description"])
+        self.assertIn("1. last item", resolved["issue_description"])
+        self.assertIn(second_text, resolved["issue_description"])
+        self.assertIsNotNone(diagnostics)
+        assert diagnostics is not None
+        rendered = json.dumps(diagnostics, ensure_ascii=False)
+        for unsafe_text in (
+            epic_text, first_text, second_text,
+            "Private epic title", "Private first title", "Private second title",
+        ):
+            self.assertNotIn(unsafe_text, rendered)
+        epic_markdown = f"## Scope\n\n{epic_text}"
+        first_markdown = f"{first_text}\n\n1. last item"
+        self.assertEqual(len(epic_markdown), diagnostics["epic"]["description_characters"])
+        self.assertEqual(GENERATOR.sha256_text(epic_markdown), diagnostics["epic"]["description_sha256"])
+        self.assertEqual(len(first_markdown), diagnostics["tasks"][0]["description_characters"])
+        self.assertEqual(GENERATOR.sha256_text(first_markdown), diagnostics["tasks"][0]["description_sha256"])
+        self.assertEqual("Done", diagnostics["tasks"][0]["status"])
+        self.assertEqual(["documentation-required", "release"], diagnostics["tasks"][0]["labels"])
+        self.assertEqual(len(resolved["issue_description"]), diagnostics["context"]["characters"])
+        self.assertEqual(GENERATOR.sha256_text(resolved["issue_description"]), diagnostics["context"]["sha256"])
+
+    def test_diagnostic_cli_does_not_invoke_claude_transport(self) -> None:
+        safe_result = {
+            "epic": {"key": "DOC-123", "description_characters": 1, "description_sha256": "a" * 64},
+            "tasks": [],
+            "context": {"characters": 1, "sha256": "b" * 64},
+        }
+        claude = mock.Mock()
+        stdout = io.StringIO()
+        with mock.patch.object(GENERATOR, "diagnose_jira_context", return_value=safe_result), \
+             mock.patch.object(GENERATOR, "http_transport", claude), \
+             mock.patch("sys.stdout", stdout):
+            result = GENERATOR.main([
+                "--ticket-file", "unused.json", "--diagnose-jira-context",
+            ])
+        self.assertEqual(0, result)
+        self.assertEqual(safe_result, json.loads(stdout.getvalue()))
+        claude.assert_not_called()
+
+    def test_diagnosis_requires_documentation_source_manifest(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            ticket_file = Path(temporary) / "ticket.json"
+            ticket_file.write_text(json.dumps({
+                "issue_key": "DOC-999",
+                "issue_summary": "Documentation",
+                "issue_description": "Legacy ticket description",
+            }), encoding="utf-8")
+            with self.assertRaisesRegex(GENERATOR.ProposalError, "requires DOCUMENTATION_SOURCE_V1"):
+                GENERATOR.diagnose_jira_context(
+                    ticket_file, self.configuration, mock.Mock(), 30,
+                )
+
     def test_duplicate_task_keys_are_removed_preserving_order(self) -> None:
         transport, calls = self.source_transport()
         manifest = self.manifest.replace("- DOC-125", "- DOC-124\n- DOC-125\n- DOC-124")
@@ -829,6 +916,7 @@ class JiraSourceManifestTests(unittest.TestCase):
         cases = {
             "missing configuration": ({}, {}),
             "HTTP failure": (self.configuration, {"DOC-123": urllib.error.HTTPError("url", 500, "error", {}, io.BytesIO())}),
+            "not an epic": (self.configuration, {"DOC-123": self.issue("DOC-123", "Not epic", issue_type="Task", parent=None)}),
             "not a direct child": (self.configuration, {"DOC-124": self.issue("DOC-124", "First task", parent="DOC-777")}),
             "not in the Done": (self.configuration, {"DOC-124": self.issue("DOC-124", "First task", done=False)}),
             "does not have documentation-required": (self.configuration, {"DOC-124": self.issue("DOC-124", "First task", labels=[])}),
