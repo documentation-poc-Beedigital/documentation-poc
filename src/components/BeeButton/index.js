@@ -20,6 +20,7 @@ const BeeButton = forwardRef(function BeeButton(
     href,
     leadingIcon,
     onClick,
+    size,
     trailingIcon,
     type = 'button',
     variant = 'primary',
@@ -27,7 +28,12 @@ const BeeButton = forwardRef(function BeeButton(
   },
   ref,
 ) {
-  const classes = `bee-button bee-button--${variant} ${className}`.trim();
+  const classes = [
+    'bee-button',
+    `bee-button--${variant}`,
+    size && `bee-button--${size}`,
+    className,
+  ].filter(Boolean).join(' ');
   const content = (
     <>
       <ButtonIcon Icon={leadingIcon} position="leading" />

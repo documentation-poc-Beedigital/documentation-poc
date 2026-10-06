@@ -4,6 +4,7 @@
   "private": true,
   "description": "Sitio documental de documentation-poc",
   "scripts": {
+    "test": "node --test tests/remove-duplicate-subtitle.cjs",
     "start": "docusaurus start",
     "build": "docusaurus build",
     "serve": "docusaurus serve"

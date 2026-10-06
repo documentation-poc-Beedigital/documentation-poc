@@ -4,10 +4,11 @@ import BeeButton from '@site/src/components/BeeButton';
 
 export default function HelpSearch() {
   function openSearch() {
-    // Use the navbar's search so the same local index and dialog serve both entry points.
-    const search = document.querySelector('.navbar .aa-DetachedSearchButton, .navbar .aa-Input');
-    if (search instanceof HTMLButtonElement) search.click();
-    else search?.focus();
+    // Reuse the navbar search so both entry points share the local Docusaurus index.
+    const trigger = document.querySelector('.navbar .bee-navbar-search__trigger');
+    const input = document.querySelector('.navbar .aa-Input');
+    if (trigger instanceof HTMLButtonElement) trigger.click();
+    else input?.focus();
   }
 
   return (

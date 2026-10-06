@@ -18,6 +18,9 @@ for (const file of output.filter(f => /\.(?:css|html|js|json|map)$/i.test(f))) {
   assert(!/bee-design-system\.json|design-system[\\/]local/i.test(content), `${file} leaks the local design-system source path`);
 }
 const pages = new Map(output.filter(f => f.endsWith('.html')).map(f => [f, load(fs.readFileSync(f, 'utf8'))]));
+function headingText($, element) {
+  return $(element).clone().find('a.hash-link').remove().end().text().replace(/\s+/g, ' ').trim();
+}
 let links = 0;
 for (const [file, $] of pages) {
   const relative = path.relative(root, file).replaceAll('\\', '/').replace(/index\.html$/, '');
@@ -37,6 +40,8 @@ for (const [file, $] of pages) {
   });
   assert(!$('.breadcrumbs, .menu, .pagination-nav').text().includes('centro-de-ayuda'));
   assert(!$('script[src], link[rel="stylesheet"]').toArray().some(e => /^https?:/.test(e.attribs.src || e.attribs.href)));
+  const ids = $('[id]').toArray().map(element => element.attribs.id);
+  assert.equal(new Set(ids).size, ids.length, `${relative}: duplicate ids`);
 }
 const home = pages.get(path.join(root, 'index.html'));
 assert.equal(home('.theme-doc-sidebar-menu > li').length, 8);
@@ -46,6 +51,20 @@ assert.equal(home('.pagination-nav a').length, 0);
 assert.equal(home('.help-search').length, 1);
 assert.equal(home('h1').length, 1);
 assert.equal(home('h1').text(), '¿Cómo podemos ayudarte?');
+const duplicatedSubtitle = pages.get(path.join(root, 'centro-de-ayuda/perfil-de-empresa-en-google/index.html'));
+const movedAnchorId = 'conexión-perfil-de-empresa-en-google';
+assert.equal(duplicatedSubtitle('h1').length, 1);
+assert.equal(duplicatedSubtitle('h2').filter((_, element) => headingText(duplicatedSubtitle, element) === 'Conexión Perfil de Empresa en Google').length, 0);
+assert.equal(duplicatedSubtitle('h1').attr('id'), movedAnchorId);
+assert.equal(duplicatedSubtitle('h1 > a.hash-link').attr('href'), `#${movedAnchorId}`);
+assert.match(duplicatedSubtitle('h1 > a.hash-link').attr('aria-label'), /Conexión Perfil de Empresa en Google/);
+assert.deepEqual(
+  duplicatedSubtitle('.theme-doc-markdown > p > a').toArray().map(element => duplicatedSubtitle(element).text().trim()),
+  ['Cómo conectar tu Perfil de Google', 'Crear un Perfil de Empresa en Google'],
+);
+const visibility = pages.get(path.join(root, 'centro-de-ayuda/visibilidad/index.html'));
+assert.deepEqual(visibility('h2').toArray().map(element => headingText(visibility, element)), ['Google', 'Página Web']);
+assert.deepEqual(visibility('h2 > a.hash-link').toArray().map(element => visibility(element).attr('href')), ['#--google', '#-página-web']);
 const indexes = output.filter(f => /search-index-.*\.json$/.test(f));
 assert(indexes.length > 0);
 const docs = indexes.flatMap(f => JSON.parse(fs.readFileSync(f)).documents);

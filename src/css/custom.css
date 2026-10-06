@@ -170,6 +170,12 @@ th {
   line-height: var(--bee-line-height-body);
 }
 
+/* Notes keep their authored semantic first line; only Docusaurus' generic
+   "Nota" heading and information icon are removed. */
+.alert--secondary > [class*='admonitionHeading'] {
+  display: none;
+}
+
 .alert [class*='admonitionIcon'] {
   display: inline-flex;
   flex: none;
@@ -189,13 +195,16 @@ th {
 }
 
 .alert > [class*='admonitionContent'] > p:first-child:has(> .help-icon:first-child) {
-  align-items: center;
+  align-items: flex-start;
   display: flex;
   gap: var(--bee-space-2);
 }
 
 .alert > [class*='admonitionContent'] > p:first-child > .help-icon:first-child {
+  align-self: flex-start;
+  flex: none;
   margin-right: 0;
+  margin-top: 0;
   vertical-align: middle;
 }
 
@@ -220,27 +229,22 @@ th {
 }
 
 .bee-pagination {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr));
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
   gap: var(--bee-space-4);
+  justify-content: space-between;
   margin-top: var(--bee-space-6);
 }
 
-.bee-pagination__link.bee-button--tertiary {
-  width: 100%;
-  max-width: none;
+.bee-pagination__link {
+  max-width: 100%;
   min-width: 0;
-  text-align: left;
-  white-space: normal;
-}
-
-.bee-pagination__link span {
-  min-width: 0;
-  overflow-wrap: anywhere;
+  white-space: nowrap;
 }
 
 .bee-pagination__link--next {
-  text-align: right;
+  margin-left: auto;
 }
 
 .footer {
@@ -347,6 +351,12 @@ th {
   line-height: 1.35;
   text-decoration: none;
   cursor: pointer;
+}
+
+.bee-button--small {
+  min-height: 40px;
+  padding: var(--bee-space-2) var(--bee-space-4);
+  font-size: var(--bee-font-size-small);
 }
 
 .bee-button--primary {
@@ -484,6 +494,91 @@ th {
   white-space: normal;
 }
 
+.navbar__items--right .navbar__item:has(.bee-navbar-search) {
+  padding-inline: 0;
+}
+
+.bee-navbar-search {
+  align-items: center;
+  display: flex;
+  justify-content: flex-end;
+  position: relative;
+  width: 7rem;
+  transition: width var(--ifm-transition-fast) ease;
+}
+
+.bee-navbar-search--expanded {
+  width: min(20rem, var(--help-search-available-width, 20rem));
+  inset-inline-end: var(--help-search-inline-offset, 0px);
+}
+
+.bee-navbar-search__trigger,
+.bee-navbar-search__close {
+  align-items: center;
+  display: inline-flex;
+  justify-content: center;
+  min-height: 40px;
+  padding: var(--bee-space-2) var(--bee-space-3);
+  border: 1px solid var(--bee-input-border);
+  border-radius: var(--bee-radius-medium);
+  background: var(--bee-input-background);
+  color: var(--bee-brand-primary);
+  font: inherit;
+  font-size: var(--bee-font-size-small);
+  font-weight: var(--bee-font-weight-semibold);
+  cursor: pointer;
+}
+
+.bee-navbar-search__trigger {
+  gap: var(--bee-space-2);
+  white-space: nowrap;
+}
+
+.bee-navbar-search__trigger svg,
+.bee-navbar-search__close svg {
+  width: 16px;
+  height: 16px;
+  stroke-width: 1.5;
+}
+
+.bee-navbar-search--expanded .bee-navbar-search__trigger {
+  display: none;
+}
+
+.bee-navbar-search__field {
+  display: none;
+  min-width: 0;
+  width: 0;
+  visibility: hidden;
+}
+
+.bee-navbar-search--expanded .bee-navbar-search__field {
+  display: block;
+  width: 100%;
+  visibility: visible;
+}
+
+.bee-navbar-search__field .dsla-search-wrapper,
+.bee-navbar-search__field .aa-Autocomplete {
+  width: 100%;
+}
+
+.bee-navbar-search__close {
+  position: absolute;
+  right: var(--bee-space-1);
+  min-height: auto;
+  padding: var(--bee-space-2);
+  border: 0;
+}
+
+.bee-navbar-search--expanded .aa-Input {
+  padding-right: var(--bee-space-8);
+}
+
+.bee-navbar-search .aa-ClearButton {
+  display: none;
+}
+
 .help-icon {
   display: inline-block;
   width: 16px;
@@ -574,15 +669,17 @@ th {
     width: 100%;
   }
 
-  .bee-pagination {
-    grid-template-columns: 1fr;
+  .bee-navbar-search {
+    width: 2.5rem;
   }
 
-  .bee-pagination__link,
-  .bee-pagination__link--next {
-    text-align: left;
+  .bee-navbar-search--expanded {
+    width: min(20rem, var(--help-search-available-width, 100%));
   }
 
+  .bee-navbar-search__trigger span {
+    display: none;
+  }
 }
 
 @media (max-width: 767px) {

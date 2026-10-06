@@ -7,6 +7,55 @@ const fs = require('node:fs');
 const url = process.env.HELP_CENTER_URL || 'http://localhost:3000/documentation-poc/';
 const screenshots = process.env.UI_SCREENSHOT_DIR;
 
+async function diagnoseHorizontalOverflow(page, label) {
+  const offenders = await page.evaluate(() => {
+    const viewportWidth = document.documentElement.clientWidth;
+
+    function identify(element) {
+      if (element.id) return `#${CSS.escape(element.id)}`;
+      const classes = [...element.classList]
+        .slice(0, 3)
+        .map(name => `.${CSS.escape(name)}`)
+        .join('');
+      return `${element.tagName.toLowerCase()}${classes}`;
+    }
+
+    return [...document.querySelectorAll('body *')]
+      .filter(element => {
+        const style = getComputedStyle(element);
+        if (style.display === 'none' || style.visibility === 'hidden') return false;
+        const rect = element.getBoundingClientRect();
+        return rect.width > 0 && (rect.left < -0.5 || rect.right > viewportWidth + 0.5);
+      })
+      .map(element => {
+        const rect = element.getBoundingClientRect();
+        return {
+          element: identify(element),
+          left: Number(rect.left.toFixed(2)),
+          right: Number(rect.right.toFixed(2)),
+          width: Number(rect.width.toFixed(2)),
+          viewportWidth,
+        };
+      });
+  });
+
+  if (offenders.length) {
+    console.warn(`[overflow] ${label}\n${JSON.stringify(offenders, null, 2)}`);
+  }
+  return offenders;
+}
+
+async function assertDocumentFitsViewport(page, label) {
+  const dimensions = await page.evaluate(() => ({
+    clientWidth: document.documentElement.clientWidth,
+    scrollWidth: document.documentElement.scrollWidth,
+  }));
+  if (dimensions.scrollWidth !== dimensions.clientWidth) {
+    await diagnoseHorizontalOverflow(page, label);
+  }
+  assert.equal(dimensions.scrollWidth, dimensions.clientWidth, `${label} has horizontal overflow`);
+}
+
 (async () => {
   const browser = await chromium.launch({channel: process.env.UI_BROWSER || 'chrome', headless: true});
   try {
@@ -21,7 +70,7 @@ const screenshots = process.env.UI_SCREENSHOT_DIR;
         });
         page.on('pageerror', error => errors.push(error.message));
         await page.goto(url);
-        await page.waitForSelector('.aa-DetachedSearchButton');
+        await page.waitForSelector('.bee-navbar-search__trigger');
         assert.equal(await page.locator('html').getAttribute('data-theme'), 'light');
         assert.equal(await page.locator('[class*="colorModeToggle"], [class*="toggleButton"]').count(), 0);
         const sidebar = page.locator('.theme-doc-sidebar-menu');
@@ -41,7 +90,7 @@ const screenshots = process.env.UI_SCREENSHOT_DIR;
           await page.waitForURL(/centro-de-ayuda\/visibilidad\/$/);
           await page.goto(url);
         }
-        assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+        await assertDocumentFitsViewport(page, `Home ${viewportName} (closed search)`);
         assert(await page.evaluate(() => document.querySelector('footer').getBoundingClientRect().bottom >= innerHeight - 1));
         const logo = page.locator('.navbar__logo img:visible');
         assert((await logo.getAttribute('src')).includes('beesible-oscuro.svg'));
@@ -60,6 +109,10 @@ const screenshots = process.env.UI_SCREENSHOT_DIR;
         await page.keyboard.press('Enter');
         const input = page.locator('.aa-Input:visible');
         await input.waitFor();
+        await assertDocumentFitsViewport(page, `Home ${viewportName} (expanded search)`);
+        assert.equal(await input.evaluate(el => el === document.activeElement), true, 'Inline search did not receive focus');
+        assert.equal(await page.locator('.aa-DetachedOverlay').count(), 0, 'Search rendered a detached overlay');
+        assert.equal(await page.locator('body.aa-Detached').count(), 0, 'Search blocked the page in detached mode');
         assert.match(await input.getAttribute('placeholder'), /buscar/i);
         await input.fill('reseñas');
         await page.waitForSelector('.aa-ItemLink');
@@ -73,15 +126,31 @@ const screenshots = process.env.UI_SCREENSHOT_DIR;
         await page.goto(new URL('centro-de-ayuda/inicio-y-acceso/acceder-a-la-plataforma/', url).href);
         const breadcrumbs = page.locator('.breadcrumbs');
         await breadcrumbs.waitFor({state: 'visible'});
+        const note = page.locator('.alert--secondary').first();
+        await note.waitFor({state: 'visible'});
+        assert.equal(await note.locator(':scope > [class*="admonitionHeading"]').count(), 1);
+        assert.equal(await note.locator(':scope > [class*="admonitionHeading"]').isVisible(), false);
+        assert.match(await note.innerText(), /A tener en cuenta:/);
+        assert.equal(await note.locator('.help-icon').count(), 1, 'Semantic note icon was removed');
         assert.deepEqual(await page.locator('.theme-doc-sidebar-menu > li > .menu__list-item-collapsible > a').evaluateAll(links => links.map(link => link.getAttribute('href'))), categoryRoutes);
-        assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+        await assertDocumentFitsViewport(page, `Article with closed search ${viewportName}`);
         assert.deepEqual(external, [], 'Search or page contacted an external service');
         assert.deepEqual(errors, [], 'Browser errors');
         if (screenshots) await page.screenshot({path: path.join(screenshots, `article-${viewportName}.png`), fullPage: true});
-        await page.locator('.navbar .aa-DetachedSearchButton').click();
+        await page.locator('.navbar .bee-navbar-search__trigger').click();
+        await assertDocumentFitsViewport(page, `Article with expanded search ${viewportName}`);
         await page.locator('.aa-Input:visible').fill('zzzxqvnonexistent');
         await page.getByText('No se han encontrado resultados.', {exact: true}).waitFor();
         await page.locator('.aa-Input:visible').press('Escape');
+        assert.equal(await page.locator('.aa-Input:visible').count(), 0, 'Escape did not collapse search');
+        assert(await page.locator('.navbar .bee-navbar-search__trigger').isVisible());
+        await page.goto(new URL('centro-de-ayuda/inicio-y-acceso/cerrar-sesion-en-la-plataforma/', url).href);
+        const paginator = page.locator('.bee-pagination');
+        await paginator.waitFor({state: 'visible'});
+        assert.deepEqual(await paginator.locator('a').allInnerTexts(), ['Anterior', 'Siguiente']);
+        assert.match(await paginator.locator('.bee-pagination__link--previous').getAttribute('aria-label'), /^Ir al artículo anterior: .+/);
+        assert.match(await paginator.locator('.bee-pagination__link--next').getAttribute('aria-label'), /^Ir al artículo siguiente: .+/);
+        await assertDocumentFitsViewport(page, `Paginated article ${viewportName}`);
         if (width < 600) {
           await page.locator('.navbar__toggle').click();
           await page.locator('.navbar-sidebar .menu:not([inert])').waitFor();

@@ -69,6 +69,22 @@ class HelpCenterUITests(unittest.TestCase):
                        "type: 'search'"):
             self.assertIn(option, config)
 
+    def test_search_is_inline_and_collapsible(self):
+        search = (ROOT / 'src/theme/SearchBar/index.js').read_text(encoding='utf-8')
+        self.assertIn("OriginalSearchBar from '@theme-original/SearchBar'", search)
+        self.assertIn("query === '' ? 'not all' : query", search)
+        self.assertIn("event.key === 'Escape'", search)
+        self.assertIn("aria-label=\"Cerrar búsqueda\"", search)
+        self.assertNotIn('aa-DetachedOverlay', search)
+
+    def test_paginator_uses_compact_accessible_buttons(self):
+        paginator = (ROOT / 'src/theme/DocItem/Paginator/index.js').read_text(encoding='utf-8')
+        self.assertIn('size="small"', paginator)
+        self.assertIn("variant={isNext ? 'secondary' : 'tertiary'}", paginator)
+        self.assertIn("'Ir al artículo siguiente'", paginator)
+        self.assertIn("'Ir al artículo anterior'", paginator)
+        self.assertNotIn('{label}: {item.title}', paginator)
+
     def test_styles_import_only_the_selected_local_tokens(self):
         css = (ROOT / 'src/css/custom.css').read_text(encoding='utf-8')
         tokens = (ROOT / 'src/css/bee-tokens.css').read_text(encoding='utf-8')
@@ -91,6 +107,7 @@ class HelpCenterUITests(unittest.TestCase):
                          '--bee-card-text', '--bee-card-text-subtle'}
         self.assertEqual(definitions - retired_cards, references,
                          'Every token used by the current interface must be defined')
+        self.assertIn(".alert--secondary > [class*='admonitionHeading']", css)
 
     def test_complete_design_system_export_is_local_only(self):
         source = 'design-system/local/bee-design-system.json'
