@@ -1,10 +1,10 @@
 ---
 article_id: ART-DOC-AGENT-001
 title: Flujo del agente de documentación
-version: 1.3
+version: 1.4
 status: published
 owner: Product
-last_reviewed: 2026-09-02
+last_reviewed: 2026-10-06
 ---
 
 # Flujo del agente de documentación
@@ -46,6 +46,14 @@ Cuando la tarea documental pasa a **In Progress**, el workflow recupera desde Ji
 El acceso usa autenticación básica de Jira Cloud y estos Repository Secrets, configurados solo en el paso que ejecuta el agente: `JIRA_BASE_URL`, `JIRA_API_EMAIL` y `JIRA_API_TOKEN`. Sus valores no se registran ni se incorporan a la tarea documental.
 
 Las tareas documentales antiguas que no contienen `DOCUMENTATION_SOURCE_V1` mantienen el flujo anterior. Si el manifiesto está presente, no hay alternativa: cualquier error de formato, configuración, consulta, relación o validación detiene el flujo antes de llamar a Claude.
+
+### Diagnóstico manual del contexto
+
+El workflow **Documentation agent PoC** permite comprobar desde **Actions > Run workflow** que Jira entrega completas las descripciones antes de llamar a Claude. Para hacerlo, se informan `issue_key`, `issue_summary` e `issue_description` con el manifiesto `DOCUMENTATION_SOURCE_V1` de la tarea documental y se activa `diagnose_only`.
+
+Esta ejecución consulta y valida la épica y sus subtareas con el mismo flujo de producción, convierte las descripciones ADF a Markdown y construye el contexto consolidado. Termina entonces sin leer la clave de Anthropic, generar una propuesta, modificar documentos, crear una rama, hacer commit o abrir una pull request. Si `issue_description` no contiene `DOCUMENTATION_SOURCE_V1`, el diagnóstico falla.
+
+El único resultado del comando es un JSON seguro con la clave de la épica; el estado, las etiquetas y la clave de cada subtarea; y las longitudes y huellas SHA-256 de cada descripción y del contexto consolidado. No muestra resúmenes, descripciones, prompts, tokens, secretos ni respuestas completas de Jira.
 
 ## Funcionamiento del agente
 
