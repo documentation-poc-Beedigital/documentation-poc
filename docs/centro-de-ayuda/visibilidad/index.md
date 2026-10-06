@@ -16,7 +16,3 @@ sidebar_position: 3
 [Añadir o actualizar información en tu Perfil de Google](anadir-o-actualizar-informacion-en-tu-perfil-de-google.md)
 
 [Expansión de tu negocio en otras plataformas](expansion-de-tu-negocio-en-otras-plataformas.md)
-
-## <HelpIcon name="website" /> Página Web
-
-[Cómo crear tu página web](como-crear-tu-pagina-web.md)
