@@ -1,7 +1,7 @@
 ---
 article_id: ART-DOC-AGENT-001
 title: Flujo del agente de documentación
-version: 1.4
+version: 1.5
 status: published
 owner: Product
 last_reviewed: 2026-10-06
@@ -49,11 +49,42 @@ Las tareas documentales antiguas que no contienen `DOCUMENTATION_SOURCE_V1` mant
 
 ### Diagnóstico manual del contexto
 
-El workflow **Documentation agent PoC** permite comprobar desde **Actions > Run workflow** que Jira entrega completas las descripciones antes de llamar a Claude. Para hacerlo, se informan `issue_key`, `issue_summary` e `issue_description` con el manifiesto `DOCUMENTATION_SOURCE_V1` de la tarea documental y se activa `diagnose_only`.
+El workflow **Documentation agent PoC** permite comprobar desde **Actions > Run workflow** que las descripciones completas de Jira llegan a la petición final preparada para Claude, sin enviarla.
 
-Esta ejecución consulta y valida la épica y sus subtareas con el mismo flujo de producción, convierte las descripciones ADF a Markdown y construye el contexto consolidado. Termina entonces sin leer la clave de Anthropic, generar una propuesta, modificar documentos, crear una rama, hacer commit o abrir una pull request. Si `issue_description` no contiene `DOCUMENTATION_SOURCE_V1`, el diagnóstico falla.
+1. Seleccionar en **Use workflow from** la rama que se quiere diagnosticar. El job de diagnóstico hace checkout de esa referencia, captura su SHA y lo verifica antes de consultar Jira y después de preparar la petición. El flujo automático normal continúa usando `main`.
+2. Rellenar estos campos y activar `diagnose_only`:
 
-El único resultado del comando es un JSON seguro con la clave de la épica; el estado, las etiquetas y la clave de cada subtarea; y las longitudes y huellas SHA-256 de cada descripción y del contexto consolidado. No muestra resúmenes, descripciones, prompts, tokens, secretos ni respuestas completas de Jira.
+   | Campo | Valor en diagnóstico | Valor en flujo normal |
+   |---|---|---|
+   | `issue_key` | Clave de la tarea documental, por ejemplo `DOC-999`; obligatorio | Obligatorio, sin cambios |
+   | `issue_summary` | Resumen de la tarea documental; obligatorio | Obligatorio, sin cambios |
+   | `issue_description` | Puede dejarse vacío; el diagnóstico lo sustituye internamente por el manifiesto | Obligatorio por validación del job, aunque el formulario lo muestre opcional; conserva el límite de 60.000 caracteres y las validaciones de texto |
+   | `jira_epic_key` | Una clave de épica, por ejemplo `DOC-123`; obligatorio cuando `diagnose_only=true` | Opcional e ignorado |
+   | `jira_task_keys` | Claves separadas por comas, por ejemplo `DOC-124, DOC-125`; obligatorio cuando `diagnose_only=true` | Opcional e ignorado |
+   | `diagnose_only` | `true` | `false` por defecto; Jira Automation conserva sus inputs y payload actuales |
+
+3. El paso **Serialize diagnostic ticket input** separa `jira_task_keys` por comas y recorta los espacios exteriores de cada elemento. Rechaza campos ausentes, elementos vacíos —incluidas comas iniciales, finales o consecutivas—, claves inválidas y texto adicional antes de exponer credenciales o consultar Jira. Las claves usan exactamente el contrato existente: `[A-Z][A-Z0-9]*(?:-[A-Z0-9]+)*-[1-9][0-9]*`. Construye `DOCUMENTATION_SOURCE_V1` con saltos de línea reales y lo pasa por el parser estricto existente; las claves de tarea repetidas se resuelven una sola vez, conservando el orden.
+4. El paso **Diagnose validated Jira context in the prepared request** recibe únicamente los tres secretos Jira indicados arriba. Consulta y valida la épica y las tareas hijas directas con las mismas funciones del flujo normal: tipo Epic, relación con la épica, etiqueta `documentation-required` y categoría Done. Convierte las descripciones ADF a Markdown y consolida el contexto completo en orden épica/tareas, sin truncarlo. Si supera 60.000 caracteres, falla antes de construir la petición.
+5. Lee `.github/prompts/documentation-agent-poc.md` y los documentos bajo `docs/` mediante las mismas funciones del flujo normal. Usa `build_request` con el mismo modelo, `max_tokens` y contrato. Deserializa el JSON del mensaje de usuario y compara exactamente `ticket.issue_description` con el contexto Jira consolidado.
+6. Consultar el JSON del paso de diagnóstico en los logs. `contexts_match=true` confirma la coincidencia exacta. Si hay discrepancia, publica las métricas seguras con `contexts_match=false` y el paso termina con código de error. Un fallo de inputs, consulta, validación, lectura o SHA detiene el diagnóstico sin publicar el payload.
+
+El job tiene únicamente `contents: read`, no persiste credenciales de Git y no recibe ni lee `ANTHROPIC_API_KEY`. Lee los inputs desde el archivo local del evento (`GITHUB_EVENT_PATH`), evitando que Actions muestre el resumen o la descripción como variables de entorno del paso. No llama al transporte HTTP de Claude ni ejecuta `generate_and_apply`. Tampoco modifica documentos, crea ramas, commits o PRs, ni envía notificaciones a Jira o Slack. Solo serializa el ticket con el manifiesto en el directorio temporal del runner; la petición completa permanece en memoria. No publica artefactos.
+
+El informe usa listas explícitas de campos permitidos, también para los objetos anidados:
+
+| Campo JSON | Contenido |
+|---|---|
+| `epic` | `key`, `description_characters`, `description_sha256` de la descripción convertida a Markdown |
+| `tasks` | Lista ordenada con esos mismos tres campos para cada tarea |
+| `context` | `characters` y `sha256` del contexto Jira consolidado |
+| `request_context` | `characters` y `sha256` de `ticket.issue_description` extraído del JSON del mensaje de usuario |
+| `contexts_match` | Booleano de igualdad exacta entre los dos contextos |
+| `documents_count` | Número de documentos incluidos en el JSON de la petición |
+| `prompt_characters` | Longitud del prompt leído, antes de añadir las instrucciones del sistema de `build_request` |
+| `user_message_characters` | Longitud del mensaje de usuario JSON serializado completo |
+| `commit_sha` | SHA completo del commit verificado para el diagnóstico |
+
+Todas las longitudes cuentan caracteres del texto Python, no bytes ni tokens; las huellas SHA-256 se calculan sobre su codificación UTF-8. No se registran estados o etiquetas arbitrarios, textos de descripciones, resúmenes, prompts, documentos, respuestas Jira ni credenciales. El informe tampoco contiene el payload completo.
 
 ## Funcionamiento del agente
 

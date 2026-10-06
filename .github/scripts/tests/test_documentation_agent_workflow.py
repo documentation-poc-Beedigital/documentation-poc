@@ -1,7 +1,14 @@
 from __future__ import annotations
 
+import io
+import json
+import os
+import re
+import tempfile
+import textwrap
 import unittest
 from pathlib import Path
+from unittest import mock
 
 
 WORKFLOW = (
@@ -79,16 +86,116 @@ class DocumentationAgentWorkflowTests(unittest.TestCase):
         self.assertIn("if: ${{ inputs.diagnose_only }}", diagnostic)
         self.assertIn("contents: read", diagnostic)
         self.assertIn("--diagnose-jira-context", diagnostic)
-        self.assertIn("DOCUMENTATION_SOURCE_V1", diagnostic)
+        self.assertIn("build_diagnostic_manifest", diagnostic)
         for secret in ("JIRA_BASE_URL", "JIRA_API_EMAIL", "JIRA_API_TOKEN"):
             self.assertIn(f"{secret}: ${{{{ secrets.{secret} }}}}", diagnostic)
         for forbidden in (
             "ANTHROPIC_API_KEY", "Claude", "git commit", "git push", "gh pr create",
             "prepare-documentation-pull-request.py",
+            "notify-", "SLACK", "upload-artifact", "contents: write", "pull-requests:",
+            "generate_and_apply", "http_transport",
+            "ISSUE_SUMMARY:", "ISSUE_DESCRIPTION:", "inputs.issue_summary", "inputs.issue_description",
         ):
             self.assertNotIn(forbidden, diagnostic)
+        self.assertIn('persist-credentials: false', diagnostic)
+        self.assertNotIn('ref: main', diagnostic)
+        self.assertIn('--prompt-file ".github/prompts/documentation-agent-poc.md"', diagnostic)
+        self.assertIn('--repo-root "${GITHUB_WORKSPACE}"', diagnostic)
+        self.assertIn('--base-sha "${{ steps.base.outputs.sha }}"', diagnostic)
+        self.assertIn('os.environ["GITHUB_EVENT_PATH"]', diagnostic)
+        serialize = diagnostic.index("Serialize diagnostic ticket input")
+        credentials = diagnostic.index("JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}")
+        self.assertLess(serialize, credentials)
         proposal_header = self.workflow[proposal_start:self.workflow.index("    steps:", proposal_start)]
         self.assertIn("if: ${{ !inputs.diagnose_only }}", proposal_header)
+
+    def serialization_code(self, step_name: str) -> str:
+        step = self.workflow[self.workflow.index(f"- name: {step_name}"):]
+        match = re.search(r"python - <<'PY'\n(.*?)\n          PY", step, re.DOTALL)
+        self.assertIsNotNone(match)
+        return textwrap.dedent(match.group(1))
+
+    def serialize_ticket(self, step_name: str, inputs: dict[str, str]) -> dict[str, str]:
+        with tempfile.TemporaryDirectory() as temporary:
+            event_file = Path(temporary) / "event.json"
+            event_file.write_text(json.dumps({"inputs": {
+                name.lower(): value for name, value in inputs.items()
+            }}), encoding="utf-8")
+            environment = {
+                "RUNNER_TEMP": temporary,
+                "GITHUB_OUTPUT": str(Path(temporary) / "output"),
+                "GITHUB_EVENT_PATH": str(event_file),
+                **inputs,
+            }
+            stdout = io.StringIO()
+            stderr = io.StringIO()
+            with mock.patch.object(os, "environ", environment), \
+                 mock.patch("sys.stdout", stdout), mock.patch("sys.stderr", stderr):
+                exec(compile(self.serialization_code(step_name), str(WORKFLOW), "exec"), {})
+            self.assertEqual("", stdout.getvalue())
+            self.assertEqual("", stderr.getvalue())
+            return json.loads((Path(temporary) / "documentation-ticket.json").read_text(encoding="utf-8"))
+
+    def test_diagnostic_inputs_are_optional_in_form_and_description_is_optional(self) -> None:
+        dispatch = self.workflow[: self.workflow.index("concurrency:")]
+        for name in ("issue_description", "jira_epic_key", "jira_task_keys"):
+            block = re.split(r"\n      \S", dispatch.split(f"      {name}:\n", 1)[1], maxsplit=1)[0]
+            self.assertIn("required: false", block)
+            self.assertIn("type: string", block)
+        for name in ("issue_key", "issue_summary"):
+            block = re.split(r"\n      \S", dispatch.split(f"      {name}:\n", 1)[1], maxsplit=1)[0]
+            self.assertIn("required: true", block)
+
+    def test_diagnostic_serialization_builds_real_newlines_without_description(self) -> None:
+        result = self.serialize_ticket("Serialize diagnostic ticket input", {
+            "ISSUE_KEY": "DOC-999", "ISSUE_SUMMARY": "Documentation",
+            "JIRA_EPIC_KEY": "DOC-123", "JIRA_TASK_KEYS": " DOC-124 , DOC-125 ",
+        })
+        self.assertEqual({
+            "issue_key": "DOC-999", "issue_summary": "Documentation",
+            "issue_description": "DOCUMENTATION_SOURCE_V1\nEPIC_KEY: DOC-123\nTASK_KEYS:\n- DOC-124\n- DOC-125\n",
+        }, result)
+        self.assertNotIn("\\n", result["issue_description"])
+
+    def test_diagnostic_serialization_rejects_missing_and_invalid_inputs(self) -> None:
+        cases = (
+            ("", "DOC-124", "requires jira_epic_key"),
+            ("DOC-123", "", "requires jira_task_keys"),
+            ("DOC-123", "DOC-124,", "empty element at position 2"),
+            ("DOC-123", "DOC-124,,DOC-125", "empty element at position 2"),
+            ("DOC-123", "DOC-124 PRIVATE_INPUT", "element at position 1"),
+            ("DOC-123 PRIVATE_INPUT", "DOC-124", "jira_epic_key must"),
+        )
+        for epic, tasks, error in cases:
+            with self.subTest(epic=epic, tasks=tasks), self.assertRaisesRegex(SystemExit, error) as raised:
+                self.serialize_ticket("Serialize diagnostic ticket input", {
+                    "ISSUE_KEY": "DOC-999", "ISSUE_SUMMARY": "Documentation",
+                    "JIRA_EPIC_KEY": epic, "JIRA_TASK_KEYS": tasks,
+                })
+            self.assertNotIn("PRIVATE_INPUT", str(raised.exception))
+
+    def test_normal_serialization_preserves_original_inputs_without_diagnostic_fields(self) -> None:
+        inputs = {
+            "ISSUE_KEY": "DOC-999", "ISSUE_SUMMARY": "Documentation",
+            "ISSUE_DESCRIPTION": "Original description\nwith evidence",
+        }
+        self.assertEqual({
+            "issue_key": inputs["ISSUE_KEY"], "issue_summary": inputs["ISSUE_SUMMARY"],
+            "issue_description": inputs["ISSUE_DESCRIPTION"],
+        }, self.serialize_ticket("Validate and serialize ticket inputs", inputs))
+        inputs["JIRA_EPIC_KEY"] = "invalid diagnostic input"
+        inputs["JIRA_TASK_KEYS"] = ","
+        self.assertEqual(inputs["ISSUE_DESCRIPTION"], self.serialize_ticket(
+            "Validate and serialize ticket inputs", inputs,
+        )["issue_description"])
+
+    def test_normal_serialization_still_requires_and_validates_description(self) -> None:
+        for description in ("", " \n\t", "x" * 60_001, "bad\x00content"):
+            with self.subTest(length=len(description)), self.assertRaisesRegex(SystemExit, "issue_description"):
+                self.serialize_ticket("Validate and serialize ticket inputs", {
+                    "ISSUE_KEY": "DOC-999", "ISSUE_SUMMARY": "Documentation",
+                    "ISSUE_DESCRIPTION": description,
+                })
 
     def test_unsafe_legacy_parallel_workflow_is_removed(self) -> None:
         self.assertFalse(LEGACY_WORKFLOW.exists())

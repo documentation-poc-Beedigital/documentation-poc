@@ -43,6 +43,12 @@ CREATE_ROOT = PurePosixPath("docs/centro-de-ayuda")
 KEBAB_CASE_NAME = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)*\.md")
 JIRA_KEY = re.compile(r"[A-Z][A-Z0-9]*(?:-[A-Z0-9]+)*-[1-9][0-9]*")
 DOCUMENTATION_SOURCE_MARKER = "DOCUMENTATION_SOURCE_V1"
+DIAGNOSTIC_DESCRIPTION_FIELDS = ("key", "description_characters", "description_sha256")
+DIAGNOSTIC_CONTEXT_FIELDS = ("characters", "sha256")
+DIAGNOSTIC_REPORT_FIELDS = (
+    "epic", "tasks", "context", "request_context", "contexts_match",
+    "documents_count", "prompt_characters", "user_message_characters", "commit_sha",
+)
 
 DOCUMENT_SCHEMA: dict[str, object] = {
     "type": "object",
@@ -124,6 +130,30 @@ def parse_documentation_source_manifest(description: str) -> tuple[str, list[str
     if not task_keys:
         raise ProposalError("DOCUMENTATION_SOURCE_V1 must contain at least one TASK_KEY")
     return epic_key, task_keys
+
+
+def build_diagnostic_manifest(jira_epic_key: str, jira_task_keys: str) -> str:
+    """Validate single-line diagnostic inputs before any Jira credentials are needed."""
+    if not jira_epic_key.strip():
+        raise ProposalError("diagnose_only requires jira_epic_key")
+    if JIRA_KEY.fullmatch(jira_epic_key) is None:
+        raise ProposalError("jira_epic_key must be a single valid uppercase Jira key")
+    if not jira_task_keys.strip():
+        raise ProposalError("diagnose_only requires jira_task_keys")
+    task_keys = [part.strip() for part in jira_task_keys.split(",")]
+    for position, key in enumerate(task_keys, start=1):
+        if not key:
+            raise ProposalError(f"jira_task_keys contains an empty element at position {position}")
+        if JIRA_KEY.fullmatch(key) is None:
+            raise ProposalError(f"jira_task_keys element at position {position} must be a single valid uppercase Jira key")
+    manifest = (
+        f"{DOCUMENTATION_SOURCE_MARKER}\nEPIC_KEY: {jira_epic_key}\nTASK_KEYS:\n"
+        + "".join(f"- {key}\n" for key in task_keys)
+    )
+    if len(manifest) > MAX_ISSUE_DESCRIPTION_CHARACTERS:
+        raise ProposalError("Diagnostic manifest exceeds 60000 characters")
+    parse_documentation_source_manifest(manifest)
+    return manifest
 
 
 def jira_configuration_from_environment(environ: Mapping[str, str] | None = None) -> dict[str, str]:
@@ -288,11 +318,8 @@ def resolve_jira_source_with_diagnostics(
             raise ProposalError(f"Jira task {task_key} is not in the Done status category")
         task_description = adf_to_markdown(task_fields.get("description"))
         sections.append(f"Task {resolved_task_key}: {task_summary}\n\n{task_description}".rstrip())
-        status_name = status.get("name") if isinstance(status, dict) else None
         task_diagnostics.append({
             "key": resolved_task_key,
-            "status": status_name if isinstance(status_name, str) else category_key,
-            "labels": [label for label in labels if isinstance(label, str)],
             "description_characters": len(task_description),
             "description_sha256": sha256_text(task_description),
         })
@@ -329,13 +356,53 @@ def resolve_jira_source(
 def diagnose_jira_context(
     ticket_file: Path, configuration: Mapping[str, str],
     jira_transport: JiraTransport = jira_http_transport, timeout: float = 120.0,
+    *, repo_root: Path, prompt_file: Path, base_sha: str,
 ) -> dict[str, object]:
+    verify_head(repo_root, base_sha)
     ticket = load_ticket(ticket_file)
-    _, diagnostics = resolve_jira_source_with_diagnostics(
+    resolved, diagnostics = resolve_jira_source_with_diagnostics(
         ticket, configuration, jira_transport, timeout, require_manifest=True,
     )
     assert diagnostics is not None
-    return diagnostics
+    documents = read_documentation(repo_root)
+    trusted_prompt = read_prompt(prompt_file)
+    request = build_request(trusted_prompt, resolved, documents)
+    try:
+        message = request["messages"][0]
+        if message["role"] != "user" or not isinstance(message["content"], str):
+            raise ProposalError("Prepared request must contain a JSON user message")
+        user_message = message["content"]
+        payload = json.loads(user_message)
+        request_context = payload["ticket"]["issue_description"]
+        included_documents = payload["documents"]
+    except (KeyError, IndexError, TypeError, json.JSONDecodeError) as error:
+        raise ProposalError("Prepared request must contain a JSON ticket and documents") from error
+    if not isinstance(request_context, str) or not isinstance(included_documents, list):
+        raise ProposalError("Prepared request has invalid context or documents")
+    verify_head(repo_root, base_sha)
+    # Explicit allowlists at every level: never forward Jira fields or request data.
+    report = {
+        "epic": {field: diagnostics["epic"][field] for field in DIAGNOSTIC_DESCRIPTION_FIELDS},
+        "tasks": [
+            {field: task[field] for field in DIAGNOSTIC_DESCRIPTION_FIELDS}
+            for task in diagnostics["tasks"]
+        ],
+        "context": {field: diagnostics["context"][field] for field in DIAGNOSTIC_CONTEXT_FIELDS},
+        "request_context": {"characters": len(request_context), "sha256": sha256_text(request_context)},
+        "contexts_match": request_context == resolved["issue_description"],
+        "documents_count": len(included_documents),
+        "prompt_characters": len(trusted_prompt),
+        "user_message_characters": len(user_message),
+        "commit_sha": base_sha,
+    }
+    return {field: report[field] for field in DIAGNOSTIC_REPORT_FIELDS}
+
+
+def read_prompt(prompt_file: Path) -> str:
+    try:
+        return prompt_file.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError) as error:
+        raise ProposalError("Could not read trusted UTF-8 prompt") from error
 
 
 def read_documentation(repo_root: Path) -> list[dict[str, str]]:
@@ -871,10 +938,7 @@ def generate_and_apply(
         jira_transport, timeout,
     )
     documents = read_documentation(repo_root)
-    try:
-        trusted_prompt = prompt_file.read_text(encoding="utf-8")
-    except (OSError, UnicodeDecodeError) as error:
-        raise ProposalError(f"Could not read trusted prompt: {error}") from error
+    trusted_prompt = read_prompt(prompt_file)
     response = transport(API_URL, api_key, build_request(trusted_prompt, ticket, documents), timeout)
     proposal = parse_proposal(extract_output_text(response))
     if read_documentation(repo_root) != documents:
@@ -906,15 +970,18 @@ def main(argv: Sequence[str] | None = None) -> int:
         parser.error("--timeout must be positive")
     if not args.diagnose_jira_context and (args.prompt_file is None or args.agent_report is None):
         parser.error("--prompt-file and --agent-report are required unless --diagnose-jira-context is used")
+    if args.diagnose_jira_context and (args.prompt_file is None or args.base_sha is None):
+        parser.error("--prompt-file and --base-sha are required for --diagnose-jira-context")
     try:
         if args.diagnose_jira_context:
             diagnostics = diagnose_jira_context(
                 ticket_file=args.ticket_file,
                 configuration=jira_configuration_from_environment(),
                 timeout=args.timeout,
+                repo_root=args.repo_root, prompt_file=args.prompt_file, base_sha=args.base_sha,
             )
             sys.stdout.write(json.dumps(diagnostics, ensure_ascii=False, sort_keys=True, separators=(",", ":")) + "\n")
-            return 0
+            return 0 if diagnostics["contexts_match"] else 1
         assert args.prompt_file is not None
         assert args.agent_report is not None
         generate_and_apply(
