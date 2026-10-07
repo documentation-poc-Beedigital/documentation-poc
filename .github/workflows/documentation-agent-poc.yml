@@ -16,11 +16,11 @@ on:
         required: false
         type: string
       jira_epic_key:
-        description: Jira epic key (required only for diagnose_only)
+        description: Jira source epic key (provide together with jira_task_keys)
         required: false
         type: string
       jira_task_keys:
-        description: Comma-separated Jira task keys (required only for diagnose_only)
+        description: Comma-separated Jira source task keys (provide together with jira_epic_key)
         required: false
         type: string
       diagnose_only:
@@ -81,15 +81,17 @@ jobs:
               Path(os.environ["GITHUB_EVENT_PATH"]).read_text(encoding="utf-8")
           )["inputs"]
           try:
-              description = generator.build_diagnostic_manifest(
+              source = generator.parse_jira_source_inputs(
                   inputs.get("jira_epic_key", ""), inputs.get("jira_task_keys", "")
               )
+              if source is None:
+                  raise generator.ProposalError("diagnose_only requires jira_epic_key and jira_task_keys")
           except generator.ProposalError as error:
               raise SystemExit(f"Invalid diagnostic inputs: {error}") from None
           ticket = {
               "issue_key": inputs["issue_key"],
               "issue_summary": inputs["issue_summary"],
-              "issue_description": description,
+              "issue_description": inputs.get("issue_description", ""),
           }
           (Path(os.environ["RUNNER_TEMP"]) / "documentation-ticket.json").write_text(
               json.dumps(ticket, ensure_ascii=False, indent=2) + "\n",
@@ -99,6 +101,8 @@ jobs:
 
       - name: Diagnose validated Jira context in the prepared request
         env:
+          JIRA_EPIC_KEY: ${{ inputs.jira_epic_key }}
+          JIRA_TASK_KEYS: ${{ inputs.jira_task_keys }}
           JIRA_BASE_URL: ${{ secrets.JIRA_BASE_URL }}
           JIRA_API_EMAIL: ${{ secrets.JIRA_API_EMAIL }}
           JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
@@ -111,6 +115,8 @@ jobs:
             --ticket-file "${RUNNER_TEMP}/documentation-ticket.json" \
             --prompt-file ".github/prompts/documentation-agent-poc.md" \
             --diagnose-jira-context \
+            --jira-epic-key "${JIRA_EPIC_KEY}" \
+            --jira-task-keys "${JIRA_TASK_KEYS}" \
             --timeout 300
 
   prepare-proposal:
@@ -149,14 +155,29 @@ jobs:
           ISSUE_KEY: ${{ inputs.issue_key }}
           ISSUE_SUMMARY: ${{ inputs.issue_summary }}
           ISSUE_DESCRIPTION: ${{ inputs.issue_description }}
+          JIRA_EPIC_KEY: ${{ inputs.jira_epic_key }}
+          JIRA_TASK_KEYS: ${{ inputs.jira_task_keys }}
         shell: bash
         run: |
           set -euo pipefail
           python - <<'PY'
+          import importlib.util
           import json
           import os
           import re
           from pathlib import Path
+
+          spec = importlib.util.spec_from_file_location(
+              "generator", ".github/scripts/generate-documentation-proposal.py"
+          )
+          generator = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(generator)
+          try:
+              generator.parse_jira_source_inputs(
+                  os.environ.get("JIRA_EPIC_KEY", ""), os.environ.get("JIRA_TASK_KEYS", "")
+              )
+          except generator.ProposalError as error:
+              raise SystemExit(f"Invalid workflow inputs: {error}") from None
 
           issue_key = os.environ["ISSUE_KEY"]
           issue_summary = os.environ["ISSUE_SUMMARY"]
@@ -240,6 +261,8 @@ jobs:
         id: claude
         continue-on-error: true
         env:
+          JIRA_EPIC_KEY: ${{ inputs.jira_epic_key }}
+          JIRA_TASK_KEYS: ${{ inputs.jira_task_keys }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           JIRA_BASE_URL: ${{ secrets.JIRA_BASE_URL }}
           JIRA_API_EMAIL: ${{ secrets.JIRA_API_EMAIL }}
@@ -253,6 +276,8 @@ jobs:
             --ticket-file "${RUNNER_TEMP}/documentation-ticket.json" \
             --prompt-file "${RUNNER_TEMP}/documentation-agent-poc.md" \
             --agent-report "${RUNNER_TEMP}/agent-report.md" \
+            --jira-epic-key "${JIRA_EPIC_KEY}" \
+            --jira-task-keys "${JIRA_TASK_KEYS}" \
             --timeout 300
 
       - name: Ensure an agent report exists
