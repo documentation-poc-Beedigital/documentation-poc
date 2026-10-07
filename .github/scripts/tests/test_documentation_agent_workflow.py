@@ -86,7 +86,7 @@ class DocumentationAgentWorkflowTests(unittest.TestCase):
         self.assertIn("if: ${{ inputs.diagnose_only }}", diagnostic)
         self.assertIn("contents: read", diagnostic)
         self.assertIn("--diagnose-jira-context", diagnostic)
-        self.assertIn("build_diagnostic_manifest", diagnostic)
+        self.assertIn("parse_jira_source_inputs", diagnostic)
         for secret in ("JIRA_BASE_URL", "JIRA_API_EMAIL", "JIRA_API_TOKEN"):
             self.assertIn(f"{secret}: ${{{{ secrets.{secret} }}}}", diagnostic)
         for forbidden in (
@@ -146,21 +146,22 @@ class DocumentationAgentWorkflowTests(unittest.TestCase):
             block = re.split(r"\n      \S", dispatch.split(f"      {name}:\n", 1)[1], maxsplit=1)[0]
             self.assertIn("required: true", block)
 
-    def test_diagnostic_serialization_builds_real_newlines_without_description(self) -> None:
+    def test_diagnostic_serialization_accepts_absent_description(self) -> None:
         result = self.serialize_ticket("Serialize diagnostic ticket input", {
             "ISSUE_KEY": "DOC-999", "ISSUE_SUMMARY": "Documentation",
             "JIRA_EPIC_KEY": "DOC-123", "JIRA_TASK_KEYS": " DOC-124 , DOC-125 ",
         })
         self.assertEqual({
             "issue_key": "DOC-999", "issue_summary": "Documentation",
-            "issue_description": "DOCUMENTATION_SOURCE_V1\nEPIC_KEY: DOC-123\nTASK_KEYS:\n- DOC-124\n- DOC-125\n",
+            "issue_description": "",
         }, result)
         self.assertNotIn("\\n", result["issue_description"])
 
     def test_diagnostic_serialization_rejects_missing_and_invalid_inputs(self) -> None:
         cases = (
-            ("", "DOC-124", "requires jira_epic_key"),
-            ("DOC-123", "", "requires jira_task_keys"),
+            ("", "DOC-124", "must be provided together"),
+            ("DOC-123", "", "must be provided together"),
+            ("DOC-123", "DOC-124, DOC-124", "duplicate keys"),
             ("DOC-123", "DOC-124,", "empty element at position 2"),
             ("DOC-123", "DOC-124,,DOC-125", "empty element at position 2"),
             ("DOC-123", "DOC-124 PRIVATE_INPUT", "element at position 1"),
@@ -185,9 +186,32 @@ class DocumentationAgentWorkflowTests(unittest.TestCase):
         }, self.serialize_ticket("Validate and serialize ticket inputs", inputs))
         inputs["JIRA_EPIC_KEY"] = "invalid diagnostic input"
         inputs["JIRA_TASK_KEYS"] = ","
-        self.assertEqual(inputs["ISSUE_DESCRIPTION"], self.serialize_ticket(
-            "Validate and serialize ticket inputs", inputs,
-        )["issue_description"])
+        with self.assertRaisesRegex(SystemExit, "jira_epic_key must"):
+            self.serialize_ticket("Validate and serialize ticket inputs", inputs)
+
+    def test_both_jobs_preserve_human_description_and_pass_references_separately(self) -> None:
+        inputs = {
+            "ISSUE_KEY": "OTHER-999", "ISSUE_SUMMARY": "Documentation",
+            "ISSUE_DESCRIPTION": "# PM context\n[Link](https://example.invalid)\n  ",
+            "JIRA_EPIC_KEY": "APP-123", "JIRA_TASK_KEYS": " APP-124 , TEAM-125 ",
+        }
+        normal = self.serialize_ticket("Validate and serialize ticket inputs", inputs)
+        diagnostic = self.serialize_ticket("Serialize diagnostic ticket input", inputs)
+        self.assertEqual(normal, diagnostic)
+        self.assertEqual(inputs["ISSUE_DESCRIPTION"], normal["issue_description"])
+        self.assertEqual({"issue_key", "issue_summary", "issue_description"}, set(normal))
+        for flag in ('--jira-epic-key "${JIRA_EPIC_KEY}"', '--jira-task-keys "${JIRA_TASK_KEYS}"'):
+            self.assertEqual(2, self.workflow.count(flag))
+
+    def test_normal_serialization_rejects_incomplete_invalid_or_duplicate_references(self) -> None:
+        for epic, tasks in (("APP-1", ""), ("", "APP-2"), ("app-1", "APP-2"),
+                            ("APP-1", "APP-2,"), ("APP-1", "APP-2, APP-2")):
+            with self.subTest(epic=epic, tasks=tasks), self.assertRaises(SystemExit):
+                self.serialize_ticket("Validate and serialize ticket inputs", {
+                    "ISSUE_KEY": "DOC-999", "ISSUE_SUMMARY": "Documentation",
+                    "ISSUE_DESCRIPTION": "DOCUMENTATION_SOURCE_V1\nEPIC_KEY: APP-1\nTASK_KEYS:\n- APP-2\n",
+                    "JIRA_EPIC_KEY": epic, "JIRA_TASK_KEYS": tasks,
+                })
 
     def test_normal_serialization_still_requires_and_validates_description(self) -> None:
         for description in ("", " \n\t", "x" * 60_001, "bad\x00content"):

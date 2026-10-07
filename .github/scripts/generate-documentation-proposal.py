@@ -92,7 +92,7 @@ Transport = Callable[[str, str, dict[str, object], float], dict[str, object]]
 JiraTransport = Callable[[str, str, str, float], dict[str, object]]
 
 
-def load_ticket(path: Path) -> dict[str, str]:
+def load_ticket(path: Path, *, allow_empty_description: bool = False) -> dict[str, str]:
     try:
         value = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
@@ -100,7 +100,9 @@ def load_ticket(path: Path) -> dict[str, str]:
     expected = {"issue_key", "issue_summary", "issue_description"}
     if not isinstance(value, dict) or set(value) != expected:
         raise ProposalError("Ticket JSON must contain exactly the three expected fields")
-    if any(not isinstance(value[name], str) or not value[name].strip() for name in expected):
+    if any(not isinstance(value[name], str) or (
+        not value[name].strip() and not (allow_empty_description and name == "issue_description")
+    ) for name in expected):
         raise ProposalError("Ticket fields must be non-empty strings")
     if len(value["issue_description"]) > MAX_ISSUE_DESCRIPTION_CHARACTERS:
         raise ProposalError(
@@ -135,20 +137,31 @@ def parse_documentation_source_manifest(description: str) -> tuple[str, list[str
     return epic_key, task_keys
 
 
-def build_diagnostic_manifest(jira_epic_key: str, jira_task_keys: str) -> str:
-    """Validate single-line diagnostic inputs before any Jira credentials are needed."""
-    if not jira_epic_key.strip():
-        raise ProposalError("diagnose_only requires jira_epic_key")
+def parse_jira_source_inputs(jira_epic_key: str = "", jira_task_keys: str = "") -> tuple[str, list[str]] | None:
+    """Validate structured references without interpreting the human description."""
+    if not jira_epic_key and not jira_task_keys:
+        return None
+    if not jira_epic_key or not jira_task_keys:
+        raise ProposalError("jira_epic_key and jira_task_keys must be provided together")
     if JIRA_KEY.fullmatch(jira_epic_key) is None:
         raise ProposalError("jira_epic_key must be a single valid uppercase Jira key")
-    if not jira_task_keys.strip():
-        raise ProposalError("diagnose_only requires jira_task_keys")
     task_keys = [part.strip() for part in jira_task_keys.split(",")]
     for position, key in enumerate(task_keys, start=1):
         if not key:
             raise ProposalError(f"jira_task_keys contains an empty element at position {position}")
         if JIRA_KEY.fullmatch(key) is None:
             raise ProposalError(f"jira_task_keys element at position {position} must be a single valid uppercase Jira key")
+    if len(set(task_keys)) != len(task_keys):
+        raise ProposalError("jira_task_keys must not contain duplicate keys")
+    return jira_epic_key, task_keys
+
+
+def build_diagnostic_manifest(jira_epic_key: str, jira_task_keys: str) -> str:
+    """Compatibility helper; structured inputs use the same validation in both modes."""
+    source = parse_jira_source_inputs(jira_epic_key, jira_task_keys)
+    if source is None:
+        raise ProposalError("diagnose_only requires jira_epic_key and jira_task_keys")
+    jira_epic_key, task_keys = source
     manifest = (
         f"{DOCUMENTATION_SOURCE_MARKER}\nEPIC_KEY: {jira_epic_key}\nTASK_KEYS:\n"
         + "".join(f"- {key}\n" for key in task_keys)
@@ -334,8 +347,10 @@ def validated_jira_issue(issue: Mapping[str, object], expected_key: str) -> tupl
 def resolve_jira_source_with_diagnostics(
     ticket: dict[str, str], configuration: Mapping[str, str], transport: JiraTransport,
     timeout: float, *, require_manifest: bool = False,
+    jira_epic_key: str = "", jira_task_keys: str = "",
 ) -> tuple[dict[str, str], dict[str, object] | None]:
-    manifest = parse_documentation_source_manifest(ticket["issue_description"])
+    structured_source = parse_jira_source_inputs(jira_epic_key, jira_task_keys)
+    manifest = structured_source if structured_source is not None else parse_documentation_source_manifest(ticket["issue_description"])
     if manifest is None:
         if require_manifest:
             raise ProposalError("Jira context diagnosis requires DOCUMENTATION_SOURCE_V1")
@@ -350,6 +365,9 @@ def resolve_jira_source_with_diagnostics(
         raise ProposalError(f"Jira source {epic_key} is not an epic")
     epic_description, epic_diagnostics = convert_jira_description(epic_fields.get("description"), resolved_epic_key)
     sections = [f"Epic {resolved_epic_key}: {epic_summary}\n\n{epic_description}".rstrip()]
+    if structured_source is not None:
+        # Keep human text verbatim inside the existing untrusted ticket payload.
+        sections.insert(0, f"Documentation task {ticket['issue_key']}: {ticket['issue_summary']}\n\n{ticket['issue_description']}")
     task_diagnostics: list[dict[str, object]] = []
     for task_key in task_keys:
         task = jira_issue(base_url, task_key, email, token, request_timeout, transport)
@@ -387,9 +405,11 @@ def resolve_jira_source_with_diagnostics(
 def resolve_jira_source(
     ticket: dict[str, str], configuration: Mapping[str, str], transport: JiraTransport,
     timeout: float,
+    *, jira_epic_key: str = "", jira_task_keys: str = "",
 ) -> dict[str, str]:
     resolved, _ = resolve_jira_source_with_diagnostics(
         ticket, configuration, transport, timeout,
+        jira_epic_key=jira_epic_key, jira_task_keys=jira_task_keys,
     )
     return resolved
 
@@ -398,11 +418,14 @@ def diagnose_jira_context(
     ticket_file: Path, configuration: Mapping[str, str],
     jira_transport: JiraTransport = jira_http_transport, timeout: float = 120.0,
     *, repo_root: Path, prompt_file: Path, base_sha: str,
+    jira_epic_key: str = "", jira_task_keys: str = "",
 ) -> dict[str, object]:
+    structured_source = parse_jira_source_inputs(jira_epic_key, jira_task_keys)
     verify_head(repo_root, base_sha)
-    ticket = load_ticket(ticket_file)
+    ticket = load_ticket(ticket_file, allow_empty_description=structured_source is not None)
     resolved, diagnostics = resolve_jira_source_with_diagnostics(
         ticket, configuration, jira_transport, timeout, require_manifest=True,
+        jira_epic_key=jira_epic_key, jira_task_keys=jira_task_keys,
     )
     assert diagnostics is not None
     documents = read_documentation(repo_root)
@@ -969,7 +992,9 @@ def generate_and_apply(
     api_key: str, transport: Transport = http_transport, timeout: float = 120.0,
     base_sha: str | None = None, jira_configuration: Mapping[str, str] | None = None,
     jira_transport: JiraTransport = jira_http_transport,
+    jira_epic_key: str = "", jira_task_keys: str = "",
 ) -> dict[str, object]:
+    parse_jira_source_inputs(jira_epic_key, jira_task_keys)
     if not api_key:
         raise ProposalError("ANTHROPIC_API_KEY is not configured")
     verify_head(repo_root, base_sha)
@@ -977,6 +1002,7 @@ def generate_and_apply(
     ticket = resolve_jira_source(
         ticket, jira_configuration_from_environment() if jira_configuration is None else jira_configuration,
         jira_transport, timeout,
+        jira_epic_key=jira_epic_key, jira_task_keys=jira_task_keys,
     )
     documents = read_documentation(repo_root)
     trusted_prompt = read_prompt(prompt_file)
@@ -1001,6 +1027,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--timeout", type=float, default=120.0)
     parser.add_argument("--base-sha")
     parser.add_argument("--diagnose-jira-context", action="store_true")
+    parser.add_argument("--jira-epic-key", default="")
+    parser.add_argument("--jira-task-keys", default="")
     return parser
 
 
@@ -1020,6 +1048,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 configuration=jira_configuration_from_environment(),
                 timeout=args.timeout,
                 repo_root=args.repo_root, prompt_file=args.prompt_file, base_sha=args.base_sha,
+                jira_epic_key=args.jira_epic_key, jira_task_keys=args.jira_task_keys,
             )
             sys.stdout.write(json.dumps(diagnostics, ensure_ascii=False, sort_keys=True, separators=(",", ":")) + "\n")
             return 0 if diagnostics["contexts_match"] else 1
@@ -1029,6 +1058,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             repo_root=args.repo_root, ticket_file=args.ticket_file, prompt_file=args.prompt_file,
             report_file=args.agent_report, api_key=os.environ.get("ANTHROPIC_API_KEY", ""), timeout=args.timeout,
             base_sha=args.base_sha, jira_configuration=jira_configuration_from_environment(),
+            jira_epic_key=args.jira_epic_key, jira_task_keys=args.jira_task_keys,
         )
     except (ProposalError, OSError) as error:
         sys.stderr.write(f"Documentation proposal generation failed: {error}\n")

@@ -1,10 +1,10 @@
 ---
 article_id: ART-DOC-AGENT-001
 title: Flujo del agente de documentación
-version: 1.6
+version: 1.7
 status: published
 owner: Product
-last_reviewed: 2026-10-06
+last_reviewed: 2026-10-07
 ---
 
 # Flujo del agente de documentación
@@ -31,7 +31,27 @@ flowchart TD
 
 ## Obtención del contexto de Jira
 
-Las tareas funcionales relevantes llevan la etiqueta `documentation-required` y se completan en **Done**. Al añadir `documentation-scope-ready` a la épica, Jira crea una sola tarea documental con `documentation-task`. Su descripción es corta y contiene únicamente este manifiesto:
+Las tareas funcionales relevantes llevan la etiqueta `documentation-required` y se completan en **Done**. Al añadir `documentation-scope-ready` a la épica, Jira crea una sola tarea documental con `documentation-task`. El proyecto documental puede centralizar solicitudes de distintos proyectos y equipos: la tarea documental no necesita ser hija de la épica ni compartir su prefijo.
+
+El flujo normal acepta `jira_epic_key` y `jira_task_keys` como referencias estructuradas, dejando `issue_description` libre para títulos, enlaces y contexto de los PM. Ejemplo de payload de `workflow_dispatch`:
+
+```json
+{
+  "ref": "main",
+  "inputs": {
+    "issue_key": "DOC-999",
+    "issue_summary": "Documentar las invitaciones",
+    "issue_description": "# Contexto para PM\nRevisar invitaciones y permisos.\n[Diseño](https://example.invalid/diseno)",
+    "jira_epic_key": "APP-123",
+    "jira_task_keys": "APP-124, TEAM-125",
+    "diagnose_only": "false"
+  }
+}
+```
+
+Ambos inputs deben llegar juntos. La épica debe ser una única clave; las tareas se separan por comas, aceptando espacios alrededor de ellas. Se rechazan elementos vacíos, claves inválidas y duplicados antes de consultar Jira o Claude. El contrato de claves es `[A-Z][A-Z0-9]*(?:-[A-Z0-9]+)*-[1-9][0-9]*`; no se recortan espacios alrededor de la clave de épica. Un input estructurado inválido nunca activa el parser del manifiesto como alternativa.
+
+Sin ninguno de los dos inputs, se conserva el mecanismo anterior: la descripción puede contener únicamente este manifiesto estricto:
 
 ```yaml
 DOCUMENTATION_SOURCE_V1
@@ -41,7 +61,11 @@ TASK_KEYS:
 - DOC-125
 ```
 
-Cuando la tarea documental pasa a **In Progress**, el workflow recupera desde Jira Cloud la épica y las tareas del manifiesto. Antes de usar el contenido, comprueba que la fuente principal es una épica y que cada tarea es hija directa, conserva `documentation-required` y pertenece a la categoría Done. Convierte las descripciones ADF a texto Markdown legible y construye el contexto en el orden épica y tareas, siempre con su clave y resumen.
+Cuando la tarea documental pasa a **In Progress**, el workflow recupera desde Jira Cloud la épica y las tareas de las referencias estructuradas o del manifiesto. Antes de usar el contenido, comprueba que la fuente principal es una épica y que cada tarea funcional es hija directa, conserva `documentation-required` y pertenece a la categoría Done. Las claves pueden tener prefijos diferentes; la relación se valida con el campo `parent` de Jira, sin consultar ni exigir parentesco a la tarea documental.
+
+En modo estructurado, `ticket.issue_description` se compone en este orden: `Documentation task CLAVE: RESUMEN`, dos saltos de línea y la descripción humana original sin recortar; después `Epic CLAVE: RESUMEN` y la descripción completa de la épica convertida de ADF; después cada sección `Task CLAVE: RESUMEN` y su descripción completa convertida, en el orden de los inputs. Las secciones se unen con dos saltos de línea. Las secciones recuperadas de Jira mantienen la conversión existente y eliminan únicamente espacios exteriores. Todo el contexto, incluidos títulos, separadores y texto humano, tiene un límite de 60.000 caracteres; si se supera, falla sin truncar y antes de preparar la petición. En modo manifiesto, se conserva exactamente la composición anterior de épica y tareas, sin añadir el manifiesto como contexto humano.
+
+El contexto permanece dentro del ticket no confiable que recibe `build_request`, con las instrucciones de seguridad existentes. El JSON del ticket conserva exactamente `issue_key`, `issue_summary` e `issue_description`: las referencias se validan por separado y llegan al generador mediante `--jira-epic-key` y `--jira-task-keys`. Los consumidores de publicación y notificación siguen recibiendo el ticket original de tres campos.
 
 Los nodos `codeBlock` se convierten en bloques Markdown delimitados, concatenando sus nodos `text` en orden y conservando literalmente el contenido, los saltos de línea y los espacios. El delimitador usa más backticks que cualquier secuencia del contenido para conservar también Markdown pegado dentro del bloque. Este texto se trata como evidencia y no se ejecuta ni se interpreta como instrucciones operativas.
 
@@ -62,17 +86,17 @@ El workflow **Documentation agent PoC** permite comprobar desde **Actions > Run 
    |---|---|---|
    | `issue_key` | Clave de la tarea documental, por ejemplo `DOC-999`; obligatorio | Obligatorio, sin cambios |
    | `issue_summary` | Resumen de la tarea documental; obligatorio | Obligatorio, sin cambios |
-   | `issue_description` | Puede dejarse vacío; el diagnóstico lo sustituye internamente por el manifiesto | Obligatorio por validación del job, aunque el formulario lo muestre opcional; conserva el límite de 60.000 caracteres y las validaciones de texto |
-   | `jira_epic_key` | Una clave de épica, por ejemplo `DOC-123`; obligatorio cuando `diagnose_only=true` | Opcional e ignorado |
-   | `jira_task_keys` | Claves separadas por comas, por ejemplo `DOC-124, DOC-125`; obligatorio cuando `diagnose_only=true` | Opcional e ignorado |
-   | `diagnose_only` | `true` | `false` por defecto; Jira Automation conserva sus inputs y payload actuales |
+   | `issue_description` | Contexto humano conservado completo; puede dejarse vacío si solo se quiere diagnosticar las fuentes | Obligatorio por validación del job, aunque el formulario lo muestre opcional; conserva el límite de 60.000 caracteres y las validaciones de texto |
+   | `jira_epic_key` | Una clave de épica, por ejemplo `APP-123`; obligatorio cuando `diagnose_only=true` | Opcional, junto con `jira_task_keys` activa el modo estructurado |
+   | `jira_task_keys` | Claves separadas por comas, por ejemplo `APP-124, TEAM-125`; obligatorio cuando `diagnose_only=true` | Opcional, junto con `jira_epic_key` activa el modo estructurado |
+   | `diagnose_only` | `true` | `false` por defecto; los payloads antiguos sin referencias siguen siendo compatibles |
 
-3. El paso **Serialize diagnostic ticket input** separa `jira_task_keys` por comas y recorta los espacios exteriores de cada elemento. Rechaza campos ausentes, elementos vacíos —incluidas comas iniciales, finales o consecutivas—, claves inválidas y texto adicional antes de exponer credenciales o consultar Jira. Las claves usan exactamente el contrato existente: `[A-Z][A-Z0-9]*(?:-[A-Z0-9]+)*-[1-9][0-9]*`. Construye `DOCUMENTATION_SOURCE_V1` con saltos de línea reales y lo pasa por el parser estricto existente; las claves de tarea repetidas se resuelven una sola vez, conservando el orden.
-4. El paso **Diagnose validated Jira context in the prepared request** recibe únicamente los tres secretos Jira indicados arriba. Consulta y valida la épica y las tareas hijas directas con las mismas funciones del flujo normal: tipo Epic, relación con la épica, etiqueta `documentation-required` y categoría Done. Convierte las descripciones ADF a Markdown y consolida el contexto completo en orden épica/tareas, sin truncarlo. Si supera 60.000 caracteres, falla antes de construir la petición.
+3. El paso **Serialize diagnostic ticket input** valida las referencias con `parse_jira_source_inputs`, igual que el flujo normal. Rechaza campos ausentes, elementos vacíos —incluidas comas iniciales, finales o consecutivas—, claves inválidas, duplicados y texto adicional antes de exponer credenciales o consultar Jira. Conserva la descripción humana en el ticket temporal, sin construir un manifiesto. Para comparar una ejecución normal, usar los mismos inputs, incluida la descripción.
+4. El paso **Diagnose validated Jira context in the prepared request** recibe únicamente los tres secretos Jira indicados arriba. Consulta y valida la épica y las tareas hijas directas con las mismas funciones del flujo normal: tipo Epic, relación con la épica, etiqueta `documentation-required` y categoría Done. Convierte las descripciones ADF a Markdown y usa la misma composición de contexto humano, épica y tareas, sin truncarlo. Si el conjunto supera 60.000 caracteres, falla antes de construir la petición.
 5. Lee `.github/prompts/documentation-agent-poc.md` y los documentos bajo `docs/` mediante las mismas funciones del flujo normal. Usa `build_request` con el mismo modelo, `max_tokens` y contrato. Deserializa el JSON del mensaje de usuario y compara exactamente `ticket.issue_description` con el contexto Jira consolidado.
 6. Consultar el JSON del paso de diagnóstico en los logs. `contexts_match=true` confirma la coincidencia exacta. Si hay discrepancia, publica las métricas seguras con `contexts_match=false` y el paso termina con código de error. Un fallo de inputs, consulta, validación, lectura o SHA detiene el diagnóstico sin publicar el payload.
 
-El job tiene únicamente `contents: read`, no persiste credenciales de Git y no recibe ni lee `ANTHROPIC_API_KEY`. Lee los inputs desde el archivo local del evento (`GITHUB_EVENT_PATH`), evitando que Actions muestre el resumen o la descripción como variables de entorno del paso. No llama al transporte HTTP de Claude ni ejecuta `generate_and_apply`. Tampoco modifica documentos, crea ramas, commits o PRs, ni envía notificaciones a Jira o Slack. Solo serializa el ticket con el manifiesto en el directorio temporal del runner; la petición completa permanece en memoria. No publica artefactos.
+El job tiene únicamente `contents: read`, no persiste credenciales de Git y no recibe ni lee `ANTHROPIC_API_KEY`. Lee los inputs desde el archivo local del evento (`GITHUB_EVENT_PATH`), evitando que Actions muestre el resumen o la descripción como variables de entorno del paso. No llama al transporte HTTP de Claude ni ejecuta `generate_and_apply`. Tampoco modifica documentos, crea ramas, commits o PRs, ni envía notificaciones a Jira o Slack. Solo serializa el ticket original en el directorio temporal del runner; la petición completa permanece en memoria. No publica artefactos.
 
 El informe usa listas explícitas de campos permitidos, también para los objetos anidados:
 

@@ -993,7 +993,7 @@ class JiraSourceManifestTests(unittest.TestCase):
 
     def test_diagnostic_manifest_uses_the_existing_strict_key_contract(self) -> None:
         self.assertEqual(self.manifest, GENERATOR.build_diagnostic_manifest("DOC-123", " DOC-124 , DOC-125 "))
-        manifest = GENERATOR.build_diagnostic_manifest("A2-OPS-123", "A2-OPS-124,A2-OPS-124,A2-OPS-125")
+        manifest = GENERATOR.build_diagnostic_manifest("A2-OPS-123", "A2-OPS-124,A2-OPS-125")
         self.assertEqual(("A2-OPS-123", ["A2-OPS-124", "A2-OPS-125"]), GENERATOR.parse_documentation_source_manifest(manifest))
 
     def test_invalid_diagnostic_keys_fail_before_jira(self) -> None:
@@ -1202,6 +1202,148 @@ class JiraSourceManifestTests(unittest.TestCase):
         manifest = self.manifest.replace("- DOC-125", "- DOC-124\n- DOC-125\n- DOC-124")
         GENERATOR.resolve_jira_source({"issue_key": "DOC-999", "issue_summary": "Documentation", "issue_description": manifest}, self.configuration, transport, 30)
         self.assertEqual(["DOC-123", "DOC-124", "DOC-125"], calls)
+
+    def test_structured_inputs_validate_before_any_jira_or_claude_call(self) -> None:
+        cases = [
+            ("DOC-123", ""), ("", "DOC-124"), (" ", "DOC-124"),
+            ("doc-123", "DOC-124"), ("DOC-123,DOC-456", "DOC-124"),
+            ("DOC-0", "DOC-124"), ("DOC-123", "doc-124"),
+            ("DOC-123", "DOC-0124"), ("DOC-123", "DOC-124,"),
+            ("DOC-123", ",DOC-124"), ("DOC-123", "DOC-124, ,DOC-125"),
+            ("DOC-123", "DOC-124, DOC-124"), ("DOC-123", "DOC-124\nPRIVATE_INPUT"),
+        ]
+        with tempfile.TemporaryDirectory() as temporary:
+            root, ticket_file, prompt_file = self.diagnostic_files(temporary)
+            for epic, tasks in cases:
+                for mode in ("normal", "diagnostic"):
+                    jira, claude = mock.Mock(), mock.Mock()
+                    with self.subTest(epic=epic, tasks=tasks, mode=mode), \
+                         mock.patch.object(GENERATOR, "verify_head"), \
+                         self.assertRaises(GENERATOR.ProposalError) as raised:
+                        if mode == "normal":
+                            GENERATOR.generate_and_apply(
+                                root, ticket_file, prompt_file, root / "report.json", "fake-key", claude,
+                                jira_configuration=self.configuration, jira_transport=jira,
+                                jira_epic_key=epic, jira_task_keys=tasks,
+                            )
+                        else:
+                            GENERATOR.diagnose_jira_context(
+                                ticket_file, self.configuration, jira, repo_root=root,
+                                prompt_file=prompt_file, base_sha="a" * 40,
+                                jira_epic_key=epic, jira_task_keys=tasks,
+                            )
+                    jira.assert_not_called()
+                    claude.assert_not_called()
+                    self.assertNotIn("PRIVATE_INPUT", str(raised.exception))
+
+    def test_structured_cross_project_context_matches_normal_and_diagnostic_request(self) -> None:
+        human = "  # Solicitud PM\n[Referencia](https://example.invalid)\nDOCUMENTATION_SOURCE_V1\ntexto libre\n  "
+        sources = {
+            "APP-10": self.issue("APP-10", "Product epic", issue_type="Epic", parent=None),
+            "TEAM-20": self.issue("TEAM-20", "Team task", parent="APP-10", description={
+                "type": "doc", "content": [{"type": "codeBlock", "content": [
+                    {"type": "text", "text": "\n  ```evidence```\n  "},
+                ]}],
+            }),
+            "APP-21": self.issue("APP-21", "Product task", parent="APP-10"),
+        }
+        references = {"jira_epic_key": "APP-10", "jira_task_keys": " TEAM-20 , APP-21 "}
+        proposal = {"decision": "abstention", "summary": "Test", "reason": "Test", "evidence": "Test", "documents": []}
+        claude = mock.Mock(return_value={"content": [{"type": "text", "text": json.dumps(proposal)}]})
+        with tempfile.TemporaryDirectory() as temporary:
+            root, ticket_file, prompt_file = self.diagnostic_files(temporary)
+            ticket = {"issue_key": "DOC-999", "issue_summary": "Documentation", "issue_description": human}
+            ticket_file.write_text(json.dumps(ticket), encoding="utf-8")
+            jira, calls = self.source_transport(sources)
+            with mock.patch.object(GENERATOR, "verify_head"), \
+                 mock.patch.object(GENERATOR.urllib.request, "urlopen", side_effect=AssertionError("Real HTTP forbidden")), \
+                 mock.patch.object(GENERATOR, "build_request", wraps=GENERATOR.build_request) as build:
+                GENERATOR.generate_and_apply(
+                    root, ticket_file, prompt_file, root / "report.json", "fake-key", claude,
+                    jira_configuration=self.configuration, jira_transport=jira, **references,
+                )
+                report = GENERATOR.diagnose_jira_context(
+                    ticket_file, self.configuration, jira, repo_root=root, prompt_file=prompt_file,
+                    base_sha="a" * 40, **references,
+                )
+            self.assertEqual(["APP-10", "TEAM-20", "APP-21"] * 2, calls)
+            self.assertEqual(build.call_args_list[0], build.call_args_list[1])
+            request = claude.call_args.args[2]
+            context = json.loads(request["messages"][0]["content"])["ticket"]["issue_description"]
+            self.assertEqual(
+                f"Documentation task DOC-999: Documentation\n\n{human}\n\n"
+                "Epic APP-10: Product epic\n\nProduct epic\n\n"
+                "Task TEAM-20: Team task\n\n````\n\n  ```evidence```\n  \n````\n\n"
+                "Task APP-21: Product task\n\nProduct task", context,
+            )
+            self.assertTrue(report["contexts_match"])
+            self.assertEqual({"characters": len(context), "sha256": GENERATOR.sha256_text(context)}, report["context"])
+            self.assertEqual(report["context"], report["request_context"])
+            self.assertNotIn(human, json.dumps(report))
+            self.assertNotIn("evidence", json.dumps(report))
+            self.assertEqual(ticket, GENERATOR.load_ticket(ticket_file))
+            claude.assert_called_once()
+
+    def test_structured_context_limit_includes_human_text_and_section_headers(self) -> None:
+        references = {"jira_epic_key": "DOC-123", "jira_task_keys": "DOC-124,DOC-125"}
+        jira, _ = self.source_transport()
+        ticket = {"issue_key": "OTHER-999", "issue_summary": "Documentation", "issue_description": "x"}
+        resolved = GENERATOR.resolve_jira_source(ticket, self.configuration, jira, 30, **references)
+        overhead = len(resolved["issue_description"]) - 1
+        for length in (60_000 - overhead, 60_001 - overhead):
+            with self.subTest(length=length), tempfile.TemporaryDirectory() as temporary:
+                root, ticket_file, prompt_file = self.diagnostic_files(temporary)
+                ticket["issue_description"] = "x" * length
+                ticket_file.write_text(json.dumps(ticket), encoding="utf-8")
+                claude = mock.Mock(return_value={"content": [{"type": "text", "text": json.dumps({
+                    "decision": "abstention", "summary": "Test", "reason": "Test", "evidence": "Test", "documents": [],
+                })}]})
+                with mock.patch.object(GENERATOR, "verify_head"):
+                    if length + overhead == 60_000:
+                        GENERATOR.generate_and_apply(root, ticket_file, prompt_file, root / "report", "fake", claude,
+                            jira_configuration=self.configuration, jira_transport=jira, **references)
+                        report = GENERATOR.diagnose_jira_context(ticket_file, self.configuration, jira,
+                            repo_root=root, prompt_file=prompt_file, base_sha="a" * 40, **references)
+                        context = json.loads(claude.call_args.args[2]["messages"][0]["content"])["ticket"]["issue_description"]
+                        self.assertEqual(60_000, len(context))
+                        self.assertIn(ticket["issue_description"], context)
+                        self.assertEqual(60_000, report["context"]["characters"])
+                    else:
+                        with self.assertRaisesRegex(GENERATOR.ProposalError, "Consolidated Jira source exceeds"):
+                            GENERATOR.generate_and_apply(root, ticket_file, prompt_file, root / "report", "fake", claude,
+                                jira_configuration=self.configuration, jira_transport=jira, **references)
+                        with self.assertRaisesRegex(GENERATOR.ProposalError, "Consolidated Jira source exceeds"):
+                            GENERATOR.diagnose_jira_context(ticket_file, self.configuration, jira,
+                                repo_root=root, prompt_file=prompt_file, base_sha="a" * 40, **references)
+                        claude.assert_not_called()
+
+    def test_structured_sources_reuse_all_jira_business_validations(self) -> None:
+        for overrides in (
+            {"DOC-123": self.issue("DOC-123", "Not epic")},
+            {"DOC-124": self.issue("DOC-124", "Wrong parent", parent="DOC-777")},
+            {"DOC-124": self.issue("DOC-124", "Not done", done=False)},
+            {"DOC-124": self.issue("DOC-124", "No label", labels=[])},
+        ):
+            with self.subTest(overrides=overrides):
+                jira, _ = self.source_transport(overrides)
+                with self.assertRaises(GENERATOR.ProposalError):
+                    GENERATOR.resolve_jira_source({"issue_key": "OTHER-999", "issue_summary": "Docs", "issue_description": "Human"},
+                        self.configuration, jira, 30, jira_epic_key="DOC-123", jira_task_keys="DOC-124")
+
+    def test_structured_diagnosis_without_human_description_remains_available(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root, ticket_file, prompt_file = self.diagnostic_files(temporary)
+            ticket = {"issue_key": "DOC-999", "issue_summary": "Docs", "issue_description": ""}
+            ticket_file.write_text(json.dumps(ticket), encoding="utf-8")
+            jira, calls = self.source_transport()
+            with mock.patch.object(GENERATOR, "verify_head"):
+                report = GENERATOR.diagnose_jira_context(ticket_file, self.configuration, jira,
+                    repo_root=root, prompt_file=prompt_file, base_sha="a" * 40,
+                    jira_epic_key="DOC-123", jira_task_keys="DOC-124,DOC-125")
+            self.assertTrue(report["contexts_match"])
+            self.assertEqual(["DOC-123", "DOC-124", "DOC-125"], calls)
+            with self.assertRaisesRegex(GENERATOR.ProposalError, "non-empty strings"):
+                GENERATOR.load_ticket(ticket_file)
 
     def test_invalid_manifest_never_falls_back(self) -> None:
         with self.assertRaisesRegex(GENERATOR.ProposalError, "Invalid DOCUMENTATION_SOURCE_V1"):
