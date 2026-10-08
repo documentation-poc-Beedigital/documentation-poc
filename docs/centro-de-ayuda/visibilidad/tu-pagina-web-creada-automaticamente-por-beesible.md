@@ -1,31 +1,32 @@
 ---
 article_id: GITHUB-D1B5E885F01DFAFF83BB80DA9D99BA8A
-title: "Tu página web creada automáticamente por Beesible"
+title: "Tu página web creada automáticamente por Beelma"
 version: 1.0
 ---
-# <HelpIcon name="google" /> Tu página web creada automáticamente por Beesible
+# <HelpIcon name="google" /> Tu página web creada automáticamente por Beelma
 
-Beesible crea automáticamente la web de tu negocio a partir de la información de tu Perfil de Empresa en Google, sin que tengas que solicitarlo. Solo tienes que revisarla, elegir tu dominio y publicarla.
+[Beelma](../beelma/que-es-beelma-y-como-empezar-a-usarla.md) crea automáticamente la web de tu negocio a partir de la información de tu Perfil de Empresa en Google. Solo tienes que revisarla, elegir tu dominio y publicarla desde Beesible.
 
-En esta guía verás qué hace Beesible por ti, dónde encontrar tu web y cómo revisarla y publicarla.
+En esta guía verás qué hace Beelma por ti, dónde encontrar tu web y cómo revisarla y publicarla.
 
 ---
 
 ### Qué necesitas antes de empezar
 
-- Tener conectado tu Perfil de Empresa en Google y haber completado la coadministración. Si aún no lo has conectado, sigue la guía [Cómo conectar tu Perfil de Google](../perfil-de-empresa-en-google/como-conectar-tu-perfil-de-google.md).
+- Conectar tu Perfil de Empresa en Google con Beesible para autorizarnos a publicar en él. Si aún no lo has conectado, sigue la guía [Cómo conectar tu Perfil de Google](../perfil-de-empresa-en-google/como-conectar-tu-perfil-de-google.md).
+- Si no tienes un Perfil de Empresa en Google o no sabes qué es, consulta [Crear un Perfil de Empresa en Google](../perfil-de-empresa-en-google/crear-un-perfil-de-empresa-en-google.md).
 
 ---
 
-### Qué hace Beesible por ti
+### Qué hace Beelma por ti
 
-Al terminar de conectar tu Perfil de Empresa en Google, Beesible empieza a crear tu web automáticamente. Mientras la prepara, verás el mensaje **«He creado una página web. Generando...»**.
+Cuando conectas tu Perfil de Empresa en Google con Beesible, Beelma empieza a crear tu web automáticamente. Mientras la prepara, verás el mensaje **«He creado una página web. Generando...»**.
 
 Cuando la web está lista, aparece una tarjeta en **Acciones** con el título «He creado una página web».
 
 #### De dónde sale la información de tu web
 
-La web usa los datos de tu Perfil de Empresa en Google. Beesible redacta los textos que faltan y crea las imágenes.
+La web usa los datos de tu Perfil de Empresa en Google. Beelma redacta los textos que faltan y crea las imágenes.
 
 #### Qué incluye tu web
 
@@ -41,7 +42,7 @@ Las secciones sin datos no se muestran. Cuanto más completo esté tu Perfil de 
 ### Cómo revisar tu web, elegir el dominio y publicarla
 
 1. En **Acciones**, localiza la tarjeta «He creado una página web» y pulsa **Ver** para abrir la vista previa. También puedes acceder desde **Visibilidad** → **Web**.
-2. Pulsa **Elegir dominio**, escribe el nombre del dominio y su extensión (por ejemplo, «tunegocio.es») y pulsa **Buscar**. Si el dominio no está disponible, Beesible te propondrá alternativas.
+2. Pulsa **Elegir dominio**, escribe el nombre del dominio y su extensión (por ejemplo, «tunegocio.es») y pulsa **Buscar**. Si el dominio no está disponible, Beelma te propondrá alternativas.
 3. Pulsa **Activar dominio** y confirma con **¡Sí, activar!**.
 
    :::note
@@ -49,11 +50,7 @@ Las secciones sin datos no se muestran. Cuanto más completo esté tu Perfil de 
 
    Una vez activado, no podrás cambiar el dominio. Activarlo equivale a comprarlo, pero no tendrás que pagar nada.
    :::
-4. Pulsa **Editar mi página web**. Se abrirá el editor en otra pestaña.
-5. Revisa los textos, las imágenes, los servicios, los precios, los datos de contacto y los datos legales. Los cambios se guardan automáticamente.
-6. Cuando todo esté bien, pulsa **Publicar** en el editor.
-
-Editar no es lo mismo que publicar: los cambios se guardan automáticamente y puedes verlos en tiempo real en el editor, pero no aparecerán en tu web pública hasta que pulses **Publicar**.
+4. Cuando todo esté listo, pulsa **Publicar** desde Beesible.
 
 ---
 
@@ -67,13 +64,13 @@ Editar no es lo mismo que publicar: los cambios se guardan automáticamente y pu
 
 ### Tu web se mantiene al día
 
-Si cambias el nombre, la categoría, la dirección, las zonas, el teléfono o el horario de tu Perfil de Empresa en Google, Beesible actualiza la web.
+Si cambias el nombre, la categoría, la dirección, las zonas, el teléfono o el horario de tu Perfil de Empresa en Google, Beelma actualiza la web.
 
 ---
 
 ### Si algo no funciona
 
-Si después de 24 horas tu web no aparece, no se ha actualizado o muestra un error, contacta con nuestro equipo de soporte.
+Si después de 24 horas tu web no aparece publicada en internet, no se ha actualizado o muestra un error, contacta con nuestro equipo de soporte.
 
 Para hacerlo, abre **Mi cuenta** desde tu avatar, entra en **Centro de ayuda** y completa el formulario de contacto. Consulta todos los pasos en [Contactar con soporte](../cuenta-y-facturacion/contactar-con-soporte.md).
 
