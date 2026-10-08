@@ -21,7 +21,7 @@ Las respuestas automáticas responden todas tus reseñas sin que dediques tiempo
 1. Ve a **Reputación** desde el menú lateral.
 2. Haz clic en el botón **Respuestas con Beelma**.
 3. En el apartado “**Configurar respuestas con IA**”, haz clic en el botón **Editar** para comenzar la configuración.
-4. Elige si quieres configurar respuestas automáticas a reseñas que **incluyan o no  comentario del cliente** para cada una de las siguientes tipologías:
+4. Elige si quieres configurar respuestas automáticas a reseñas que **incluyan o no comentario del cliente** para cada una de las siguientes tipologías:
     - 1 y 2 estrellas
     - 3 estrellas
     - 4 y 5 estrellas
@@ -32,7 +32,7 @@ Las respuestas automáticas responden todas tus reseñas sin que dediques tiempo
 
 ### <HelpIcon name="beelma" />  Para probar cómo responderá Beelma:
 
-1. Busca el apartado “**Prueba cómo responde nuestra IA**.”
+1. Busca el apartado “**Prueba cómo responde nuestra IA**”.
 2. Elige una **tipología de reseña**:
     - 1 y 2 estrellas
     - 3 estrellas

@@ -30,7 +30,7 @@ Desde la plataforma, puedes **compartir fácilmente un enlace por WhatsApp** y a
 
     ✏️ *“¡Gracias por tu visita! ¿Nos dejas una reseña? Tu opinión es muy importante para nosotros 🙌👇”*
 
-6. **Elige los clientes** con los que deseas compartir el mensaje, y **envíalo** directamente desde WhatsApp.
+6. **Elige los clientes** con los que deseas compartir el mensaje y **envíalo** directamente desde WhatsApp.
 
 ---
 

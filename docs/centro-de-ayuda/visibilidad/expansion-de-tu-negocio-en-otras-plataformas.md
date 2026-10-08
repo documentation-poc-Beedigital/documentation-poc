@@ -20,7 +20,7 @@ Es una parte clave para mantener tu información actualizada y coherente en inte
 
 ### <HelpIcon name="google" />  Cómo consultar el estado de tu negocio en internet:
 
-1. Ve a “**Visibilidad**” en el menú lateral y accede a la sección “**Google**”
+1. Ve a “**Visibilidad**” en el menú lateral y accede a la sección “**Google**”.
 2. En el apartado “**Expansión**”, verás un mensaje informativo que explica cómo se está distribuyendo la información de tu negocio en distintas plataformas digitales, junto con el **estado actual de cada una de ellas:**
     - **Sincronizado:** la plataforma está correctamente sincronizada y lista para mostrar la información de tu negocio.
     - **Publicando:** la conexión está en proceso y tu información se está actualizando en esa plataforma.
@@ -40,7 +40,7 @@ Es una parte clave para mantener tu información actualizada y coherente en inte
 ### <HelpIcon name="recommendations" />  Recomendaciones:
 
 - **Conectar redes manualmente:** Vincula cuanto antes las plataformas que lo requieran (como Facebook).
-- **Resolver desconexiones:** Si alguna red lleva mucho tiempo sin conexión, revisa o [**contacta con soporte.**](../cuenta-y-facturacion/contactar-con-soporte.md)
+- **Resolver desconexiones:** Si alguna red lleva mucho tiempo sin conexión, revisa o [**contacta con soporte**](../cuenta-y-facturacion/contactar-con-soporte.md).
 - **Comprobar fichas públicas:** Usa los enlaces visibles para revisar cómo se muestra tu negocio y corregir errores.
 - **Actualizar perfil:** Mantén la información al día para que los cambios se sincronicen en todas las redes.
 

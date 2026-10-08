@@ -18,9 +18,9 @@ Así puedes mantener actualizados tu **contacto, ubicación y horarios**, gestio
 
 ### <HelpIcon name="steps" />  Pasos para editar los datos de tu negocio:
 
-1. Ve a “**Visibilidad**” en el menú lateral y accede a la sección “**Google**”
+1. Ve a “**Visibilidad**” en el menú lateral y accede a la sección “**Google**”.
 2. Para comprobar cómo se ve tu negocio en Google, haz clic en “**Ver en Google**”.
-3. Para editar los datos de tu negocio, haz clic en “**Editar datos de mi negocio**”
+3. Para editar los datos de tu negocio, haz clic en “**Editar datos de mi negocio**”.
 4. Aquí verás los distintos apartados que puedes editar:
     - **Información**
     - **Contacto**
@@ -42,7 +42,7 @@ Pulsa “**Editar**” para:
 :::note
 <HelpIcon name="warning" />  **Importante:**
 
-Modificar la información general puede suspender tu perfil de empresa en Google si el cambio no cumple con sus [**directrices de nombre, categoría y descripción de empresa.**](https://support.google.com/business/answer/3038177?hl=es#zippy=%2Cnombre)
+Modificar la información general puede suspender tu perfil de empresa en Google si el cambio no cumple con sus [**directrices de nombre, categoría y descripción de empresa**](https://support.google.com/business/answer/3038177?hl=es#zippy=%2Cnombre).
 :::
 
 ### Contacto
@@ -56,7 +56,7 @@ Pulsa “**Editar**” para:
 :::note
 <HelpIcon name="warning" />  **Importante:**
 
-Modificar la información de contacto puede suspender tu perfil de empresa en Google si el cambio no cumple con sus [**directrices de contacto.**](https://support.google.com/business/answer/3038177?hl=es#zippy=%2Csitio-web-y-tel%C3%A9fono)
+Modificar la información de contacto puede suspender tu perfil de empresa en Google si el cambio no cumple con sus [**directrices de contacto**](https://support.google.com/business/answer/3038177?hl=es#zippy=%2Csitio-web-y-tel%C3%A9fono).
 :::
 
 ### Ubicación
@@ -68,12 +68,12 @@ Modificar la información de contacto puede suspender tu perfil de empresa en Go
 :::note
 <HelpIcon name="warning" />  **Importante:**
 
-Modificar la dirección puede suspender tu perfil de empresa en Google si el cambio no cumple con sus [**directrices de ubicación.](https://support.google.com/business/answer/3038177?hl=es#zippy=%2Cdirecci%C3%B3n)**
+Modificar la dirección puede suspender tu perfil de empresa en Google si el cambio no cumple con sus [**directrices de ubicación**](https://support.google.com/business/answer/3038177?hl=es#zippy=%2Cdirecci%C3%B3n).
 :::
 
 ### Horarios
 
-- Pulsa **“Editar”** para modificar tu horario existente, o **“Añadir”** si aún no has establecido ninguno.
+- Pulsa **“Editar”** para modificar tu horario existente o **“Añadir”** si aún no has establecido ninguno.
 - Selecciona los días de la semana y la hora de apertura y cierre.
 - Marca **“Abierto 24h”** si corresponde.
 - Si tu horario no es continuo, pulsa **“Añadir franja horaria”** para establecer varios rangos en un mismo día, por ejemplo, de **9:00 a 14:00** y de **17:00 a 20:00**.
@@ -84,26 +84,26 @@ Modificar la dirección puede suspender tu perfil de empresa en Google si el cam
 :::note
 <HelpIcon name="warning" />  **Importante:**
 
-Modificar los horarios puede suspender tu perfil de empresa en Google si el cambio no cumple con sus [**directrices de horarios de apertura.](https://support.google.com/business/answer/3038177?hl=es#zippy=%2Chorario-de-apertura)**
+Modificar los horarios puede suspender tu perfil de empresa en Google si el cambio no cumple con sus [**directrices de horarios de apertura**](https://support.google.com/business/answer/3038177?hl=es#zippy=%2Chorario-de-apertura).
 :::
 
 ### Logotipo
 
-- Pulsa **“Editar”** para modificar tu logotipo existente, o **“Añadir”** si aún no has subido ninguno.
+- Pulsa **“Editar”** para modificar tu logotipo existente o **“Añadir”** si aún no has subido ninguno.
 - Para eliminar el logotipo actual, haz clic en el **icono de basura** y confirma en el cuadro de diálogo.
 - Para subir un nuevo logotipo, utiliza la funcionalidad **“Subir imagen”** y revisa las instrucciones de formatos, dimensiones y tamaños óptimos.
 - Pulsa **“Guardar cambios”** para que se apliquen todas las modificaciones.
 
 ### Fotos
 
-- Pulsa **“Editar”** para modificar tus fotos existentes, o **“Añadir”** si aún no has subido ninguna.
+- Pulsa **“Editar”** para modificar tus fotos existentes o **“Añadir”** si aún no has subido ninguna.
 - Para eliminar una foto, haz clic en el **icono de basura** y confirma en el cuadro de diálogo.
 - Para añadir más fotos, pulsa **“Subir imágenes”** y selecciona las que quieras incluir.
 - Pulsa **“Guardar cambios”** para que se apliquen todas las modificaciones.
 
 ### Más información (Atributos)
 
-- Pulsa **“Editar”** para modificar los atributos existentes, o **“Añadir”** si aún no has incluido ninguno.
+- Pulsa **“Editar”** para modificar los atributos existentes o **“Añadir”** si aún no has incluido ninguno.
 - Usa el desplegable **“Añadir más información”** para seleccionar los atributos que quieras mostrar.
 - Para cada atributo, selecciona **“Sí”** o **“No”**. Esto **determina si ofreces o no ese servicio**.
     - Si marcas **“Sí”**, el atributo aparecerá en tu perfil indicando que ofreces el servicio.
@@ -114,8 +114,8 @@ Modificar los horarios puede suspender tu perfil de empresa en Google si el camb
 :::note
 <HelpIcon name="warning" />  **Importante:**
 
-- Todos los cambios que realices en esta sección, se actualizarán automáticamente en tu perfil de Google y en todas las plataformas conectadas que se muestran en el apartado **“[Expansión](expansion-de-tu-negocio-en-otras-plataformas.md)”.**
-- Cambios repetidos o inconsistentes, información falsa o violaciones de las [**políticas de Google](https://support.google.com/business/answer/3038177?hl=es)** pueden derivar en **suspensión temporal o definitiva de la ficha**, afectando tu visibilidad y posicionamiento online. Si tienes dudas, **[contacta con el equipo de soporte.](../cuenta-y-facturacion/contactar-con-soporte.md)**
+- Todos los cambios que realices en esta sección se actualizarán automáticamente en tu perfil de Google y en todas las plataformas conectadas que se muestran en el apartado **“[Expansión](expansion-de-tu-negocio-en-otras-plataformas.md)”**.
+- Cambios repetidos o inconsistentes, información falsa o violaciones de las [**políticas de Google](https://support.google.com/business/answer/3038177?hl=es)** pueden derivar en **suspensión temporal o definitiva de la ficha**, afectando tu visibilidad y posicionamiento online. Si tienes dudas, **[contacta con el equipo de soporte](../cuenta-y-facturacion/contactar-con-soporte.md)**.
 :::
 
 ---

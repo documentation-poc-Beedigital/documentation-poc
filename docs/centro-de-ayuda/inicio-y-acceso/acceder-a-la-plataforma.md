@@ -14,7 +14,7 @@ notion_id: 29cb7527ac25802184e3e9e42cf145c4
 
 ### Acceso con tu correo electrónico
 
-1. En la **pantalla de inicio de sesión**, introduce tu **correo electrónico** y tu **contraseña.**
+1. En la **pantalla de inicio de sesión**, introduce tu **correo electrónico** y tu **contraseña**.
 2. Pulsa **“Continuar con email”** para acceder a la plataforma.
 3. Si no tienes cuenta, podrás crear una nueva pulsando el botón **“Regístrate”**.
 4. Una vez completado el registro, tu cuenta se creará automáticamente y podrás acceder a la plataforma.

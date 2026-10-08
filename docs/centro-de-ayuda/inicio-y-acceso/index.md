@@ -13,10 +13,10 @@ sidebar_position: 1
 
 ## <HelpIcon name="security" />  Inicio y acceso
 
-[Acceder a la plataforma ](acceder-a-la-plataforma.md)
+[Acceder a la plataforma](acceder-a-la-plataforma.md)
 
-[Configurar opciones de seguridad ](configurar-opciones-de-seguridad.md)
+[Configurar opciones de seguridad](configurar-opciones-de-seguridad.md)
 
-[Cerrar sesión en la plataforma ](cerrar-sesion-en-la-plataforma.md)
+[Cerrar sesión en la plataforma](cerrar-sesion-en-la-plataforma.md)
 
 [Descargar la app](descargar-la-app.md)
