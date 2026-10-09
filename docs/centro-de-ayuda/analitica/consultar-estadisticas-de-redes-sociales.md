@@ -19,18 +19,18 @@ Puedes consultar las estadísticas de tus perfiles en redes sociales para conoce
 1. Ve a “**Analítica**” en el menú lateral y accede a la sección “**Redes Sociales**”.
 2. Selecciona la **red social y el periodo** que quieres consultar.
 3. Explora las diferentes métricas organizadas por bloques:
-    - **Crecimiento (sirve para ver si tu cuenta crece o se estanca).**
+    - **Crecimiento (sirve para ver si tu cuenta crece o se estanca)**.
         - Seguidores actuales
         - Seguidores ganados y perdidos
         - Número de publicaciones
-    - **Balance de seguidores (indica si tu contenido atrae o no a la audiencia.).**
+    - **Balance de seguidores (indica si tu contenido atrae o no a la audiencia)**.
         - Compara seguidores ganados vs perdidos.
     - **Evolución general:** muestra tendencias a lo largo del tiempo (subidas o bajadas).
-    - **Alcance y visualizaciones** (sirve para medir visibilidad:
+    - **Alcance y visualizaciones** (sirve para medir visibilidad):
         - **Alcance**: personas únicas que ven tu contenido
         - **Visualizaciones**: veces totales que se muestra
     - **Interacciones (indica cómo es de interesante tu contenido)**: incluye me gusta, comentarios, compartidos y guardados.
-    - **Actividad del perfil (mide el interés real hacia tu perfil):** incluye visitas al perfil, clics en enlaces, mensajes o contactos.
+    - **Actividad del perfil (mide el interés real hacia tu perfil)**: incluye visitas al perfil, clics en enlaces, mensajes o contactos.
 
 ---
 

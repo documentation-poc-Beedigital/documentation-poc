@@ -22,7 +22,7 @@ Puedes consultar las estadísticas de tu Perfil de Google desde la plataforma pa
     - **Últimos 30 días**
     - **Últimos 3 meses**
     - **Últimos 6 meses**
-3. Revisa los indicadores principales
+3. Revisa los indicadores principales:
     - **Total de visitas** → número de veces que se ha visitado la web
     - **Total de usuarios** → personas únicas que entraron
     - **Usuarios recurrentes** → porcentaje de usuarios que vuelven

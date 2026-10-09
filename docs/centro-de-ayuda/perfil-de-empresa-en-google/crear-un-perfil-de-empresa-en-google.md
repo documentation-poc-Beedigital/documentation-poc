@@ -23,7 +23,7 @@ Lo mejor es que puedes **gestionar tu perfil de forma fácil y centralizada desd
 Cuando completas la contratación y accedes por primera vez, la plataforma te preguntará si ya tienes creado un Perfil de Empresa en Google para tu negocio.
 
 - Si seleccionas **“Sí”**, continuarás con el proceso para conectar tu perfil de Google con la plataforma.
-- Si seleccionas **“No”**, accederás a la pantalla **“Crea tu perfil de empresa en Google”** donde deberás pulsar el botón **“Crear perfil de empresa”.** Desde ahí, serás redirigido al **proceso oficial de creación de Google**.
+- Si seleccionas **“No”**, accederás a la pantalla **“Crea tu perfil de empresa en Google”** donde deberás pulsar el botón **“Crear perfil de empresa”**. Desde ahí, serás redirigido al **proceso oficial de creación de Google**.
 
 Si decidiste saltarte el paso anterior, puedes retomarlo en cualquier momento desde el módulo **“¿Has creado ya tu Perfil de Empresa en Google?”** dentro de la plataforma. Solo tienes que hacer clic en el botón **“Crear perfil”** para iniciar el proceso de creación en Google.
 
@@ -56,7 +56,7 @@ Si decidiste saltarte el paso anterior, puedes retomarlo en cualquier momento de
     No aparecerás públicamente en Google hasta que verifiques tu empresa.
     :::
 
-8. Una vez verificado, tendrás que volver a la plataforma para **[conectar tu perfil de Google con la plataforma](como-conectar-tu-perfil-de-google.md).**
+8. Una vez verificado, tendrás que volver a la plataforma para **[conectar tu perfil de Google con la plataforma](como-conectar-tu-perfil-de-google.md)**.
 
     :::note
     <HelpIcon name="warning" />  **Importante:**
@@ -73,8 +73,8 @@ Si decidiste saltarte el paso anterior, puedes retomarlo en cualquier momento de
 - La **categoría** afecta cómo y cuándo apareces en las búsquedas, así que elige la más precisa posible.
 - Asegúrate de que la **dirección** sea correcta y actualizada.
 - Añade un **teléfono y web** para facilitar el contacto.
-- Revisa periódicamente tu perfil para mantener la **información al día.**
-- Opcionalmente, puedes añadir **horarios, logotipo, fotos y atributos.** Aunque no son obligatorios para crear el perfil, sí son muy recomendables para mejorar la visibilidad y la confianza de tu negocio.
+- Revisa periódicamente tu perfil para mantener la **información al día**.
+- Opcionalmente, puedes añadir **horarios, logotipo, fotos y atributos**. Aunque no son obligatorios para crear el perfil, sí son muy recomendables para mejorar la visibilidad y la confianza de tu negocio.
 
 ---
 

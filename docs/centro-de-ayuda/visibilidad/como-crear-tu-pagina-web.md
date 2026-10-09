@@ -34,7 +34,7 @@ A continuación te explicamos cómo gestionar, configurar y personalizar tu pág
 
 Una vez dentro del editor, podrás personalizar tu sitio paso a paso:
 
-1. Selecciona las **secciones** que formarán tu página web
+1. Selecciona las **secciones** que formarán tu página web.
 2. Elige los **colores y la tipografía** que mejor representen tu marca.
 3. Añade los **datos de contacto** de tu negocio que se mostrarán en la web.
 4. Escribe una **descripción de tu negocio** y de los servicios que ofreces.

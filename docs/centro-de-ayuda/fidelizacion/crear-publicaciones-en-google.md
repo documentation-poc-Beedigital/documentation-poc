@@ -10,7 +10,7 @@ notion_id: 2bdb7527ac2580e2ad53dd358d340739
 
 # <HelpIcon name="loyalty" /> Crear publicaciones en Google
 
-Publicar en tu Perfil de Google te ayuda a **destacar frente a la competencia y mejorar tu visibilidad en búsquedas locales**. Es el lugar ideal para compartir novedades, promociones, eventos o cambios de horario, y mantener tu ficha siempre activa y atractiva.
+Publicar en tu Perfil de Google te ayuda a **destacar frente a la competencia y mejorar tu visibilidad en búsquedas locales**. Es el lugar ideal para compartir novedades, promociones, eventos o cambios de horario y mantener tu ficha siempre activa y atractiva.
 
 Además, publicar con frecuencia **aumenta las interacciones**, impulsa visitas a tu web y mejora la percepción de tu negocio.
 
@@ -24,7 +24,7 @@ Además, publicar con frecuencia **aumenta las interacciones**, impulsa visitas 
 2. Haz clic en el botón **“Crear manualmente”**.
 3. **Añade una imagen (obligatorio)**: selecciona o sube la foto que acompañará tu publicación.
 4. **Escribe la descripción (obligatorio)**: comunica tu mensaje (promociones, novedades, avisos, eventos, etc.).
-5. **Añade un botón de llamada a la acción (opcional)**: elige un CTA como “Reservar”, “Más información” o “Pedir online”, y añade un enlace si corresponde.
+5. **Añade un botón de llamada a la acción (opcional)**: elige un CTA como “Reservar”, “Más información” o “Pedir online” y añade un enlace si corresponde.
 6. Haz clic en **“Publicar”** para enviar tu contenido.
 7. La publicación aparecerá en tu Perfil de Google y será visible durante **7 días**.
 8. Una vez publicada, podrás **visualizarla desde la plataforma**, con opciones para:

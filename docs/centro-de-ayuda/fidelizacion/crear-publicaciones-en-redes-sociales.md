@@ -23,7 +23,7 @@ Además, ayuda a publicar de forma más regular, organizar mejor el contenido y 
 
 ### Conectar tus redes sociales
 
-1. Ve al apartado **“Conectar redes sociales”.**
+1. Ve al apartado **“Conectar redes sociales”**.
 2. Selecciona la red social que quieres conectar (Instagram, Facebook, LinkedIn, X, etc.).
 3. Inicia sesión con la cuenta de esa red social y acepta los permisos solicitados.
 4. Una vez autorizada, la red social quedará vinculada y podrás gestionarla desde la plataforma.
@@ -33,7 +33,7 @@ Además, ayuda a publicar de forma más regular, organizar mejor el contenido y 
 ### Publicar contenido
 
 1. Ve al apartado **“Calendario de publicaciones”**.
-2. Haz clic en **“Crear publicación”.**
+2. Haz clic en **“Crear publicación”**.
 3. Elige la red social donde quieres publicar.
 4. Escribe el texto de la publicación y añade imágenes, vídeos o enlaces.
 5. Selecciona la fecha y la hora de publicación.
@@ -53,7 +53,7 @@ Además, ayuda a publicar de forma más regular, organizar mejor el contenido y 
 
 ### Gestionar tus mensajes
 
-1. Ve al apartado **“Mensajes”.**
+1. Ve al apartado **“Mensajes”**.
 2. Selecciona la red social cuyos mensajes o comentarios quieres revisar.
 3. Consulta las conversaciones desde un único panel.
 4. Haz clic en un mensaje o comentario para abrir la conversación.
@@ -67,9 +67,9 @@ Además, ayuda a publicar de forma más regular, organizar mejor el contenido y 
 
 **Funciones útiles:**
 
-- Filtrar conversaciones por: **No resueltos / No leídos / Todos.**
-- **Marcar todo como resuelto.**
-- **Marcar todo como leído.**
+- Filtrar conversaciones por: **No resueltos / No leídos / Todos**.
+- **Marcar todo como resuelto**.
+- **Marcar todo como leído**.
 
 ---
 
