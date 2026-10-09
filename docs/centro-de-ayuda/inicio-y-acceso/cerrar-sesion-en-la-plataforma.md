@@ -19,7 +19,7 @@ Una vez cerrada la sesión, si deseas volver a entrar, deberás **iniciar sesió
 ### <HelpIcon name="signIn" />  Cómo cerrar sesión:
 
 1. Haz clic en tu **avatar/“Mi cuenta”**, ubicado en la parte inferior del menú lateral izquierdo.
-2. En el menú desplegable, selecciona la opción **“Cerrar sesión”**, y cuando aparezca el cuadro de diálogo de confirmación, haz clic en el botón **“Sí, cerrar sesión”**.
+2. En el menú desplegable, selecciona la opción **“Cerrar sesión”** y, cuando aparezca el cuadro de diálogo de confirmación, haz clic en el botón **“Sí, cerrar sesión”**.
 3. Tras hacerlo, serás redirigido a la pantalla de [**acceso o *login***](acceder-a-la-plataforma.md).
 
 ---

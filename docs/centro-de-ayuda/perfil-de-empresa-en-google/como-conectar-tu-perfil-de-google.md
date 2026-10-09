@@ -17,7 +17,7 @@ Así, podrás gestionar y actualizar tus datos de forma centralizada, facilitand
 
 ### <HelpIcon name="steps" />  Pasos para conectar tu Perfil de Empresa en Google:
 
-Al completar tu contratación, te pediremos que **conectes tu Perfil de Empresa en Google con Beesible.**
+Al completar tu contratación, te pediremos que **conectes tu Perfil de Empresa en Google con Beesible**.
 
 ### <HelpIcon name="success" />  Si pulsas **“Conectar mi cuenta”** (ya tienes un perfil)
 
@@ -48,7 +48,7 @@ Al completar tu contratación, te pediremos que **conectes tu Perfil de Empresa 
     [Cómo crear tu Perfil de Empresa en Google](crear-un-perfil-de-empresa-en-google.md)
     :::
 
-2. Una vez termines la creación en Google, vuelve a la plataforma y **conecta tu Perfil de Empresa con Beesible.**
+2. Una vez termines la creación en Google, vuelve a la plataforma y **conecta tu Perfil de Empresa con Beesible**.
 
 ---
 

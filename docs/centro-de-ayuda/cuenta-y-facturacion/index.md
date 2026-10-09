@@ -13,10 +13,10 @@ sidebar_position: 8
 
 ## <HelpIcon name="billing" /> Cuenta y facturación
 
-[Configurar tu perfil de usuario ](configurar-tu-perfil-de-usuario.md)
+[Configurar tu perfil de usuario](configurar-tu-perfil-de-usuario.md)
 
 [Gestionar tu plan y tus facturas](gestionar-tu-plan-y-tus-facturas.md)
 
-[Contactar con soporte ](contactar-con-soporte.md)
+[Contactar con soporte](contactar-con-soporte.md)
 
 [**Enviar sugerencias**](enviar-sugerencias.md)

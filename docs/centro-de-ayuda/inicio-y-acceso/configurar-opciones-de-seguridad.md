@@ -33,9 +33,9 @@ En la sección **Seguridad** de la plataforma puedes actualizar tu contraseña y
 1. Haz clic en tu **avatar/“Mi cuenta”**, ubicado en la parte inferior del menú lateral izquierdo.
 2. En el **menú desplegable**, selecciona la opción **“Seguridad”**.
 3. Busca el apartado **Acceso seguro** y selecciona la opción **“Configurar”**.
-4. Usa el **desplegable** para activar la autenticación por email
+4. Usa el **desplegable** para activar la autenticación por email.
 5. Al seleccionar **Email**, se enviará un código de verificación a la **dirección de correo electrónico con la que estás registrado** cada vez que inicies sesión.
-6. Este correo lo puedes visualizar en la sección **Mi perfil.**
+6. Este correo lo puedes visualizar en la sección **Mi perfil**.
 
 ### ¿Qué ocurre después?
 

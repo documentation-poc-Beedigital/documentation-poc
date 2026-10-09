@@ -13,4 +13,4 @@ sidebar_position: 6
 
 ## <HelpIcon name="beelma" />  Beelma
 
-[Qué es Beelma y cómo empezar a usarla ](que-es-beelma-y-como-empezar-a-usarla.md)
+[Qué es Beelma y cómo empezar a usarla](que-es-beelma-y-como-empezar-a-usarla.md)
