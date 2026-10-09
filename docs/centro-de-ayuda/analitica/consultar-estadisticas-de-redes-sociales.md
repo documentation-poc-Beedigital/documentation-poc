@@ -26,11 +26,11 @@ Puedes consultar las estadísticas de tus perfiles en redes sociales para conoce
     - **Balance de seguidores (indica si tu contenido atrae o no a la audiencia)**.
         - Compara seguidores ganados vs perdidos.
     - **Evolución general:** muestra tendencias a lo largo del tiempo (subidas o bajadas).
-    - **Alcance y visualizaciones** (sirve para medir visibilidad:
+    - **Alcance y visualizaciones** (sirve para medir visibilidad):
         - **Alcance**: personas únicas que ven tu contenido
         - **Visualizaciones**: veces totales que se muestra
     - **Interacciones (indica cómo es de interesante tu contenido)**: incluye me gusta, comentarios, compartidos y guardados.
-    - **Actividad del perfil (mide el interés real hacia tu perfil):** incluye visitas al perfil, clics en enlaces, mensajes o contactos.
+    - **Actividad del perfil (mide el interés real hacia tu perfil)**: incluye visitas al perfil, clics en enlaces, mensajes o contactos.
 
 ---
 
