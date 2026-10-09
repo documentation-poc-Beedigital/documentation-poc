@@ -43,7 +43,7 @@ Puedes consultar las estadísticas de tu Perfil de Google desde la plataforma pa
 2. Haz clic en “**Analizar con Beelma**”.
 3. Beelma revisa los datos de los últimos meses y genera un informe claro con los puntos más importantes:
 - **Resumen general** del rendimiento del perfil, basado en métricas como impresiones totales, visualizaciones del perfil y evolución de la visibilidad.
-- **Puntos fuertes** identificados a partir de las métricas con mejor rendimiento
+- **Puntos fuertes** identificados a partir de las métricas con mejor rendimiento.
 - **Puntos a mejorar** como menor tasa de interacción, baja conversión de visitas a acciones o caída de visibilidad.
 - **Acciones recomendadas** para optimizar el perfil, enfocadas en mejorar la visibilidad, aumentar las visitas y elevar el nivel de interacción.
 
