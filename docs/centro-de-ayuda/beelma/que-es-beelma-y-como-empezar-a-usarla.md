@@ -54,7 +54,7 @@ Gestiona la reputación online de tu negocio:
 - “Publica esta respuesta en Google.”
 - “Edita mi última respuesta a una reseña.”
 - “¿Qué reseñas no tienen respuesta todavía?”
-- “Analiza mis reseñas y hazme un plan de respuestas con prioridades”
+- “Analiza mis reseñas y hazme un plan de respuestas con prioridades.”
 
 ---
 
