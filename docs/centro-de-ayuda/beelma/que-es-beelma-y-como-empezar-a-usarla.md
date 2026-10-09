@@ -20,7 +20,7 @@ Puedes interactuar con Beelma de forma natural, como si hablaras con una persona
 
 Para interactuar con Beelma, **haz clic en el icono** que encontrarás en la esquina inferior derecha de la pantalla, visible durante toda la navegación.
 
-Además, en algunas secciones de la plataforma puedes acceder a Beelma directamente mediante **botones de acción rápida**: crear una publicación desde la sección de Publicaciones con Google, analizar tus reseñas desde Reputación, o analizar el rendimiento de tu perfil de Google desde Optimización.
+Además, en algunas secciones de la plataforma puedes acceder a Beelma directamente mediante **botones de acción rápida**: crear una publicación desde la sección de Publicaciones con Google, analizar tus reseñas desde Reputación o analizar el rendimiento de tu perfil de Google desde Optimización.
 
 ### 1. Ayuda y navegación
 
@@ -54,7 +54,7 @@ Gestiona la reputación online de tu negocio:
 - “Publica esta respuesta en Google.”
 - “Edita mi última respuesta a una reseña.”
 - “¿Qué reseñas no tienen respuesta todavía?”
-- “Analiza mis reseñas y hazme un plan de respuestas con prioridades”
+- “Analiza mis reseñas y hazme un plan de respuestas con prioridades.”
 
 ---
 
@@ -138,10 +138,10 @@ Consulta tus facturas por fecha y las descarga al momento.
 
 ### ¿Te resultó útil esta información? También puedes leer:
 
-**<HelpIcon name="related" />[Analizar reseñas con Beelma](../reputacion/analizar-resenas-con-beelma.md)**
+**<HelpIcon name="related" /> [Analizar reseñas con Beelma](../reputacion/analizar-resenas-con-beelma.md)**
 
-**<HelpIcon name="related" />[Automatizar respuestas con Beelma](../reputacion/automatizar-respuestas-con-beelma.md)**
+**<HelpIcon name="related" /> [Automatizar respuestas con Beelma](../reputacion/automatizar-respuestas-con-beelma.md)**
 
-**<HelpIcon name="related" />[Consultar estadísticas del Perfil de Google](../analitica/consultar-estadisticas-del-perfil-de-google.md)**
+**<HelpIcon name="related" /> [Consultar estadísticas del Perfil de Google](../analitica/consultar-estadisticas-del-perfil-de-google.md)**
 
-**<HelpIcon name="related" />[Crear publicaciones en Google](../fidelizacion/crear-publicaciones-en-google.md)**
+**<HelpIcon name="related" /> [Crear publicaciones en Google](../fidelizacion/crear-publicaciones-en-google.md)**

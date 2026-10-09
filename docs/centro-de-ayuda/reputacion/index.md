@@ -13,12 +13,12 @@ sidebar_position: 4
 
 ## <HelpIcon name="reputation" /> Reputación
 
-[Consultar y responder reseñas ](consultar-y-responder-resenas.md)
+[Consultar y responder reseñas](consultar-y-responder-resenas.md)
 
-[Automatizar respuestas con Beelma ](automatizar-respuestas-con-beelma.md)
+[Automatizar respuestas con Beelma](automatizar-respuestas-con-beelma.md)
 
 [Analizar reseñas con Beelma](analizar-resenas-con-beelma.md)
 
-[Solicitar más reseñas por WhatsApp ](solicitar-mas-resenas-por-whatsapp.md)
+[Solicitar más reseñas por WhatsApp](solicitar-mas-resenas-por-whatsapp.md)
 
-[Configurar alertas automáticas de nuevas reseñas ](configurar-alertas-automaticas-de-nuevas-resenas.md)
+[Configurar alertas automáticas de nuevas reseñas](configurar-alertas-automaticas-de-nuevas-resenas.md)
