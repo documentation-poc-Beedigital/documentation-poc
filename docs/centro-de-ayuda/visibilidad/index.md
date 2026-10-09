@@ -19,4 +19,4 @@ sidebar_position: 3
 
 ## <HelpIcon name="website" /> Página Web
 
-[Tu página web creada automáticamente por Beesible](tu-pagina-web-creada-automaticamente-por-beesible.md)
+[Tu página web creada automáticamente por Beelma](tu-pagina-web-creada-automaticamente-por-beesible.md)

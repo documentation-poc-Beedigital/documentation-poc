@@ -77,9 +77,19 @@ assert.deepEqual(
   [
     {text: 'Añadir o actualizar información en tu Perfil de Google', href: '/documentation-poc/centro-de-ayuda/visibilidad/anadir-o-actualizar-informacion-en-tu-perfil-de-google/'},
     {text: 'Expansión de tu negocio en otras plataformas', href: '/documentation-poc/centro-de-ayuda/visibilidad/expansion-de-tu-negocio-en-otras-plataformas/'},
-    {text: 'Tu página web creada automáticamente por Beesible', href: '/documentation-poc/centro-de-ayuda/visibilidad/tu-pagina-web-creada-automaticamente-por-beesible/'},
+    {text: 'Tu página web creada automáticamente por Beelma', href: '/documentation-poc/centro-de-ayuda/visibilidad/tu-pagina-web-creada-automaticamente-por-beesible/'},
   ],
 );
+const recoveredRoute = recoveredSource.replace(/^docs\//, '').replace(/\.md$/, '/');
+const recoveredArticle = pages.get(path.join(root, recoveredRoute, 'index.html'));
+const recoveredTitle = 'Tu página web creada automáticamente por Beelma';
+assert.equal(headingText(recoveredArticle, recoveredArticle('h1')), recoveredTitle);
+assert.equal(visibility(`.theme-doc-sidebar-menu a[href$="/${recoveredRoute}"]`).text().trim(), recoveredTitle);
+const importantNotices = recoveredArticle('.alert strong').filter((_, element) => recoveredArticle(element).text().trim() === 'Importante:');
+assert.equal(importantNotices.length, 1);
+importantNotices.each((_, element) => {
+  assert.equal(recoveredArticle(element).prev('svg.help-icon--warning[aria-hidden="true"]').length, 1, 'Important notice must render the warning HelpIcon before its label');
+});
 assert(!fs.existsSync(retiredPath), `Retired route was generated: ${retiredRoute}`);
 for (const [file, $] of pages) {
   assert.equal($(`.theme-doc-sidebar-menu a[href$="/${retiredRoute}"]`).length, 0, `${file}: retired article remains in sidebar`);

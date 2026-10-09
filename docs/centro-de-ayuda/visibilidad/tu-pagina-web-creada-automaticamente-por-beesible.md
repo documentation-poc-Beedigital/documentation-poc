@@ -46,7 +46,7 @@ Las secciones sin datos no se muestran. Cuanto más completo esté tu Perfil de 
 3. Pulsa **Activar dominio** y confirma con **¡Sí, activar!**.
 
    :::note
-   **Importante:**
+   <HelpIcon name="warning" />  **Importante:**
 
    Una vez activado, no podrás cambiar el dominio. Activarlo equivale a comprarlo, pero no tendrás que pagar nada.
    :::
