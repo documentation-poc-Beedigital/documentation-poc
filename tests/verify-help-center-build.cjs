@@ -21,6 +21,7 @@ const pages = new Map(output.filter(f => f.endsWith('.html')).map(f => [f, load(
 const retiredSource = 'docs/centro-de-ayuda/visibilidad/como-crear-tu-pagina-web.md';
 const retiredRoute = 'centro-de-ayuda/visibilidad/como-crear-tu-pagina-web/';
 const retiredPath = path.join(root, retiredRoute, 'index.html');
+const recoveredSource = 'docs/centro-de-ayuda/visibilidad/tu-pagina-web-creada-automaticamente-por-beesible.md';
 function headingText($, element) {
   return $(element).clone().find('a.hash-link').remove().end().text().replace(/\s+/g, ' ').trim();
 }
@@ -66,8 +67,8 @@ assert.deepEqual(
   ['Cómo conectar tu Perfil de Google', 'Crear un Perfil de Empresa en Google'],
 );
 const visibility = pages.get(path.join(root, 'centro-de-ayuda/visibilidad/index.html'));
-assert.deepEqual(visibility('h2').toArray().map(element => headingText(visibility, element)), ['Google']);
-assert.deepEqual(visibility('h2 > a.hash-link').toArray().map(element => visibility(element).attr('href')), ['#--google']);
+assert.deepEqual(visibility('h2').toArray().map(element => headingText(visibility, element)), ['Google', 'Página Web']);
+assert.deepEqual(visibility('h2 > a.hash-link').toArray().map(element => visibility(element).attr('href')), ['#--google', '#-página-web']);
 assert.deepEqual(
   visibility('.theme-doc-markdown > p > a').toArray().map(element => ({
     text: visibility(element).text().trim(),
@@ -76,6 +77,7 @@ assert.deepEqual(
   [
     {text: 'Añadir o actualizar información en tu Perfil de Google', href: '/documentation-poc/centro-de-ayuda/visibilidad/anadir-o-actualizar-informacion-en-tu-perfil-de-google/'},
     {text: 'Expansión de tu negocio en otras plataformas', href: '/documentation-poc/centro-de-ayuda/visibilidad/expansion-de-tu-negocio-en-otras-plataformas/'},
+    {text: 'Tu página web creada automáticamente por Beesible', href: '/documentation-poc/centro-de-ayuda/visibilidad/tu-pagina-web-creada-automaticamente-por-beesible/'},
   ],
 );
 assert(!fs.existsSync(retiredPath), `Retired route was generated: ${retiredRoute}`);
@@ -91,10 +93,11 @@ assert(!JSON.stringify(docs).match(/project-docs|production-snapshots/));
 const corpus = Object.keys(require('./fixtures/public-docs-sha256.json'));
 assert(!docs.some(doc => doc.sectionRoute.split('#')[0].endsWith(`/${retiredRoute}`)));
 assert(!docs.some(doc => /Cómo crear tu página web/i.test(JSON.stringify(doc))));
-for (const source of corpus.filter(source => source !== retiredSource)) {
+const publicSources = [...corpus.filter(source => source !== retiredSource), recoveredSource];
+for (const source of publicSources) {
   const route = source.replace(/^docs\//, '').replace(/index\.md$/, '').replace(/\.md$/, '/');
   assert(fs.existsSync(path.join(root, route, 'index.html')), `Public URL changed: ${route}`);
   const indexedRoute = new URL(route, base).pathname;
   assert(docs.some(doc => doc.sectionRoute.split('#')[0] === indexedRoute), `Search index missing: ${route}`);
 }
-console.log(`Build OK: ${pages.size} HTML pages, ${links} internal links/anchors, ${docs.length} indexed sections, 31 public document URLs and 1 retained draft.`);
+console.log(`Build OK: ${pages.size} HTML pages, ${links} internal links/anchors, ${docs.length} indexed sections, ${publicSources.length} public document URLs and 1 retained draft.`);
