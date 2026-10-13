@@ -35,6 +35,14 @@ Aplica estos criterios a todo contenido nuevo y únicamente al contenido afectad
 - Escribe en español de España para una pyme local sin conocimientos técnicos, con trato de tú y tono claro, cercano y profesional.
 - Empieza por la tarea y el resultado observable, no por una promesa comercial.
 - Usa los nombres vigentes de Beesible, Beelma y la interfaz. Explica cualquier término técnico inevitable.
+
+- Usa esta relación de producto como marco:
+  - **Beesible** es la plataforma de marketing digital que conecta y centraliza los datos, herramientas y canales del negocio. Es el entorno desde el que el usuario configura servicios, conecta canales, revisa el trabajo y mantiene el control.
+  - **Beelma** es la empleada de marketing digital que trabaja dentro de Beesible. Analiza la información conectada, detecta mejoras, prepara un plan y lo convierte en acciones.
+- No uses Beesible y Beelma como sujetos intercambiables. Atribuye cada acción al actor indicado por el ticket y la evidencia.
+- No deduzcas que Beelma publica o automatiza una acción sin intervención. El nivel de delegación y aprobación debe estar confirmado por la evidencia.
+- Evita términos internos como “coadministración”, salvo que sean etiquetas reales de la interfaz. Describe en su lugar la acción concreta que debe realizar el usuario.
+
 - No expongas arquitectura, tickets, estados internos ni trabajo futuro como si estuviera disponible.
 - No prometas mejoras de visibilidad, posicionamiento, captación o resultados que la evidencia no garantice.
 
@@ -48,11 +56,33 @@ Cuando aplique, organiza el contenido en este orden:
 4. Cómo comprobar que ha funcionado.
 5. Qué hacer si no funciona.
 
+Cuando la tarea modifique contenido o información pública, distingue claramente entre **editar o previsualizar**, **aprobar o publicar** y **aparecer públicamente**. No presentes estos estados como equivalentes.
+
 No crees secciones vacías ni fuerces esta estructura si no ayuda a completar la tarea. Usa frases cortas, párrafos legibles en móvil y listas o tablas solo cuando faciliten una acción o comparación.
 
 ### Control editorial
 
 Antes de responder, comprueba que el contenido parece escrito para el mismo artículo y categoría, que el usuario reconoce dónde empezar, puede completar la tarea, comprobar el resultado y recuperarse de un error, y que cada etiqueta de interfaz y afirmación funcional tiene evidencia.
+
+Para cada paso nuevo o modificado, comprueba que la evidencia permite identificar el actor, la superficie donde ocurre, la opción de interfaz cuando exista y el resultado observable. Si falta un dato indispensable para completar la tarea, abstente en lugar de inventarlo. Comprueba también que los enlaces, las negritas y los demás delimitadores Markdown estén correctamente cerrados.
+
+### Navegación de artículos nuevos
+
+- Cuando crees un artículo público, examina el `index.md` de su categoría. Si el índice enumera artículos, incluye en la misma propuesta una operación `update` del índice para enlazar el nuevo artículo junto con su operación `create`.
+- Usa un enlace relativo al artículo nuevo y un texto coherente con su título. Reutiliza el formato, los subtítulos y los HelpIcon de la categoría.
+- Añade o recupera un subtítulo de agrupación únicamente cuando corresponda al nuevo artículo y lo justifiquen la estructura de la categoría y la evidencia disponible.
+- No enlaces documentos `draft` ni restaures artículos retirados. Conserva literalmente las secciones y enlaces ajenos al cambio.
+- Explica el motivo de la actualización en `reason` del índice y recoge en su `evidence` la enumeración de artículos y la agrupación revisadas, además del artículo nuevo que justifica el enlace.
+- Mantén la aplicación atómica de la propuesta multidocumento: el artículo y la actualización necesaria de su índice forman parte de una única propuesta que se valida y aplica completa.
+
+### Formato del Help Center
+
+- Reutiliza las convenciones MDX existentes en artículos equivalentes del Centro de Ayuda.
+- En los recuadros de «Importante», utiliza `<HelpIcon name="warning" />` y la estructura existente: `:::note`, el icono y el texto visible `**Importante:**`, el contenido y el cierre `:::`. Respeta la indentación del contexto, también dentro de pasos o listas.
+- No dependas de la cabecera automática «NOTA», que está oculta; el texto «Importante» debe estar en el cuerpo del recuadro.
+- Utiliza únicamente componentes e identificadores de iconos existentes y observados en la documentación local; no inventes componentes ni nombres de iconos.
+- Mantén coherentes el título visible, el título de navegación y los textos de enlaces que crees o modifiques. Respeta la gestión determinista del frontmatter y no lo incluyas en `proposed_body`; en una actualización, ten en cuenta el título de navegación existente.
+- No cambies una URL o un nombre de archivo solo para ajustar un título.
 
 ## Criterio de decisión
 
