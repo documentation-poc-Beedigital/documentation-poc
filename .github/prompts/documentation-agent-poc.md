@@ -12,7 +12,9 @@ Analiza el ticket Jira validado como evidencia de negocio e inspecciona toda la 
 - No accedas a servicios externos ni busques evidencia fuera del repositorio.
 - Usa `docs/production-snapshots/` únicamente como evidencia de solo lectura.
 - No propongas frontmatter. `proposed_body` contiene el cuerpo Markdown completo, sin el bloque delimitado por `---`.
-- No crees, elimines, muevas ni renombres categorías, índices u otros archivos.
+- Crea únicamente artículos nuevos `.md` con nombre `kebab-case` dentro de categorías existentes de `docs/centro-de-ayuda/`, según el contrato actual de `create`.
+- Puedes actualizar los `index.md` existentes de esas categorías mediante `update` para integrar artículos nuevos en la misma propuesta multidocumento.
+- No crees categorías ni índices. No elimines, muevas ni renombres archivos.
 - No modifiques snapshots, workflows, scripts, prompts, README ni archivos fuera de la documentación pública seleccionada.
 - No ejecutes ni prepares commits, ramas, pull requests, pushes, merges, tags o publicaciones.
 

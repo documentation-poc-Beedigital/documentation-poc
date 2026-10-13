@@ -400,6 +400,24 @@ class DocumentationProposalValidatorTests(unittest.TestCase):
             item["operation"] for item in result["documents"]
         })
 
+    def test_valid_article_creation_and_existing_index_update_is_accepted(self) -> None:
+        created = self.create(
+            "docs/centro-de-ayuda/cuenta/activar-alertas.md",
+            "Activar alertas", "\n# Activar alertas\n",
+        )
+        updated = self.modify(
+            "docs/centro-de-ayuda/cuenta/index.md",
+            "\n# Cuenta\n\n[Activar alertas](activar-alertas.md)\n",
+            title="Cuenta",
+        )
+        self.write_report("proposal", [created, updated])
+        result = self.validate()
+        self.assertTrue(result["valid"], result)
+        self.assertEqual(
+            {("create", created["path"]), ("update", updated["path"])},
+            {(item["operation"], item["path"]) for item in result["documents"]},
+        )
+
     def test_creation_requires_exact_deterministic_frontmatter(self) -> None:
         item = self.create(
             "docs/centro-de-ayuda/cuenta/activar-alertas.md",
