@@ -4,12 +4,16 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import re
 import subprocess
 import sys
 from pathlib import Path, PurePosixPath
 from typing import Mapping, Sequence
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import documentation_images as images
 
 
 ISSUE_KEY_PATTERN = re.compile(
@@ -214,16 +218,19 @@ def validate_repository_state(
     decision: str,
     changed_files: list[object],
     document_metadata: list[object] | None = None,
+    image_metadata: list[dict] | None = None,
 ) -> list[str]:
     validate_base_state(root, base_sha)
     entries = changed_entries(root, base_sha)
     untracked = untracked_paths(root)
     if decision == "abstention":
+        if image_metadata:
+            raise PublicationPreparationError("An abstention cannot include published images")
         if changed_files != []:
             raise PublicationPreparationError(
                 "An abstention validation result must have no changed_files"
             )
-        if entries:
+        if entries or untracked:
             raise PublicationPreparationError("An abstention requires an empty Git diff")
         return []
 
@@ -237,6 +244,16 @@ def validate_repository_state(
         str(item.get("path")): item.get("operation")
         for item in metadata if isinstance(item, dict)
     }
+    image_metadata = images.validate_entries([] if image_metadata is None else image_metadata)
+    for image in image_metadata:
+        images.verify_file(root, image)
+        if image["operation"] == "create":
+            operations[image["path"]] = "create"
+        else:
+            if run_git(root, "cat-file", "-e", f"{base_sha}:{image['path']}", check=False).returncode != 0:
+                raise PublicationPreparationError("Reused image does not exist in base")
+            if hashlib.sha256(run_git(root, "show", f"{base_sha}:{image['path']}").stdout).hexdigest() != image["sha256"]:
+                raise PublicationPreparationError("Reused image differs from base")
     if set(operations) != set(documents):
         raise PublicationPreparationError(
             "Validated operation metadata does not match changed_files"
@@ -244,7 +261,10 @@ def validate_repository_state(
     if any(operation not in {"create", "update"} for operation in operations.values()):
         raise PublicationPreparationError("Validated document operation is invalid")
     for document in documents:
-        validate_document_path(root, document, str(operations[document]))
+        if document in {image["path"] for image in image_metadata}:
+            images.asset_path(root, document)
+        else:
+            validate_document_path(root, document, str(operations[document]))
     expected_entries = sorted(
         ("M", document) for document in documents if operations[document] == "update"
     )
@@ -279,9 +299,8 @@ def read_agent_report(path: Path) -> dict[str, object]:
         report = json.loads(payload.decode("utf-8"))
     except (UnicodeDecodeError, json.JSONDecodeError) as error:
         raise PublicationPreparationError("Agent report is not valid UTF-8 JSON") from error
-    if not isinstance(report, dict) or set(report) != {
-        "decision", "summary", "reason", "evidence", "documents"
-    }:
+    fields = {"decision", "summary", "reason", "evidence", "documents"}
+    if not isinstance(report, dict) or set(report) not in (fields, fields | {"images"}):
         raise PublicationPreparationError("Agent report has an unexpected structure")
     return report
 
@@ -377,6 +396,10 @@ def build_pull_request_body(
     evidence = report.get("evidence")
     if not all(isinstance(value, str) for value in (summary, reason, evidence)):
         raise PublicationPreparationError("Proposal report summary is invalid")
+    image_sections = ""
+    for image in images.validate_entries(report.get("images", [])):
+        image_sections += (f"- `{image['path']}` — {image['operation']}; origen `{image['id']}`; "
+                           f"SHA-256 `{image['sha256']}`; {escape_markdown_inline(image['reason'])}\n")
     return (
         "## Propuesta documental automatizada\n\n"
         f"**Clave Jira:** `{ticket['issue_key']}`\n\n"
@@ -389,6 +412,7 @@ def build_pull_request_body(
         + ("\n".join(created_sections) if created_sections else "Ninguno.\n")
         + "\n## Documentos actualizados\n\n"
         + ("\n".join(updated_sections) if updated_sections else "Ninguno.\n")
+        + "\n## Imágenes\n\n" + (image_sections or "Ninguna.\n")
         + "\n"
         f"[Ver ejecución de GitHub Actions]({actions_url})\n\n"
         "> Esta propuesta fue generada por Claude y validada "
@@ -430,9 +454,11 @@ def prepare_publication(
         raise PublicationPreparationError(
             "validation-result.json documents must be a list"
         )
-    documents = validate_repository_state(
-        root, base_sha, decision, changed_files, validated_documents
+    validated_images = validation.get("images", [])
+    all_paths = validate_repository_state(
+        root, base_sha, decision, changed_files, validated_documents, validated_images
     )
+    documents = [path for path in all_paths if path.startswith("docs/")]
     if decision == "abstention":
         return {"publish": "false", "decision": "abstention"}
 
@@ -497,6 +523,16 @@ def prepare_publication(
             }
         )
     report = read_agent_report(agent_report)
+    if report.get("images", []) != validated_images:
+        raise PublicationPreparationError("Agent report images do not match validation")
+    used = set()
+    for item in report.get("documents", []):
+        path = item["path"]
+        current = (root / path).read_text(encoding="utf-8")
+        before = run_git(root, "show", f"{base_sha}:{path}").stdout.decode("utf-8") if item["operation"] == "update" else ""
+        used.update(images.references(current, validated_images, before))
+    if used != {image["path"] for image in validated_images}:
+        raise PublicationPreparationError("Published images must be used by documents")
     if report.get("decision") != "proposal":
         raise PublicationPreparationError("Agent report decision does not match publication")
     report_documents = report.get("documents")
@@ -511,6 +547,7 @@ def prepare_publication(
         "publish": "true",
         "decision": "proposal",
         "branch": branch,
+        "files_json": json.dumps(sorted(all_paths), separators=(",", ":")),
         "documents_json": json.dumps(
             publication_documents, ensure_ascii=False, separators=(",", ":")
         ),
@@ -561,7 +598,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             server_url=args.server_url,
         )
         write_github_outputs(args.github_output, values)
-    except (PublicationPreparationError, OSError) as error:
+    except (PublicationPreparationError, images.ImageError, OSError) as error:
         sys.stderr.write(f"Pull request publication preparation failed: {error}\n")
         return 1
     return 0

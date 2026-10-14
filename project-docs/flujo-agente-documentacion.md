@@ -1,10 +1,10 @@
 ---
 article_id: ART-DOC-AGENT-001
 title: Flujo del agente de documentación
-version: 1.7
+version: 1.8
 status: published
 owner: Product
-last_reviewed: 2026-10-07
+last_reviewed: 2026-10-14
 ---
 
 # Flujo del agente de documentación
@@ -117,6 +117,28 @@ El informe usa listas explícitas de campos permitidos, también para los objeto
 Todas las longitudes cuentan caracteres del texto Python, no bytes ni tokens; las huellas SHA-256 se calculan sobre su codificación UTF-8. No se registran estados o etiquetas arbitrarios, textos de descripciones, resúmenes, prompts, documentos, respuestas Jira ni credenciales. El informe tampoco contiene el payload completo.
 
 ## Funcionamiento del agente
+
+### Imágenes de Jira en la misma propuesta
+
+La selección pública viaja en un bloque JSON `documentation-images-v1` separado de los campos de origen y del manifiesto legado. El formato completo y el ejemplo que genera la skill se mantienen en [imágenes para publicación](../skills/create-documentation-epic/references/imagenes-publicacion.md). Incluye versión `1` y entradas con `issue_key`, `attachment_id`, `description`, `alt`, `placement` y `reason`; rechaza claves adicionales o duplicadas, IDs ambiguos, URLs y destinos. Puede situarse en la descripción humana estructurada o en una descripción de épica/Task. En modo legado la descripción documental sigue siendo exclusivamente `DOCUMENTATION_SOURCE_V1`.
+
+La skill distingue evidencia de publicación en A, muestra selección, motivo, ubicación y alt, excluye imágenes obsoletas/contradictorias y solicita versiones sin datos sensibles. En B recupera los IDs reales después de adjuntar a los tickets documentales autorizados. Las capturas no sustituyen la descripción de hechos ni modifican CREAR o la autorización independiente de ejecución.
+
+El generador solicita `attachment` junto a los campos Jira existentes y valida primero el lote de origen. Solo puede seleccionar adjuntos de la épica o de sus Task autorizadas, comprobando pertenencia por ID en sus metadatos. No acepta adjuntos de la tarea documental ni de tickets originales ajenos al lote. Usa los secretos Jira existentes y construye `/rest/api/3/attachment/content/ID`; no utiliza el nombre o `content` recibido como URL de descarga o ruta de destino.
+
+Se admiten hasta diez PNG/JPEG, 2.000.000 bytes por archivo, 8.000.000 bytes por lote y 20.000.000 píxeles por imagen. Se contrastan tamaño real, MIME, estructura binaria y SHA-256; PNG también comprueba CRC y datos comprimidos. JPEG comprueba marcadores y dimensiones, sin decodificar sus píxeles. No se certifican privacidad, vigencia o correspondencia visual automáticamente.
+
+Las redirecciones se procesan explícitamente, con un máximo de cinco: HTTPS, mismo origen Jira o el host exacto `api.media.atlassian.com`. Solo el origen Jira recibe autenticación Basic. Otros hosts, puertos, credenciales en URL y downgrades se rechazan. Un futuro host legítimo distinto requerirá revisar esta lista; no se amplía automáticamente.
+
+Las rutas son deterministas: `static/img/jira/ticket-id-sha256.png` o `.jpg`, con ticket en minúsculas y SHA-256 completo. Markdown usa `![alt](/img/jira/...)`, que Docusaurus resuelve como recurso estático adaptándolo a `baseUrl` ([contrato de recursos estáticos](https://docusaurus.io/docs/static-assets)). Se valida el alt exacto aprobado; las referencias nuevas deben pertenecer al catálogo. Esta versión no admite nuevas imágenes en HTML/JSX, imports ni sintaxis de referencia. Conserva imágenes existentes no afectadas.
+
+Claude recibe únicamente un catálogo textual con identidad, ruta, descripción, ubicación, motivo y alt. Conserva modelo, `max_tokens`, esquema de respuesta y el contexto textual de 60.000 caracteres. Las referencias viajan en `proposed_body`; solo los binarios usados se aplican atómicamente con los documentos. En abstención no se aplica ningún archivo de imagen. Una ruta preexistente solo se reutiliza si está versionada, sin cambios y tiene el hash y tipo esperados; nunca se sobrescribe un archivo ajeno. Nombres originales repetidos generan rutas distintas por ticket/ID. Los fallos durante la aplicación restauran Markdown y eliminan binarios y directorios nuevos.
+
+El informe determinista permite un campo opcional `images` con las imágenes usadas, procedencia, hash, tamaño, ruta y operación `create`/`reuse`; los informes antiguos siguen siendo válidos. El validador comprueba existencia, referencias, hashes, base Git y cambios exactos. Mantiene el límite previo del diff documental y aplica por separado los límites binarios del catálogo. La preparación de PR conserva `documents_json` para sus consumidores y añade `files_json` con las rutas exactas de Markdown y binarios nuevos que se deben añadir y confirmar. El cuerpo de la PR enumera imágenes, tickets y hashes. No se usa `git add` indiscriminado.
+
+`--image-artifacts` apunta fuera del repositorio. El artefacto `documentation-proposal-files` conserva `catalogue.json` (versión, catálogo disponible y publicado) y `files/` con documentos completos e imágenes usadas, también las reutilizadas. Se conserva además el informe con hashes de documentos y binarios y el diff existente: el diff por sí solo no recupera creaciones sin seguimiento ni imágenes. Verifica hashes antes de recuperar y revisar una propuesta; los archivos preparados pueden existir aunque la aplicación haya fallado, por lo que el resultado del validador determina si son publicables. Las imágenes descargadas pero omitidas solo constan como metadatos, sin su binario.
+
+El diagnóstico continúa verificando el contexto textual sin descargar imágenes; no prueba catálogo ni píxeles. Las pruebas nuevas son offline y usan transportes simulados. La suite de renderizado construye una página temporal con las `baseUrl` de producción y preview; los artículos reales permanecen intactos. El refuerzo general de reintentos de publicación sigue pendiente.
 
 Cuando una tarea con la etiqueta `documentation-task` pasa a **In Progress**, Jira añade automáticamente la etiqueta `documentation-agent-ready`.
 

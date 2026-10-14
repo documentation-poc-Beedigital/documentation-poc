@@ -14,6 +14,9 @@ from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Sequence
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import documentation_images as images
+
 DEFAULT_MAX_DIFF_BYTES = 262_144
 DEFAULT_MAX_REPORT_BYTES = 262_144
 ALLOWED_SUFFIXES = {".md", ".mdx"}
@@ -63,8 +66,15 @@ def parse_agent_report(path: Path, max_bytes: int) -> dict[str, object]:
         value = json.loads(payload.decode("utf-8"))
     except (UnicodeDecodeError, json.JSONDecodeError) as error:
         raise ValidationError("Agent report must be valid UTF-8 JSON") from error
-    if not isinstance(value, dict) or set(value) != REPORT_FIELDS:
+    if not isinstance(value, dict) or set(value) not in (REPORT_FIELDS, REPORT_FIELDS | {"images"}):
         raise ValidationError("Agent report has an unexpected structure")
+    try:
+        if "images" in value:
+            images.validate_entries(value["images"])
+            if value["decision"] == "abstention" and value["images"]:
+                raise images.ImageError("Abstention cannot publish images")
+    except images.ImageError as error:
+        raise ValidationError(str(error)) from error
     if value["decision"] not in {"proposal", "abstention"}:
         raise ValidationError("Agent report decision must be proposal or abstention")
     for field in ("summary", "reason", "evidence"):
@@ -325,6 +335,8 @@ def validate_repository(
         if status != "M":
             errors.append(f"Only modification status M is allowed; {path} has status {status}")
     documents_result: list[dict[str, str]] = []
+    image_result = []
+    used_images = set()
     if report is not None:
         reported_documents = report["documents"]
         assert isinstance(reported_documents, list)
@@ -336,13 +348,13 @@ def validate_repository(
                 errors.append("An abstention report requires an empty Git diff")
             if untracked:
                 errors.append("Added or untracked files are not allowed for abstention: " + ", ".join(untracked))
-        elif sorted(reported_paths) != sorted(changed_files):
+        elif sorted(reported_paths + [image["path"] for image in report.get("images", []) if image["operation"] == "create"]) != sorted(changed_files):
             errors.append("Proposal report documents must match every changed file exactly")
-        total_diff_bytes = len(run_git(root, "diff", "--binary", "--no-ext-diff", base_sha, "--").stdout)
+        total_diff_bytes = len(run_git(root, "diff", "--binary", "--no-ext-diff", base_sha, "--", "docs/").stdout)
         total_diff_bytes += sum(
             root.joinpath(*PurePosixPath(path).parts).stat().st_size
             for path in untracked
-            if root.joinpath(*PurePosixPath(path).parts).is_file()
+            if path.startswith("docs/") and root.joinpath(*PurePosixPath(path).parts).is_file()
         )
         if total_diff_bytes > config.max_diff_bytes:
             errors.append(f"Combined diff is too large: {total_diff_bytes} bytes exceeds {config.max_diff_bytes}")
@@ -364,6 +376,7 @@ def validate_repository(
                 after = read_worktree_text(candidate, path)
                 after_frontmatter, after_body = split_frontmatter(after, path)
                 validate_markdown_body(after_body, path)
+                used_images.update(images.references(after_body, report.get("images", []), before or ""))
                 if operation == "create":
                     expected_frontmatter = expected_create_frontmatter(path, str(item["title"]))
                     previous_version = None
@@ -404,7 +417,23 @@ def validate_repository(
                     "reason": item["reason"], "evidence": item["evidence"],
                     "previous_version": previous_version, "proposed_version": proposed_version,
                 })
-            except ValidationError as error:
+            except (ValidationError, images.ImageError) as error:
+                errors.append(str(error))
+        for image in report.get("images", []):
+            try:
+                images.verify_file(root, image)
+                existed = run_git(root, "cat-file", "-e", f"{base_sha}:{image['path']}", check=False).returncode == 0
+                if image["path"] not in used_images:
+                    raise images.ImageError("Reported image is not used by any document")
+                if image["operation"] == "create" and (existed or image["path"] not in untracked):
+                    raise images.ImageError("Created image must be a new untracked file")
+                if image["operation"] == "reuse":
+                    if not existed or any(path == image["path"] for _, path in entries):
+                        raise images.ImageError("Reused image must be unchanged from the base")
+                    if hashlib.sha256(run_git(root, "show", f"{base_sha}:{image['path']}").stdout).hexdigest() != image["sha256"]:
+                        raise images.ImageError("Reused image differs from base hash")
+                image_result.append(image)
+            except (images.ImageError, OSError) as error:
                 errors.append(str(error))
     reported_operations = {
         str(item["path"]): str(item["operation"])
@@ -412,8 +441,11 @@ def validate_repository(
     } if report is not None else {}
     for path in changed_files:
         try:
-            validate_relative_path(root, path, reported_operations.get(path, "update"))
-        except ValidationError as error:
+            if path in {image["path"] for image in image_result}:
+                images.asset_path(root, path)
+            else:
+                validate_relative_path(root, path, reported_operations.get(path, "update"))
+        except (ValidationError, images.ImageError) as error:
             if str(error) not in errors:
                 errors.append(str(error))
     diff_check = run_git(root, "diff", "--check", base_sha, "--", check=False)
@@ -428,6 +460,7 @@ def validate_repository(
         "evidence": report["evidence"] if valid and report else "",
         "reason": report["reason"] if valid and report else "",
         "changed_files": changed_files, "documents": documents_result if valid else [],
+        "images": image_result if valid else [],
         "errors": errors,
         "limits": {
             "max_diff_bytes": config.max_diff_bytes,

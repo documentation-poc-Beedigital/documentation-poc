@@ -1,5 +1,13 @@
 # Escenarios de ensayo sin efectos externos
 
+## Selección pública de capturas
+
+Ensaya un lote con una captura vigente útil, otra obsoleta como evidencia y una con datos personales. La revisión en A debe distinguir sus finalidades, mostrar motivo, ubicación y alt de la vigente, excluir las otras de publicación y solicitar una versión adecuada de la sensible sin afirmar que está revisada si no se abrió. Conserva los hechos importantes en texto y los pendientes `[VERIFICAR]`.
+
+Simula CREAR y dos adjuntos llamados `captura-001.png` en tickets documentales distintos. La skill debe recuperar ticket/ID reales, mantenerlos inequívocos, registrar un único bloque `documentation-images-v1` por descripción y evitar repetir una identidad en el lote. Un adjunto original ajeno al lote requiere una copia verificada en un ticket autorizado. Un timeout no autoriza duplicarlo. El manifiesto legado permanece intacto y el medidor incluye el bloque en descripciones de fuentes. CREAR no ejecuta el agente; conserva su autorización independiente.
+
+Tras una propuesta simulada, comprueba que la revisión consulta el informe de imágenes y no promete que todas las seleccionadas aparecen. Tras abstención, no afirma que se publicaron capturas. Estos escenarios son expectativas; las pruebas técnicas del workflow no sustituyen un ensayo de comportamiento de la skill.
+
 Estos casos preparan pruebas de comportamiento; no son ejecuciones de Jira ni del agente documental. Usa fuentes ficticias locales y respuestas simuladas de herramientas. Registra el borrador, preguntas, medición, decisiones y operaciones propuestas. No escribas en Jira ni llames a Claude. Un repaso de estas expectativas es revisión manual, no un ensayo real de un agente independiente.
 
 ## Protocolo y registro de validación
