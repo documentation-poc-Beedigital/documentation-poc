@@ -140,7 +140,7 @@ Para gestionar tu plan o consultar tus facturas más adelante, consulta [Gestion
 
 ### Si empiezas desde el análisis gratuito de tu negocio
 
-También puedes llegar al registro desde el análisis gratuito de tu negocio en la web de Beesible. Tras solicitar el informe, puedes usar un botón de registro del informe o la opción **«Quiero registrarme en Beesible»**.
+También puedes llegar al registro desde el análisis gratuito de tu negocio en la [web de Beesible](https://www.beesible.ai/). Tras solicitar el informe, puedes usar un botón de registro del informe o la opción **«Quiero registrarme en Beesible»**.
 
 Solicitar el informe no equivale a tener una cuenta ni a contratar. Después, el registro sigue el mismo camino de esta guía, desde el paso 1.
 
