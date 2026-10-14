@@ -36,7 +36,9 @@ Separar la preferencia de la evidencia; si no se pudo consultar, decirlo.]
 [V-nn por pregunta con evidencia de resolución propia; clase indispensable/secundaria/fuera de alcance, motivo y consecuencias
 para el recorrido; respuesta y procedencia si existen. Sin reglas para el agente.]
 ## Fuentes
-[ID, enlace o archivo/localizador, consulta, edición si se conoce, acceso y alcance leído.]
+[ID, enlace o archivo/localizador, consulta, edición si se conoce, acceso y alcance leído.
+En artículos: versión disponible; en apoyo GitHub: rama y commit disponibles.
+Distinguir web publicada de repositorio, sin asumir que main está desplegado.]
 ## [VERIFICAR] transversales
 ## No afirmar todavía
 [Promesas, disponibilidad y resultados sin evidencia suficiente.]

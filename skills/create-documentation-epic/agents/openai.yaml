@@ -1,3 +1,3 @@
 interface:
   display_name: "Crear épica documental"
-  short_description: "Prepara contexto documental y tickets revisables en Jira"
+  short_description: "Revisa el plan y ejecútalo en Jira tras CREAR"

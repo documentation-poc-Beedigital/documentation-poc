@@ -4,7 +4,7 @@ Lee esta referencia al reunir fuentes y decidir qué preguntar o incluir. Las in
 
 ## Leer antes de preguntar
 
-Abre las fuentes completas y los artículos relacionados cuando tengas acceso. Registra archivo o enlace, localizador, fecha, estado de acceso y qué se leyó. Una referencia a una imagen no equivale a haberla inspeccionado. Si una fuente está inaccesible, conserva ese hecho y solicita su contenido cuando sea necesario para el alcance.
+Abre las fuentes completas y los artículos relacionados cuando tengas acceso, siguiendo [la consulta de documentación existente](documentacion-existente.md): web pública primero, GitHub opcional. Registra archivo o enlace, localizador, fecha, estado de acceso y qué se leyó. Una referencia a una imagen no equivale a haberla inspeccionado. Si una fuente está inaccesible, conserva ese hecho y solicita su contenido cuando sea necesario para el alcance.
 
 Para cada recorrido identifica actor, superficie, punto de entrada, precondiciones, acciones, textos de interfaz y resultado observable. Contrasta disponibilidad y audiencia: Done, fechas previstas, una captura y autorización para crear tickets no prueban producción. Una aclaración del usuario se atribuye como tal, con su alcance literal; «usa 60 €/mes» resuelve esa tarifa, no el orden del registro ni el lanzamiento.
 
@@ -14,7 +14,7 @@ Valora por separado el detalle del recorrido y su confirmación funcional. Un pl
 
 | Clase | Criterio para el alcance acordado | Acción |
 | --- | --- | --- |
-| Indispensable | Sin ese dato no puede explicarse un paso necesario, su precondición o resultado, o se presentaría como vigente un recorrido sin disponibilidad/audiencia confirmadas. | Preguntar antes de dar por preparado el recorrido; mantener el bloqueo si no se resuelve. |
+| Indispensable | Sin ese dato no puede explicarse un paso necesario, su precondición o resultado, o se presentaría como vigente un recorrido sin disponibilidad/audiencia confirmadas. | Preguntar antes de dar por confirmado el recorrido; si no sabe o pospone, conservar el pendiente y explicar el riesgo. Puede revisarse y aprobarse un plan con esa limitación. |
 | Secundario omisible | Puede omitirse sin romper el recorrido útil ni hacer una afirmación insegura. | Registrar la omisión y su consecuencia; no inventar el detalle ni bloquear todo el lote. |
 | Fuera de alcance | No forma parte de la tarea documental acordada. | Explicar la exclusión y conservar la evidencia relevante sin describirlo como disponible. |
 
@@ -34,7 +34,9 @@ Mantén V-nn con pregunta, clase, motivo, recorridos afectados, fuentes en confl
 
 Cada pendiente tiene una pregunta y una condición de resolución propias. Separa IDs si requieren evidencias distintas: aportar capturas no resuelve recuperación de un fallo ni confirma implementación; confirmar envío no confirma recepción. Al dividir un ID agrupado, conserva su procedencia y el enlace a los nuevos IDs. Una respuesta parcial cierra solo el hecho al que responde, sin cerrar los demás.
 
-Si responde «no lo sé», registra esa respuesta y ofrece obtener el dato, reducir/dividir el alcance o continuar con el riesgo explicado. No interpretes el silencio como confirmación. No vuelvas a preguntar lo mismo sin nueva evidencia. Continuar con incertidumbre no convierte la afirmación en confirmada ni autoriza ejecutar.
+Si responde «no lo sé» o decide posponer, registra esa respuesta y ofrece obtener el dato, reducir/dividir el alcance o preparar y aprobar el plan con el riesgo explicado. No exijas respuestas que no puede aportar. No interpretes el silencio como confirmación. No vuelvas a preguntar lo mismo sin nueva evidencia. «Crea todo de cero» no resuelve disponibilidad, audiencia ni secuencia. Continuar con incertidumbre no convierte la afirmación en confirmada ni autoriza ejecutar el agente.
+
+Una discrepancia con un artículo antiguo puede justificar actualizarlo cuando el cambio está confirmado. No la trates como bloqueo por sí sola ni vuelvas a preguntar hechos ya resueltos; registra el artículo y la evidencia del cambio.
 
 ## Elegir una parte útil
 

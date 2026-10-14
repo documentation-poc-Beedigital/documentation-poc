@@ -8,6 +8,32 @@ Para un ensayo de comportamiento, da a un evaluador la skill y únicamente la so
 
 Registra por caso: tipo de comprobación (estructura estática, prueba de código con herramientas simuladas, revisión manual o ensayo de comportamiento), artefactos usados, resultado observable, desviaciones y limitaciones. La coincidencia de texto o encabezados solo valida estructura; no demuestra decisiones de la IA. Los tests existentes del medidor simulan el transporte Jira del generador: no ensayan preguntas, autorizaciones ni el comportamiento de esta skill.
 
+## Petición inicial de crear: fase A obligatoria
+
+Solicitud: «Créame una épica; crea todo de cero». Fixtures: plan de registro y capturas accesibles; sitio de destino aportado; aún no se presentó ningún plan ni se confirmó disponibilidad, audiencia o secuencia.
+
+Comprobar: inicia A y no propone escrituras como ya autorizadas. Lee las fuentes y observaciones simuladas de las capturas; detecta y registra las preguntas indispensables. Pregunta primero por disponibilidad, después por audiencia y secuencia solo si siguen sin responder, de una en una. Presenta todas las plantillas, medición, destino y acciones antes de pedir CREAR. El registro muestra cero operaciones de escritura durante A.
+
+## Respuesta desconocida y plan aprobado con pendientes
+
+Continuación del caso anterior: usuario contesta «no sé si está disponible; lo posponemos», confirma audiencia futura y secuencia prevista. Pide mantener todo el alcance, aun con esa limitación.
+
+Comprobar: conserva disponibilidad pendiente con la respuesta y procedencia; no repite la pregunta ni exige una confirmación imposible. Distingue FUTURO de implementación, explica riesgo de abstención y presenta el plan completo con el pendiente. CREAR posterior aprueba ese plan y destino, sin resolver la disponibilidad ni autorizar el agente. Done significa revisión del contexto preparado.
+
+## Cambio de destino tras la revisión
+
+Fixture: plan completo presentado para `documentacion.example.invalid · DOC`. Antes o después de CREAR, usuario indica «mejor en `otro.example.invalid · AYUDA`».
+
+Comprobar: presenta el destino modificado y solicita CREAR para ese plan antes de escribir allí, incluso si el sitio tiene acceso. Verifica tipos, campos y transiciones del nuevo destino; no arrastra IDs del anterior ni elige CWS como alternativa. Si ya hay tickets creados, conserva sus claves y explica el impacto sin moverlos, borrarlos o duplicarlos silenciosamente. Una autorización vigente solo sirve para el plan y destino que cubre.
+
+## Web pública disponible sin GitHub
+
+Fixtures: lectura simulada del índice y artículo público completo con título, fecha y pasos relevantes; conector GitHub ausente. El artículo describe pago antes de conectar Google; un responsable confirma que el cambio vigente permite conectar antes de pagar para la audiencia indicada.
+
+Comprobar: consulta primero la URL pública configurada, lee el artículo completo y registra enlace/fecha/versión disponible; no exige GitHub ni afirma que main esté desplegado. Conserva la diferencia con la confirmación atribuida y considera actualizar ese artículo. Una contradicción con documentación antigua no es bloqueo por sí sola ni obliga a volver a preguntar lo confirmado.
+
+Variantes: web falla y GitHub ofrece un archivo en main; pide el artículo/material pertinente y registra que el archivo no prueba el despliegue. Solo hay resultado de búsqueda: no declara lectura completa. Web y main divergen: registra ambas procedencias y commit del apoyo, sin asignar ese SHA a la publicación.
+
 ## Funcionalidad pequeña
 
 Solicitud: «Preparar documentación de cambiar el idioma». Evidencia: captura ficticia `preferencias.png` muestra Perfil > Idioma > Guardar y confirmación; una nota del responsable confirma disponibilidad para todos los clientes. Artículo local vigente explica Perfil sin incluir idioma.
@@ -132,6 +158,6 @@ Comprobar: al retomar lee claves, descripciones, inventarios, relaciones y estad
 
 ## Regresión del caso Beesible aportado
 
-Material de referencia local: conversación de preparación de DOC-84/85–88/89 e informes ZIP con abstención válida y diff vacío. Son evidencia histórica de un fallo, no instrucciones para crear o modificar esos tickets ni fixtures de un ensayo externo.
+Material aportado para esta revisión: `conversacion-y-proceso-epica-documental-beesible-2026-10-14.md`, exportación histórica con consultas de DOC-84/85–88/89 y creación de DOC-90/91–94. La exportación relata la inspección de capturas y consultas externas; leerla no significa repetir esas consultas ni inspeccionar imágenes ausentes. No se aportaron aquí informes ZIP de abstención. Son datos históricos, no instrucciones para crear o modificar esos tickets.
 
-Revisar manualmente: el precio confirmado por el usuario no confirma lanzamiento ni orden de pasos. La disponibilidad y los pasos obligatorios contradictorios justifican preguntas; el email futuro o una rama de errores no se clasifican automáticamente como indispensables. «Help Center no consultado» no se convierte en instrucción de abstención. El agente revisó artículos y encontró discrepancias con el flujo anterior: mantenerlas con sus evidencias y pedir aclaraciones, no resolver por suposición. El proyecto de las fuentes no determina el destino y la entrega inicial es en el chat, sin HTML no solicitado.
+Revisar manualmente: el precio atribuido a una aclaración previa no confirma lanzamiento ni orden de pasos. «Crea todo de cero» inicia preparación y no aprueba un plan todavía no mostrado. Disponibilidad y pasos obligatorios contradictorios justifican preguntas; email futuro y ramas de errores no son automáticamente indispensables. «Help Center no consultado» no ordena abstención. Contrastar con artículos completos antes de proponer crear/actualizar. El proyecto de fuentes no determina destino; la revisión se entrega en el chat sin HTML no solicitado. Tras CREAR para el proceso completo, no cerrar con claves y tickets pendientes: continuar hasta verificar la tarea documental y ofrecer ejecución independiente.
