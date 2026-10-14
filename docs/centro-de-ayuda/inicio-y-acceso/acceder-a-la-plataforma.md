@@ -1,13 +1,12 @@
 ---
 article_id: NOTION-29CB7527AC25802184E3E9E42CF145C4
 title: "Acceder a la plataforma"
-version: 1.1
+version: 1.2
 status: published
 owner: Product
 last_reviewed: 2026-09-09
 notion_id: 29cb7527ac25802184e3e9e42cf145c4
 ---
-
 # <HelpIcon name="signIn" /> Acceder a la plataforma
 
 ### <HelpIcon name="signIn" />  Cómo acceder a la plataforma:
@@ -17,7 +16,7 @@ notion_id: 29cb7527ac25802184e3e9e42cf145c4
 1. En la **pantalla de inicio de sesión**, introduce tu **correo electrónico** y tu **contraseña**.
 2. Pulsa **“Continuar con email”** para acceder a la plataforma.
 3. Si no tienes cuenta, podrás crear una nueva pulsando el botón **“Regístrate”**.
-4. Una vez completado el registro, tu cuenta se creará automáticamente y podrás acceder a la plataforma.
+4. Completa el registro y sigue los pasos para conectar tu Perfil de Empresa en Google y probar Beesible. Los tienes explicados en [Registrarte, probar Beesible y activar el Plan Start](registrarte-probar-beesible-y-activar-el-plan-start.md).
 
 ### Acceso con tu cuenta de Google
 
@@ -50,6 +49,8 @@ notion_id: 29cb7527ac25802184e3e9e42cf145c4
 ---
 
 ### ¿Te resultó útil esta información? También puedes leer:
+
+**<HelpIcon name="related" /> [Registrarte, probar Beesible y activar el Plan Start](registrarte-probar-beesible-y-activar-el-plan-start.md)**
 
 **<HelpIcon name="related" /> [Configurar opciones de seguridad](configurar-opciones-de-seguridad.md)**
 
