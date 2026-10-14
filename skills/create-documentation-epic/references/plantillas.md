@@ -4,6 +4,8 @@ Lee estas plantillas antes de redactar. Sustituye los corchetes con evidencia; n
 
 ## Épica
 
+Si hay capturas, añade a la revisión del plan una selección de evidencia/publicación con archivo, motivo, ticket previsto, descripción, ubicación y alt, según [imágenes para publicación](imagenes-publicacion.md). En el borrador los IDs son provisionales; el JSON ejecutable solo se materializa tras cargar y verificar los IDs reales. Conserva todos los encabezados de las plantillas y el contexto textual.
+
 ```markdown
 # [Resultado que consigue el usuario]
 

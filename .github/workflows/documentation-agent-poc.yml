@@ -248,6 +248,8 @@ jobs:
           set -euo pipefail
           git show "${BASE_SHA}:.github/scripts/generate-documentation-proposal.py" \
             > "${RUNNER_TEMP}/generate-documentation-proposal.py"
+          git show "${BASE_SHA}:.github/scripts/documentation_images.py" \
+            > "${RUNNER_TEMP}/documentation_images.py"
           git show "${BASE_SHA}:.github/prompts/documentation-agent-poc.md" \
             > "${RUNNER_TEMP}/documentation-agent-poc.md"
           git show "${BASE_SHA}:.github/scripts/prepare-documentation-pull-request.py" \
@@ -276,6 +278,7 @@ jobs:
             --ticket-file "${RUNNER_TEMP}/documentation-ticket.json" \
             --prompt-file "${RUNNER_TEMP}/documentation-agent-poc.md" \
             --agent-report "${RUNNER_TEMP}/agent-report.md" \
+            --image-artifacts "${RUNNER_TEMP}/documentation-proposal-files" \
             --jira-epic-key "${JIRA_EPIC_KEY}" \
             --jira-task-keys "${JIRA_TASK_KEYS}" \
             --timeout 300
@@ -377,6 +380,7 @@ jobs:
         run: |
           set -euo pipefail
           npm ci
+          node --test tests/jira-images-build.cjs
           npm run build
 
       - name: Upload proposal evidence
@@ -390,6 +394,7 @@ jobs:
             ${{ runner.temp }}/documentation-proposal.diff
             ${{ runner.temp }}/agent-report.md
             ${{ runner.temp }}/validation-result.json
+            ${{ runner.temp }}/documentation-proposal-files/
 
       - name: Enforce Claude and validation results
         if: always()
@@ -480,6 +485,7 @@ jobs:
           COMMIT_MESSAGE: ${{ steps.publication.outputs.commit_message }}
           PR_TITLE: ${{ steps.publication.outputs.pr_title }}
           PR_BODY: ${{ steps.publication.outputs.pr_body }}
+          FILES_JSON: ${{ steps.publication.outputs.files_json }}
           ISSUE_KEY: ${{ steps.ticket.outputs.issue_key }}
           REPOSITORY: ${{ github.repository }}
         shell: bash
@@ -521,7 +527,7 @@ jobs:
             "41898282+github-actions[bot]@users.noreply.github.com"
           git switch --create "${BRANCH}" "${BASE_SHA}"
           mapfile -t documents < <(
-            python -c 'import json, os; print("\n".join(sorted(item["path"] for item in json.loads(os.environ["DOCUMENTS_JSON"]))))'
+            python -c 'import json, os; print("\n".join(json.loads(os.environ["FILES_JSON"])))'
           )
           if [ "${#documents[@]}" -eq 0 ]; then
             echo "No validated documents were provided for publication" >&2
