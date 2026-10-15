@@ -153,6 +153,16 @@ La etiqueta inicia el workflow de GitHub Actions. El agente utiliza el ticket co
 
 ## Controles
 
+### Enlaces, incertidumbres y orden documental
+
+`.github/documentation-destinations.json` configura destinos respaldados por fuentes locales, con propósito y alcance de verificación. Solo consta la web general; no hay pantalla de acceso o registro confirmada ni comprobación HTTP realizada. Generador y validador rechazan nuevas URLs del dominio Beesible ausentes del catálogo. No se hacen consultas externas para verificar destinos durante la generación ni se conceden herramientas al modelo. El catálogo no sustituye la revisión de que un enlace conduce a la pantalla correcta.
+
+El contrato de `[VERIFICAR] V-nn` usa `reason` y `evidence` existentes. Las afirmaciones pendientes incluidas conservan marca e ID; las secundarias omitidas registran motivo y las resueltas citan evidencia. Al retirar ocurrencias de una marca de un documento, se exige `V-nn omitido: motivo` o `V-nn resuelto: evidencia` en ese documento. Se comprueba también que los nuevos IDs marcados se expliquen. No se exige trasladar cada ID del ticket al artículo. La revisión humana debe detectar reformulaciones que ocultan incertidumbre, evaluar si una omisión rompe el recorrido y comprobar que la evidencia resuelve el dato exacto; las comprobaciones deterministas no prueban esos juicios semánticos ni la veracidad de una declaración de resolución.
+
+El único campo JSON nuevo es `sidebar_position`, opcional por documento, conservado en el informe determinista, la validación y `documents_json`. No cambia el esquema para incertidumbres. Python genera el frontmatter; Claude sigue devolviendo el cuerpo sin él. Se permiten números finitos mayores que 1 y hasta 10000, con decimales para inserciones; máximo cinco artículos de una única categoría por propuesta y sin colisiones con hermanos. No se permite ordenar índices ni renombrar archivos. Las solicitudes e informes antiguos siguen siendo válidos. El validador comprueba la modificación exacta de frontmatter y hashes; la preparación de PR muestra la posición propuesta y rechaza discrepancias de orden entre informe y validación.
+
+El índice se edita aparte conservando contenido ajeno. `sidebars.js` usa autogeneración: las posiciones explícitas preceden a artículos sin posición y estos se ordenan por nombre. Anterior/Siguiente procede de los metadatos de esa sidebar, también en el componente personalizado. La regresión temporal coloca registro y Plan Start antes de acceso, comprobando índice, sidebar y ambas direcciones de paginación con un build real. La elección semántica de posiciones y del recorrido requiere revisión humana. No se modifican artículos publicados.
+
 - El contexto consolidado recuperado de Jira se conserva completo, sin truncado ni resumen automático, hasta un máximo de 60.000 caracteres; si lo supera, el flujo se detiene antes de Claude.
 - La propuesta puede crear o actualizar uno o varios documentos Markdown y se aplica de forma atómica.
 - El agente no inventa comportamiento, evidencia ni contenido ausente en el ticket.

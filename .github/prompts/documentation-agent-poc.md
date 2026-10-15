@@ -70,6 +70,9 @@ Para cada paso nuevo o modificado, comprueba que la evidencia permite identifica
 
 ### Navegación de artículos nuevos
 
+- Valora el recorrido lógico: registro y primeros pasos antes de acceso recurrente, configuración y gestión posterior. Si el índice enumera artículos, inserta el enlace en su lugar lógico y conserva literalmente el contenido ajeno.
+- El índice no determina la sidebar: Docusaurus la autogenera por `sidebar_position` y después por nombre; Anterior/Siguiente usa esa sidebar. Si hace falta, propone el campo opcional `sidebar_position` fuera de `proposed_body`, solo en artículos de una misma categoría existente (máximo cinco). Usa números finitos mayores que 1 y hasta 10000, sin colisiones con hermanos; puedes usar decimales para evitar renumerar. El índice y otras categorías conservan su orden. Python escribe y valida el frontmatter. Una actualización solo de orden puede conservar el cuerpo completo sin cambios.
+- «Registrarte, probar Beesible y activar el Plan Start» debe preceder a «Acceder a la plataforma» en Inicio y acceso. Conserva Plan Start: no hay confirmación de un cambio a Smart. Nunca renombres archivos ni URLs para ordenar.
 - Cuando crees un artículo público, examina el `index.md` de su categoría. Si el índice enumera artículos, incluye en la misma propuesta una operación `update` del índice para enlazar el nuevo artículo junto con su operación `create`.
 - Usa un enlace relativo al artículo nuevo y un texto coherente con su título. Reutiliza el formato, los subtítulos y los HelpIcon de la categoría.
 - Añade o recupera un subtítulo de agrupación únicamente cuando corresponda al nuevo artículo y lo justifiquen la estructura de la categoría y la evidencia disponible.
@@ -87,6 +90,16 @@ Para cada paso nuevo o modificado, comprueba que la evidencia permite identifica
 - No cambies una URL o un nombre de archivo solo para ajustar un título.
 
 ## Criterio de decisión
+
+### Destinos útiles y verificados
+
+El mensaje incluye `verified_destinations`, configuración explícita respaldada por fuentes locales. Enlaza registro, acceso o apertura de plataforma cuando ayude a completar la tarea, usando únicamente destinos confirmados. No inventes rutas profundas ni pantallas; no uses URLs con sesiones, tokens o datos personales. Evita repetir enlaces en cada mención. Si solo se conoce la web general, enlázala solo cuando sea útil y explica el recorrido confirmado en texto; no la presentes como pantalla directa de acceso o registro. Una respuesta HTTP correcta no demuestra que la URL lleve a la pantalla adecuada. No consultes servicios externos: si falta confirmación, registra esa limitación en evidence. Las nuevas URLs Beesible deben coincidir exactamente con el catálogo; conservar un enlace previo no lo convierte en evidencia de un nuevo destino.
+
+### Incertidumbres y [VERIFICAR]
+
+Una marca identifica un dato sin confirmar, nunca autoriza a inventarlo. Si incluyes una afirmación pendiente, conserva `[VERIFICAR] V-nn` junto a ella y explica el ID y lo pendiente en `evidence` o `reason`. Si omites un dato secundario o fuera de alcance, registra ID, decisión y motivo en el informe, sin introducir marcas innecesarias en el artículo. Si una aclaración lo resuelve, identifica la evidencia concreta y su procedencia. No elimines silenciosamente una marca dejando la misma afirmación confirmada. Conserva literalmente las marcas y el contenido no relacionados.
+
+Cuando retires una ocurrencia de una marca existente, escribe en el `reason` o `evidence` de ese documento `V-nn omitido: motivo` o `V-nn resuelto: evidencia concreta`. Los campos actuales bastan; no añadas campos de incertidumbres. No es obligatorio reproducir todos los pendientes del ticket en el artículo. No te abstengas por la mera presencia de marcas; mantén la abstención cuando falta información indispensable para el alcance. La revisión humana debe comprobar que las omisiones son secundarias, que la evidencia resuelve exactamente el dato y que ninguna reformulación oculta una afirmación aún pendiente: el validador no prueba equivalencia semántica ni veracidad.
 
 ### Imágenes seleccionadas
 
@@ -119,7 +132,7 @@ Devuelve únicamente el objeto JSON sujeto al esquema del generador:
 - `evidence`: evidencia revisada.
 - `documents`: para una propuesta, uno o más objetos; para una abstención, una lista vacía.
 
-Cada documento contiene exactamente:
+Cada documento contiene los siguientes campos obligatorios y, solo si requiere ordenar, el opcional `sidebar_position`:
 
 - `operation`: `create` o `update`.
 - `path`: ruta relativa exacta.
