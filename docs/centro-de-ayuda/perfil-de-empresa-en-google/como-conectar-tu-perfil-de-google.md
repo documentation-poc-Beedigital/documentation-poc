@@ -1,7 +1,7 @@
 ---
 article_id: NOTION-281B7527AC25817081B1D51E45A498C7
 title: "Cómo conectar tu Perfil de Google"
-version: 1.2
+version: 1.3
 status: published
 owner: Product
 last_reviewed: 2026-09-09
@@ -17,7 +17,7 @@ Así, podrás gestionar y actualizar tus datos de forma centralizada, facilitand
 
 ### <HelpIcon name="steps" />  Pasos para conectar tu Perfil de Empresa en Google:
 
-Al completar tu contratación, te pediremos que **conectes tu Perfil de Empresa en Google con Beesible**.
+Después de crear tu cuenta de Beesible, y antes de probar las acciones gratuitas y de contratar, te pediremos que **conectes tu Perfil de Empresa en Google con Beesible**.
 
 ### <HelpIcon name="success" />  Si pulsas **“Conectar mi cuenta”** (ya tienes un perfil)
 
@@ -34,7 +34,7 @@ Al completar tu contratación, te pediremos que **conectes tu Perfil de Empresa 
     También puedes consultar la sección de **Preguntas Frecuentes** para acceder a nuestra documentación y guías de ayuda.
     :::
 
-3. Una vez conectes tu perfil, accederás a la plataforma con toda tu **información sincronizada**. Desde ese momento, podrás empezar a utilizar Beesible para gestionar tu información, responder reseñas y gestionar tus publicaciones de forma sencilla.
+3. Una vez conectes tu perfil y selecciones tu negocio, accederás al panel de Beesible con tu **información sincronizada**. Desde ahí puedes probar las acciones gratuitas y, si decides contratar, activar el Plan Start para usar las acciones incluidas en él. Consulta todo el recorrido en [Registrarte, probar Beesible y activar el Plan Start](../inicio-y-acceso/registrarte-probar-beesible-y-activar-el-plan-start.md).
 
 ### <HelpIcon name="warning" />  Si pulsas **“No tengo Perfil de Empresa”**
 
@@ -53,6 +53,8 @@ Al completar tu contratación, te pediremos que **conectes tu Perfil de Empresa 
 ---
 
 ### ¿Te resultó útil esta información? También puedes leer:
+
+**<HelpIcon name="related" /> [Registrarte, probar Beesible y activar el Plan Start](../inicio-y-acceso/registrarte-probar-beesible-y-activar-el-plan-start.md)**
 
 **<HelpIcon name="related" /> [Crear un Perfil de Empresa en Google](crear-un-perfil-de-empresa-en-google.md)**
 
