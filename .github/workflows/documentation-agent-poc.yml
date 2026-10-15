@@ -61,6 +61,36 @@ jobs:
           fi
           echo "sha=${base_sha}" >> "${GITHUB_OUTPUT}"
 
+      - name: Stage trusted diagnostic scripts and prompt
+        env:
+          BASE_SHA: ${{ steps.base.outputs.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import os
+          import subprocess
+          from pathlib import Path
+
+          # Preserve the module/catalog layout, using only the captured commit.
+          root = Path(os.environ["RUNNER_TEMP"]) / "trusted-documentation"
+          for relative in (
+              "scripts/generate-documentation-proposal.py",
+              "scripts/documentation_images.py",
+              "scripts/documentation_contract.py",
+              "documentation-destinations.json",
+              "prompts/documentation-agent-poc.md",
+          ):
+              content = subprocess.run(
+                  ["git", "-C", os.environ["GITHUB_WORKSPACE"], "show",
+                   f"{os.environ['BASE_SHA']}:.github/{relative}"],
+                  check=True, capture_output=True,
+              ).stdout
+              destination = root / relative
+              destination.parent.mkdir(parents=True, exist_ok=True)
+              destination.write_bytes(content)
+          PY
+
       - name: Serialize diagnostic ticket input
         shell: bash
         run: |
@@ -72,7 +102,7 @@ jobs:
           from pathlib import Path
 
           spec = importlib.util.spec_from_file_location(
-              "generator", ".github/scripts/generate-documentation-proposal.py"
+              "generator", Path(os.environ["RUNNER_TEMP"]) / "trusted-documentation/scripts/generate-documentation-proposal.py"
           )
           generator = importlib.util.module_from_spec(spec)
           spec.loader.exec_module(generator)
@@ -109,11 +139,11 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python ".github/scripts/generate-documentation-proposal.py" \
+          python "${RUNNER_TEMP}/trusted-documentation/scripts/generate-documentation-proposal.py" \
             --repo-root "${GITHUB_WORKSPACE}" \
             --base-sha "${{ steps.base.outputs.sha }}" \
             --ticket-file "${RUNNER_TEMP}/documentation-ticket.json" \
-            --prompt-file ".github/prompts/documentation-agent-poc.md" \
+            --prompt-file "${RUNNER_TEMP}/trusted-documentation/prompts/documentation-agent-poc.md" \
             --diagnose-jira-context \
             --jira-epic-key "${JIRA_EPIC_KEY}" \
             --jira-task-keys "${JIRA_TASK_KEYS}" \
@@ -149,6 +179,40 @@ jobs:
           fi
           echo "sha=${base_sha}" >> "${GITHUB_OUTPUT}"
 
+      - name: Stage trusted automation scripts and prompt
+        env:
+          BASE_SHA: ${{ steps.base.outputs.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import os
+          import subprocess
+          from pathlib import Path
+
+          # Preserve the module/catalog layout, using only the captured commit.
+          root = Path(os.environ["RUNNER_TEMP"]) / "trusted-documentation"
+          for relative in (
+              "scripts/generate-documentation-proposal.py",
+              "scripts/documentation_images.py",
+              "scripts/documentation_contract.py",
+              "scripts/validate-documentation-proposal.py",
+              "scripts/prepare-documentation-pull-request.py",
+              "scripts/notify-jira-documentation-abstention.py",
+              "scripts/notify-slack-documentation-pr.py",
+              "documentation-destinations.json",
+              "prompts/documentation-agent-poc.md",
+          ):
+              content = subprocess.run(
+                  ["git", "-C", os.environ["GITHUB_WORKSPACE"], "show",
+                   f"{os.environ['BASE_SHA']}:.github/{relative}"],
+                  check=True, capture_output=True,
+              ).stdout
+              destination = root / relative
+              destination.parent.mkdir(parents=True, exist_ok=True)
+              destination.write_bytes(content)
+          PY
+
       - name: Validate and serialize ticket inputs
         id: ticket
         env:
@@ -168,7 +232,7 @@ jobs:
           from pathlib import Path
 
           spec = importlib.util.spec_from_file_location(
-              "generator", ".github/scripts/generate-documentation-proposal.py"
+              "generator", Path(os.environ["RUNNER_TEMP"]) / "trusted-documentation/scripts/generate-documentation-proposal.py"
           )
           generator = importlib.util.module_from_spec(spec)
           spec.loader.exec_module(generator)
@@ -240,25 +304,6 @@ jobs:
             -p 'test_*.py' \
             -v
 
-      - name: Stage trusted automation scripts and prompt
-        env:
-          BASE_SHA: ${{ steps.base.outputs.sha }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          git show "${BASE_SHA}:.github/scripts/generate-documentation-proposal.py" \
-            > "${RUNNER_TEMP}/generate-documentation-proposal.py"
-          git show "${BASE_SHA}:.github/scripts/documentation_images.py" \
-            > "${RUNNER_TEMP}/documentation_images.py"
-          git show "${BASE_SHA}:.github/prompts/documentation-agent-poc.md" \
-            > "${RUNNER_TEMP}/documentation-agent-poc.md"
-          git show "${BASE_SHA}:.github/scripts/prepare-documentation-pull-request.py" \
-            > "${RUNNER_TEMP}/prepare-documentation-pull-request.py"
-          git show "${BASE_SHA}:.github/scripts/notify-jira-documentation-abstention.py" \
-            > "${RUNNER_TEMP}/notify-jira-documentation-abstention.py"
-          git show "${BASE_SHA}:.github/scripts/notify-slack-documentation-pr.py" \
-            > "${RUNNER_TEMP}/notify-slack-documentation-pr.py"
-
       - name: Generate documentation proposal with Claude
         id: claude
         continue-on-error: true
@@ -272,11 +317,11 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python "${RUNNER_TEMP}/generate-documentation-proposal.py" \
+          python "${RUNNER_TEMP}/trusted-documentation/scripts/generate-documentation-proposal.py" \
             --repo-root "${GITHUB_WORKSPACE}" \
             --base-sha "${{ steps.base.outputs.sha }}" \
             --ticket-file "${RUNNER_TEMP}/documentation-ticket.json" \
-            --prompt-file "${RUNNER_TEMP}/documentation-agent-poc.md" \
+            --prompt-file "${RUNNER_TEMP}/trusted-documentation/prompts/documentation-agent-poc.md" \
             --agent-report "${RUNNER_TEMP}/agent-report.md" \
             --image-artifacts "${RUNNER_TEMP}/documentation-proposal-files" \
             --jira-epic-key "${JIRA_EPIC_KEY}" \
@@ -352,7 +397,7 @@ jobs:
             exit 1
           fi
 
-          validator_path="${RUNNER_TEMP}/validate-documentation-proposal.py"
+          validator_path="${RUNNER_TEMP}/trusted-documentation/scripts/validate-documentation-proposal.py"
           if ! git show "${BASE_SHA}:.github/scripts/validate-documentation-proposal.py" \
             > "${validator_path}"; then
             echo "Could not load the trusted validator from ${BASE_SHA}" >&2
@@ -424,7 +469,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python "${RUNNER_TEMP}/prepare-documentation-pull-request.py" \
+          python "${RUNNER_TEMP}/trusted-documentation/scripts/prepare-documentation-pull-request.py" \
             --repo-root "${GITHUB_WORKSPACE}" \
             --validation-result "${RUNNER_TEMP}/validation-result.json" \
             --ticket-file "${RUNNER_TEMP}/documentation-ticket.json" \
@@ -448,7 +493,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python "${RUNNER_TEMP}/notify-jira-documentation-abstention.py" prepare \
+          python "${RUNNER_TEMP}/trusted-documentation/scripts/notify-jira-documentation-abstention.py" prepare \
             --validation-result "${RUNNER_TEMP}/validation-result.json" \
             --ticket-file "${RUNNER_TEMP}/documentation-ticket.json" \
             --agent-report "${RUNNER_TEMP}/agent-report.md" \
@@ -469,7 +514,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python "${RUNNER_TEMP}/notify-jira-documentation-abstention.py" send \
+          python "${RUNNER_TEMP}/trusted-documentation/scripts/notify-jira-documentation-abstention.py" send \
             --payload-file "${RUNNER_TEMP}/jira-abstention-payload.json" \
             --timeout 30
 
@@ -499,7 +544,7 @@ jobs:
             --json url,title,headRefName \
             > "${RUNNER_TEMP}/open-prs-for-ticket.json"
           existing_pr_url="$(python \
-            "${RUNNER_TEMP}/notify-slack-documentation-pr.py" find-pr \
+            "${RUNNER_TEMP}/trusted-documentation/scripts/notify-slack-documentation-pr.py" find-pr \
             --candidates-file \
               "${RUNNER_TEMP}/open-prs-for-branch.json" \
               "${RUNNER_TEMP}/open-prs-for-ticket.json" \
@@ -622,7 +667,7 @@ jobs:
           PR_URL: ${{ steps.pull_request.outputs.pr_url }}
         shell: bash
         run: |
-          python "${RUNNER_TEMP}/notify-slack-documentation-pr.py" send \
+          python "${RUNNER_TEMP}/trusted-documentation/scripts/notify-slack-documentation-pr.py" send \
             --issue-key "${ISSUE_KEY}" \
             --issue-summary "${ISSUE_SUMMARY}" \
             --documents-json "${DOCUMENTS_JSON}" \

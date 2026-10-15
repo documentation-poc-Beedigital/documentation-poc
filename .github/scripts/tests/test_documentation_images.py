@@ -433,7 +433,8 @@ class ImageWorkflowTests(unittest.TestCase):
 class ImageWorkflowWiringTests(unittest.TestCase):
     def test_workflow_stages_module_and_includes_recoverable_binaries(self):
         workflow = (SCRIPTS.parent / "workflows/documentation-agent-poc.yml").read_text(encoding="utf-8")
-        self.assertIn('${BASE_SHA}:.github/scripts/documentation_images.py', workflow)
+        # The shared startup regression executes this staging list via git show.
+        self.assertIn('"scripts/documentation_images.py"', workflow)
         self.assertIn('--image-artifacts "${RUNNER_TEMP}/documentation-proposal-files"', workflow)
         self.assertIn('${{ runner.temp }}/documentation-proposal-files/', workflow)
         self.assertIn('FILES_JSON: ${{ steps.publication.outputs.files_json }}', workflow)
