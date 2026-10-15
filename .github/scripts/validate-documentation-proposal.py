@@ -16,6 +16,7 @@ from typing import Sequence
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import documentation_images as images
+import documentation_contract as contract
 
 DEFAULT_MAX_DIFF_BYTES = 262_144
 DEFAULT_MAX_REPORT_BYTES = 262_144
@@ -84,7 +85,7 @@ def parse_agent_report(path: Path, max_bytes: int) -> dict[str, object]:
         raise ValidationError("Agent report documents must be a list")
     parsed: list[dict[str, str]] = []
     for index, item in enumerate(documents):
-        if not isinstance(item, dict) or set(item) != REPORT_DOCUMENT_FIELDS:
+        if not isinstance(item, dict) or set(item) not in (REPORT_DOCUMENT_FIELDS, REPORT_DOCUMENT_FIELDS | {"sidebar_position"}):
             raise ValidationError(f"Agent report document {index} has an unexpected structure")
         normalized: dict[str, object] = {}
         for field in ("operation", "path", "title", "reason", "evidence", "proposed_version"):
@@ -107,6 +108,8 @@ def parse_agent_report(path: Path, max_bytes: int) -> dict[str, object]:
         if not isinstance(item["diff"], str):
             raise ValidationError(f"Agent report documents[{index}].diff must be a string")
         normalized["diff"] = item["diff"]
+        if "sidebar_position" in item:
+            normalized["sidebar_position"] = item["sidebar_position"]
         parsed.append(normalized)  # type: ignore[arg-type]
     if value["decision"] == "proposal" and not parsed:
         raise ValidationError("A proposal report requires at least one document")
@@ -343,6 +346,12 @@ def validate_repository(
         reported_paths = [str(item["path"]) for item in reported_documents]
         if len(reported_paths) != len(set(reported_paths)):
             errors.append("Agent report contains duplicate document paths")
+        try:
+            for item in reported_documents:
+                validate_relative_path(root, item["path"], item["operation"])
+            contract.check_navigation(root, reported_documents)
+        except (ValueError, OSError) as error:
+            errors.append(str(error))
         if report["decision"] == "abstention":
             if entries or untracked:
                 errors.append("An abstention report requires an empty Git diff")
@@ -389,8 +398,15 @@ def validate_repository(
                     assert before is not None
                     before_frontmatter, before_body = split_frontmatter(before, path)
                     expected_frontmatter, previous_version, proposed_version = increment_frontmatter_version(before_frontmatter, path)
-                    if after_body == before_body:
+                    if after_body == before_body and "sidebar_position" not in item:
                         raise ValidationError(f"Proposed body is unchanged: {path}")
+                try:
+                    if existed and after_body == before_body and contract.position(before_frontmatter, item) == before_frontmatter:
+                        raise ValueError(f"Proposed document is unchanged: {path}")
+                    expected_frontmatter = contract.position(expected_frontmatter, item)
+                    contract.check_content(before_body if existed else "", after_body, item)
+                except ValueError as error:
+                    raise ValidationError(str(error)) from error
                 if after_frontmatter != expected_frontmatter:
                     raise ValidationError(
                         f"Only the deterministic MINOR version increment or deterministic creation "
@@ -416,6 +432,7 @@ def validate_repository(
                     "operation": operation, "path": path, "title": item["title"],
                     "reason": item["reason"], "evidence": item["evidence"],
                     "previous_version": previous_version, "proposed_version": proposed_version,
+                    **({"sidebar_position": item["sidebar_position"]} if "sidebar_position" in item else {}),
                 })
             except (ValidationError, images.ImageError) as error:
                 errors.append(str(error))

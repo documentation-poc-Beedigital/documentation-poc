@@ -14,6 +14,7 @@ from typing import Mapping, Sequence
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import documentation_images as images
+import documentation_contract as contract
 
 
 ISSUE_KEY_PATTERN = re.compile(
@@ -388,6 +389,12 @@ def build_pull_request_body(
             f"- Motivo: {escape_markdown_inline(reason)}\n"
             f"- Evidencia: {escape_markdown_inline(evidence)}\n"
         )
+        if "sidebar_position" in item:
+            try:
+                contract.position("---\n---\n", item)
+            except ValueError as error:
+                raise PublicationPreparationError(str(error)) from error
+            section += f"- Posición propuesta en la categoría: `{item['sidebar_position']}`\n"
         (created_sections if operation == "create" else updated_sections).append(
             section
         )
@@ -486,10 +493,11 @@ def prepare_publication(
     publication_documents: list[dict[str, object]] = []
     seen: set[str] = set()
     for item in validated_documents:
-        if not isinstance(item, dict) or set(item) != {
+        metadata_fields = {
             "operation", "path", "title", "reason", "evidence",
             "previous_version", "proposed_version"
-        }:
+        }
+        if not isinstance(item, dict) or set(item) not in (metadata_fields, metadata_fields | {"sidebar_position"}):
             raise PublicationPreparationError("Invalid validated document metadata")
         document = item["path"]
         if not isinstance(document, str) or document in seen or document not in documents:
@@ -520,6 +528,7 @@ def prepare_publication(
                 "evidence": item["evidence"],
                 "previous_version": previous_version,
                 "proposed_version": proposed_version,
+                **({"sidebar_position": item["sidebar_position"]} if "sidebar_position" in item else {}),
             }
         )
     report = read_agent_report(agent_report)
@@ -540,6 +549,9 @@ def prepare_publication(
         item.get("path") if isinstance(item, dict) else None for item in report_documents
     ] != [item["path"] for item in publication_documents]:
         raise PublicationPreparationError("Agent report documents do not match validation")
+    for reported, validated in zip(report_documents, publication_documents):
+        if reported.get("sidebar_position") != validated.get("sidebar_position"):
+            raise PublicationPreparationError("Agent report navigation does not match validation")
     body = build_pull_request_body(ticket, report, actions_url)
     body_file.parent.mkdir(parents=True, exist_ok=True)
     body_file.write_text(body, encoding="utf-8", newline="\n")

@@ -1,0 +1,8 @@
+[
+  {
+    "url": "https://www.beesible.ai/",
+    "purpose": "Web general de Beesible; explicar en texto el recorrido cuando proceda",
+    "source": "docusaurus.config.js footer; docs/index.md; artículo de registro",
+    "verification": "Destino general respaldado por fuentes locales. No se ha comprobado respuesta HTTP ni pantalla de registro o acceso. No hay URL de plataforma confirmada en el repositorio."
+  }
+]

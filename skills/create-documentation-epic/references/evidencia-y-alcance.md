@@ -40,6 +40,8 @@ Una discrepancia con un artículo antiguo puede justificar actualizarlo cuando e
 
 ## Elegir una parte útil
 
+Al trasladar pendientes al agente documental, una marca no confirma el dato. Si la afirmación sigue incluida y pendiente, conserva `[VERIFICAR] V-nn` junto a ella; si es secundaria o queda fuera de alcance, registra su omisión y motivo sin exigir marcas en el artículo. Una resolución identifica evidencia y procedencia. No retires silenciosamente una marca conservando la afirmación como confirmada. La mera existencia de pendientes no exige abstención: sí puede exigirla la falta de información indispensable. No es obligatorio publicar todos los pendientes del ticket.
+
 Busca unidades coherentes que puedan explicarse desde un inicio claro hasta un resultado con evidencia suficiente. Presenta qué se documentaría, qué queda aplazado y por qué. Reducir no consiste en cortar pasos necesarios de un recorrido para llamarlo completo. Confirma la elección del usuario si cambia el alcance pedido; conserva lo aplazado en el registro y fuera de los pasos que se presenten como ejecutables.
 
 Tras reducir, reevalúa detalle, confirmación funcional, documentación relacionada y pendientes del lote restante. Explica qué bloqueo deja de afectar y qué riesgos continúan. «El plan describe suficientemente este recorrido futuro» no equivale a «la funcionalidad está confirmada» ni a «ya no puede haber abstención». La falta de implementación confirmada puede conservarse como pendiente para verificar el producto sin impedir preparar el borrador FUTURO, y puede seguir motivando abstención al ejecutar el agente.

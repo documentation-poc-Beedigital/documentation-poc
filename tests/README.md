@@ -9,6 +9,7 @@ python -B -m unittest discover -s .github/scripts/tests
 npm run build
 node tests/verify-help-center-build.cjs
 node --test tests/jira-images-build.cjs
+node --test tests/documentation-navigation-build.cjs
 npm run serve -- --host 127.0.0.1 --no-open
 ```
 
