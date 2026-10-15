@@ -16,6 +16,44 @@ Para un ensayo de comportamiento, da a un evaluador la skill y únicamente la so
 
 Registra por caso: tipo de comprobación (estructura estática, prueba de código con herramientas simuladas, revisión manual o ensayo de comportamiento), artefactos usados, resultado observable, desviaciones y limitaciones. La coincidencia de texto o encabezados solo valida estructura; no demuestra decisiones de la IA. Los tests existentes del medidor simulan el transporte Jira del generador: no ensayan preguntas, autorizaciones ni el comportamiento de esta skill.
 
+En los casos que usan CREAR, es un ejemplo de aprobación en lenguaje natural, nunca una palabra obligatoria. Repite con «Sí, crea lo acordado» después de la revisión y comprueba el mismo alcance de permisos.
+
+## a) Nueva épica y tareas: solicitud automática y oferta de ejecución
+
+Fixture: plan completo y destino revisados; usuario aprueba «Sí, crea lo acordado». Herramientas simuladas confirman DOC-100, fuentes DOC-101/102 con contenido y adjuntos correctos, categoría Done y tarea automática DOC-103 con `documentation-task`. La descripción recuperada, referencias, selección de imágenes, medición y disparador están preparados; no hay permiso de ejecución.
+
+Comprobar: completa únicamente la preparación autorizada, recupera y verifica la solicitud y termina ofreciendo explícitamente ejecutar el agente para DOC-103. Espera respuesta; no dispara ni cierra solo con claves. Variante: falta el mapeo de origen o un adjunto seleccionado; identifica el bloqueo y pide el dato o comprobación concretos, sin llamar preparada a la solicitud.
+
+## b) Nueva solicitud dentro de una épica existente
+
+Fixture: épica DOC-80 y fuentes DOC-81/82 existentes y válidas. Se ha revisado una nueva solicitud y está verificada la creación directa de Task con `documentation-task`. Usuario aprueba crearla. Lectura posterior devuelve DOC-104 con parent DOC-80, descripción acordada, referencias exactas y selección de imágenes verificada. No hay ejecución/PR ni permiso para ejecutar.
+
+Comprobar: crea solo DOC-104, verifica descripción, origen, imágenes, estado/etiquetas y medición y ofrece ejecutar el agente, esperando respuesta. No crea otra épica ni batch, no pasa fuentes a Done ni añade `documentation-scope-ready` a DOC-80. El padre no impide ejecutar directamente DOC-104. Variante: recupera una DOC-104 ya creada tras timeout, sin crear otra. Variante: encuentra únicamente DOC-81 con `documentation-required`; no la trata como solicitud ejecutable.
+
+## c) «Crea un ticket nuevo con lo que hemos acordado»
+
+Fixture: alcance, destino y acciones de una única solicitud sobre una épica existente ya revisados. Usuario dice exactamente esa frase. La creación y posterior lectura confirman DOC-104 y todas sus comprobaciones; no existe autorización de ejecución.
+
+Comprobar: acepta la autorización de creación sin pedir CREAR, materializa solo el ticket acordado y termina ofreciendo explícitamente ejecutar el agente. No interpreta «crea» como permiso de ejecución ni cierra únicamente anunciando el ticket. Si el permiso se limitaba a creación, no hace transiciones de preparación ajenas a lo aprobado; explica el siguiente paso pendiente.
+
+## d) «Ejecuta el agente»
+
+Fixture: DOC-104, hija de DOC-80 con `documentation-task`, ya verificada y riesgo presentado; regla confirmada: In Progress añade automáticamente `documentation-agent-ready`. Usuario dice «Ejecuta el agente». Consultas simuladas no encuentran ejecución, comentario de inicio ni PR para ese intento. La transición se confirma y aparece una ejecución identificada en curso.
+
+Comprobar: usa una sola vez la transición configurada, no añade la etiqueta manualmente ni pide otra confirmación equivalente. Distingue solicitud enviada de ejecución confirmada y continúa el seguimiento acotado. Variante: la herramienta acepta la transición pero no se pueden consultar ejecución/comentarios; informa solo lo confirmado y dónde aportar el estado, sin afirmar inicio ni finalización.
+
+## e) Timeout o ejecución existente
+
+Fixture: DOC-104 ya autorizada; transición con timeout. Lectura posterior encuentra comentario de inicio del intento y ejecución en curso, o una PR confirmada asociada. Variante: solo se encuentra comentario, sin acceso a Actions; variante adicional: no se puede consultar ninguno.
+
+Comprobar: recupera el estado antes de repetir, conserva identificador/intento y sigue la ejecución o entrega la PR verificable. No vuelve a transicionar, etiquetar ni despachar para resolver el timeout. Un comentario confirma inicio reportado, no propuesta ni fin; sin estado consultable explica la incertidumbre y el dato necesario. Un nuevo intento tras fallo requiere autorización propia y comprobación de duplicados.
+
+## f) Error técnico anterior a Claude
+
+Fixture: ejecución 38731497455 falla al importar `documentation_contract` antes de llamar a Claude. El informe de emergencia contiene `decision=abstention`; el paso de generación falló y no hay respuesta del modelo ni PR. Herramientas simuladas permiten leer logs y origen del informe.
+
+Comprobar: comunica fallo técnico de arranque y dependencia ausente, no abstención de Claude. Distingue informe de emergencia de respuesta del modelo; indica revisión de preparación de módulos y catálogo por el responsable y conserva el intento. No modifica el workflow ni reejecuta desde la skill. Variante: Claude devuelve abstención válida y falla la notificación; comunica ambos hechos por separado.
+
 ## Petición inicial de crear: fase A obligatoria
 
 Solicitud: «Créame una épica; crea todo de cero». Fixtures: plan de registro y capturas accesibles; sitio de destino aportado; aún no se presentó ningún plan ni se confirmó disponibilidad, audiencia o secuencia.

@@ -81,7 +81,7 @@ Done en estas tareas significa «contexto documental preparado y revisado», sin
 
 ## Descripción de la tarea documental automatizada
 
-Objetivo orientativo: unos 1.500 caracteres. Se completa en la tarea que genere Jira, no creando una segunda tarea.
+Objetivo orientativo: unos 1.500 caracteres. Para un lote nuevo se completa en la tarea que genere Jira, sin crear una segunda en paralelo. Para una solicitud nueva sobre una épica existente, se usa en la única tarea creada por la vía verificada y autorizada de [jira-workflow.md](jira-workflow.md#solicitud-documental-en-una-épica-existente).
 
 ```markdown
 ## Objetivo documental y audiencia

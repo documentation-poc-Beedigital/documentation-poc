@@ -1,14 +1,14 @@
 from __future__ import annotations
 
-import io
 import json
 import os
 import re
+import subprocess
+import sys
 import tempfile
 import textwrap
 import unittest
 from pathlib import Path
-from unittest import mock
 
 
 WORKFLOW = (
@@ -99,7 +99,7 @@ class DocumentationAgentWorkflowTests(unittest.TestCase):
             self.assertNotIn(forbidden, diagnostic)
         self.assertIn('persist-credentials: false', diagnostic)
         self.assertNotIn('ref: main', diagnostic)
-        self.assertIn('--prompt-file ".github/prompts/documentation-agent-poc.md"', diagnostic)
+        self.assertIn('--prompt-file "${RUNNER_TEMP}/trusted-documentation/prompts/documentation-agent-poc.md"', diagnostic)
         self.assertIn('--repo-root "${GITHUB_WORKSPACE}"', diagnostic)
         self.assertIn('--base-sha "${{ steps.base.outputs.sha }}"', diagnostic)
         self.assertIn('os.environ["GITHUB_EVENT_PATH"]', diagnostic)
@@ -117,6 +117,10 @@ class DocumentationAgentWorkflowTests(unittest.TestCase):
 
     def serialize_ticket(self, step_name: str, inputs: dict[str, str]) -> dict[str, str]:
         with tempfile.TemporaryDirectory() as temporary:
+            stage_name = ("Stage trusted diagnostic scripts and prompt"
+                          if step_name == "Serialize diagnostic ticket input"
+                          else "Stage trusted automation scripts and prompt")
+            self.stage_trusted_files(temporary, stage_name)
             event_file = Path(temporary) / "event.json"
             event_file.write_text(json.dumps({"inputs": {
                 name.lower(): value for name, value in inputs.items()
@@ -127,14 +131,90 @@ class DocumentationAgentWorkflowTests(unittest.TestCase):
                 "GITHUB_EVENT_PATH": str(event_file),
                 **inputs,
             }
-            stdout = io.StringIO()
-            stderr = io.StringIO()
-            with mock.patch.object(os, "environ", environment), \
-                 mock.patch("sys.stdout", stdout), mock.patch("sys.stderr", stderr):
-                exec(compile(self.serialization_code(step_name), str(WORKFLOW), "exec"), {})
-            self.assertEqual("", stdout.getvalue())
-            self.assertEqual("", stderr.getvalue())
+            result = self.run_isolated(temporary, self.serialization_code(step_name), environment)
+            if result.returncode:
+                raise SystemExit(result.stderr.strip())
+            self.assertEqual("", result.stdout)
+            self.assertEqual("", result.stderr)
             return json.loads((Path(temporary) / "documentation-ticket.json").read_text(encoding="utf-8"))
+
+    def run_isolated(self, cwd: str, code: str, environment: dict[str, str]):
+        # No secrets, PYTHONPATH, user site, repository cwd or network in children.
+        clean = {key: os.environ[key] for key in ("PATH", "SYSTEMROOT", "TEMP", "TMP")
+                 if key in os.environ}
+        guard = (
+            "import json, os, sys\n"
+            # JSON also carries invalid control characters to the input validator;
+            # OS environment blocks cannot represent the NUL rejection fixture.
+            "os.environ = {**os.environ, **json.loads(sys.stdin.read())}\n"
+            "def offline(event, args):\n"
+            "    if event.startswith('socket.'):\n"
+            "        raise AssertionError('Network forbidden in workflow startup regression')\n"
+            "sys.addaudithook(offline)\n"
+        )
+        return subprocess.run(
+            [sys.executable, "-I", "-X", "utf8", "-B", "-c", guard + code], cwd=cwd,
+            env=clean, input=json.dumps(environment), text=True, encoding="utf-8",
+            capture_output=True, timeout=30,
+        )
+
+    def stage_trusted_files(self, temporary: str, step_name: str) -> Path:
+        repository = WORKFLOW.parents[2]
+        sha = subprocess.run(
+            ["git", "-C", str(repository), "rev-parse", "HEAD"],
+            check=True, capture_output=True, text=True,
+        ).stdout.strip()
+        result = self.run_isolated(temporary, self.serialization_code(step_name), {
+            "RUNNER_TEMP": temporary, "GITHUB_WORKSPACE": str(repository), "BASE_SHA": sha,
+        })
+        self.assertEqual(0, result.returncode, result.stderr)
+        return Path(temporary) / "trusted-documentation"
+
+    def test_trusted_startup_from_isolated_temporary_directory(self) -> None:
+        for step in ("Stage trusted diagnostic scripts and prompt",
+                     "Stage trusted automation scripts and prompt"):
+            with self.subTest(step=step), tempfile.TemporaryDirectory(prefix="workflow isolated ") as temporary:
+                root = self.stage_trusted_files(temporary, step)
+                self.assertTrue((root / "prompts/documentation-agent-poc.md").read_text(encoding="utf-8").strip())
+                self.assertTrue(json.loads((root / "documentation-destinations.json").read_text(encoding="utf-8")))
+                jobs = self.workflow.split("  prepare-proposal:", 1)
+                job = jobs[0] if "diagnostic" in step else jobs[1]
+                references = set(re.findall(
+                    r'\$\{RUNNER_TEMP\}/trusted-documentation/([^"\s]+)', job,
+                ))
+                self.assertTrue(references)
+                for relative in sorted(references):
+                    script = root / relative
+                    self.assertTrue(script.is_file(), f"Workflow uses an unstaged file: {relative}")
+                    if script.suffix != ".py":
+                        continue
+                    # Use each real CLI, including notification prepare/send parsers,
+                    # without sending anything or invoking a model.
+                    args = [str(script), "--help"]
+                    if "diagnostic" in step:
+                        args.insert(1, "--diagnose-jira-context")
+                    result = self.run_isolated(temporary,
+                        "import runpy, sys\n"
+                        f"sys.argv = {args!r}\n"
+                        f"runpy.run_path({str(script)!r}, run_name='__main__')\n", {})
+                    self.assertEqual(0, result.returncode, f"{script.name}: {result.stderr}")
+                    self.assertIn("usage:", result.stdout)
+
+    def test_startup_regression_detects_missing_dependencies_and_resources(self) -> None:
+        for missing in ("scripts/documentation_contract.py", "scripts/documentation_images.py",
+                        "documentation-destinations.json"):
+            with self.subTest(missing=missing), tempfile.TemporaryDirectory() as temporary:
+                root = self.stage_trusted_files(temporary, "Stage trusted automation scripts and prompt")
+                (root / missing).unlink()
+                for filename in ("generate-documentation-proposal.py", "validate-documentation-proposal.py",
+                                 "prepare-documentation-pull-request.py"):
+                    script = root / "scripts" / filename
+                    result = self.run_isolated(temporary,
+                        "import runpy, sys\n"
+                        f"sys.argv = [{str(script)!r}, '--help']\n"
+                        f"runpy.run_path({str(script)!r}, run_name='__main__')\n", {})
+                    self.assertNotEqual(0, result.returncode)
+                    self.assertIn(Path(missing).stem, result.stderr)
 
     def test_diagnostic_inputs_are_optional_in_form_and_description_is_optional(self) -> None:
         dispatch = self.workflow[: self.workflow.index("concurrency:")]

@@ -1,3 +1,3 @@
 interface:
   display_name: "Crear épica documental"
-  short_description: "Revisa el plan y ejecútalo en Jira tras CREAR"
+  short_description: "Revisa el plan, prepara Jira y ofrece ejecutar el agente"
