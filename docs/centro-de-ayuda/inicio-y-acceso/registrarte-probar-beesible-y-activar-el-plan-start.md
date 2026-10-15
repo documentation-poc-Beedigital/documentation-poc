@@ -1,7 +1,8 @@
 ---
 article_id: GITHUB-6274BA706E64091E96A83280061A2AAA
 title: "Registrarte, probar Beesible y activar el Plan Start"
-version: 1.1
+version: 1.2
+sidebar_position: 2
 ---
 # <HelpIcon name="signIn" /> Registrarte, probar Beesible y activar el Plan Start
 
@@ -35,7 +36,7 @@ Está pensada para nuevos usuarios de España.
 
 ### <HelpIcon name="steps" />  Paso 1. Crea tu cuenta
 
-1. Abre el registro desde un botón de la web de Beesible.
+1. Abre el registro desde un botón de la [web de Beesible](https://www.beesible.ai/).
 2. Elige cómo quieres registrarte:
     - **Registro con Google**
     - **Registro con Apple**
