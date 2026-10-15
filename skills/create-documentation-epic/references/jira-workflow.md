@@ -2,7 +2,7 @@
 
 ## Contrato observado y configuración portable
 
-Referencia local revisada: `project-docs/flujo-agente-documentacion.md` v1.7, `.github/prompts/documentation-agent-poc.md`, `.github/scripts/generate-documentation-proposal.py` y `.github/workflows/documentation-agent-poc.yml`. Estos archivos pertenecen al repositorio anfitrión, no al paquete portable. En otro entorno descubre y verifica el contrato equivalente antes de escribir. No copies secretos ni rutas personales.
+Referencia local revisada: `project-docs/flujo-agente-documentacion.md` v1.8, `.github/prompts/documentation-agent-poc.md`, `.github/scripts/generate-documentation-proposal.py` y `.github/workflows/documentation-agent-poc.yml`. Estos archivos pertenecen al repositorio anfitrión, no al paquete portable. En otro entorno descubre y verifica el contrato equivalente antes de escribir. No copies secretos ni rutas personales.
 
 El agente consume descripciones, no comentarios ni campos de negocio adicionales. Exige una fuente de tipo Epic (el generador actual comprueba el nombre `epic` sin distinguir mayúsculas), hijas directas mediante `parent`, etiqueta `documentation-required` y `statusCategory.key=done`. No presupongas que un tipo traducido es compatible. La tarea documental puede pertenecer a otro proyecto y no necesita ser hija de la épica.
 
@@ -34,6 +34,8 @@ La fase A no escribe en Jira. Su revisión presenta el plan y destino completos 
 Ante un fallo parcial, conserva las claves verificadas y detente en la operación fallida. Si una escritura termina con timeout, busca su resultado antes de repetirla. Al continuar, lee de nuevo las claves y crea solo lo que se demuestre ausente. No borres tickets para «deshacer» el lote ni reapliques la etiqueta de disparo a ciegas. Si no puedes determinar si la operación ocurrió, informa la incertidumbre y pide el dato necesario.
 
 ## Entradas del agente y ejecución separada
+
+Para adjuntos seleccionados para el artículo, usa [el contrato de imágenes](imagenes-publicacion.md) después de verificar ticket e ID real. Colócalo en una sola descripción del lote; nunca amplíes el manifiesto legado. Recupera la descripción y los metadatos para comprobar la selección y vuelve a medir antes de ejecutar.
 
 El modo estructurado recibe juntos `jira_epic_key` y `jira_task_keys`; este último es una lista de claves separadas por comas. Rechaza vacíos, duplicados y claves inválidas. El patrón actual es `[A-Z][A-Z0-9]*(?:-[A-Z0-9]+)*-[1-9][0-9]*`. El ticket conserva `issue_key`, `issue_summary`, `issue_description`; las referencias se pasan por separado. Configura o descubre los campos que la automatización mapea a estos inputs, sin inventar IDs.
 

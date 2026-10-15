@@ -8,6 +8,7 @@ python -B -m unittest discover -s tests
 python -B -m unittest discover -s .github/scripts/tests
 npm run build
 node tests/verify-help-center-build.cjs
+node --test tests/jira-images-build.cjs
 npm run serve -- --host 127.0.0.1 --no-open
 ```
 
@@ -27,6 +28,12 @@ snapshots y PDF. Revisar también las capturas visualmente.
 `fixtures/public-docs-sha256.json` fija el contenido original de los 24 artículos y
 los ocho índices, normalizando únicamente CRLF/LF. Solo debe actualizarse ante una
 migración documental aprobada, nunca para hacer pasar un cambio de interfaz.
+
+`jira-images-build.cjs` construye un artículo temporal con una imagen Jira bajo
+`/documentation-poc/` y `/` (preview), verifica el HTML, alt y archivo servido.
+No modifica artículos reales ni llama a Jira o Claude. La suite Python de
+`.github/scripts/tests/test_documentation_images.py` simula selección, descarga,
+validación, aplicación atómica, publicación y recuperación de binarios.
 
 La suite histórica exige que `docs/production-snapshots/` no exista. Si hay
 snapshots locales previos, esa prueba falla aunque el build los excluya. No deben
