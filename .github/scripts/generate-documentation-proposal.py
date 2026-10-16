@@ -1062,6 +1062,66 @@ def verify_head(repo_root: Path, base_sha: str | None) -> None:
         raise ProposalError("HEAD changed after the trusted base was captured")
 
 
+def resolve_image_catalogue(
+    ticket: dict[str, str], configuration: Mapping[str, str], jira_transport: JiraTransport,
+    timeout: float, jira_epic_key: str, jira_task_keys: str, image_downloader: Callable,
+) -> tuple[dict[str, str], list[dict], dict[str, bytes]]:
+    """Shared canonical source resolution and image validation for both modes."""
+    source_issues, descriptions = {}, []
+    ticket, _ = resolve_jira_source_with_diagnostics(
+        ticket, configuration, jira_transport, timeout,
+        jira_epic_key=jira_epic_key, jira_task_keys=jira_task_keys,
+        source_issues=source_issues, source_descriptions=descriptions,
+    )
+    if not source_issues:
+        descriptions.append(ticket["issue_description"])
+    selected = [item for description in descriptions for item in images.selection(description)]
+    catalogue, blobs = [], {}
+    if selected:
+        if not source_issues:
+            raise ProposalError("Image selection requires an authorized Jira source batch")
+        catalogue, blobs = images.catalogue(
+            descriptions, source_issues, validate_jira_configuration(configuration),
+            min(timeout, JIRA_REQUEST_TIMEOUT), image_downloader, selected=selected)
+        if len(catalogue) != len(selected):
+            raise ProposalError("Image selection was lost while building the catalogue")
+    return ticket, catalogue, blobs
+
+
+def diagnose_images(
+    repo_root: Path, ticket_file: Path, base_sha: str, configuration: Mapping[str, str],
+    timeout: float = 120.0, jira_epic_key: str = "", jira_task_keys: str = "",
+    jira_transport: JiraTransport = jira_http_transport, image_downloader: Callable = images.download,
+) -> dict[str, object]:
+    source = parse_jira_source_inputs(jira_epic_key, jira_task_keys)
+    if source is None:
+        raise ProposalError("Image diagnosis requires structured Jira source inputs")
+    verify_head(repo_root, base_sha)
+    ticket = load_ticket(ticket_file, allow_empty_description=True)
+    # Only the shared resolver/catalogue is reachable: no model request or apply.
+    _, catalogue, blobs = resolve_image_catalogue(
+        ticket, configuration, jira_transport, timeout, jira_epic_key, jira_task_keys, image_downloader)
+    with tempfile.TemporaryDirectory(prefix="documentation-images-") as temporary:
+        for index, image in enumerate(catalogue):
+            (Path(temporary) / str(index)).write_bytes(blobs[image["path"]])
+    verify_head(repo_root, base_sha)
+    fields = ("issue_key", "attachment_id", "size", "mime_type", "sha256")
+    return {"status": "success", "commit_sha": base_sha,
+            "issue_key": ticket["issue_key"], "epic_key": jira_epic_key,
+            "task_keys": source[1],
+            "images_count": len(catalogue), "total_bytes": sum(i["size"] for i in catalogue),
+            "images": [{field: image[field] for field in fields} for image in catalogue]}
+
+
+def technical_failure(error: Exception) -> dict[str, object]:
+    # Never serialize exception text, response bodies, URLs or credentials.
+    report = {"status": "technical_error", "error_type": type(error).__name__}
+    match = re.fullmatch(r"Jira image download returned HTTP ([0-9]{3})", str(error))
+    if isinstance(error, images.ImageError) and match:
+        report["http_status"] = int(match[1])
+    return report
+
+
 def generate_and_apply(
     repo_root: Path, ticket_file: Path, prompt_file: Path, report_file: Path,
     api_key: str, transport: Transport = http_transport, timeout: float = 120.0,
@@ -1076,27 +1136,8 @@ def generate_and_apply(
     verify_head(repo_root, base_sha)
     ticket = load_ticket(ticket_file)
     configuration = jira_configuration_from_environment() if jira_configuration is None else jira_configuration
-    source_issues: dict = {}
-    descriptions: list[str] = []
-    ticket, _ = resolve_jira_source_with_diagnostics(
-        ticket, configuration,
-        jira_transport, timeout,
-        jira_epic_key=jira_epic_key, jira_task_keys=jira_task_keys,
-        source_issues=source_issues,
-        source_descriptions=descriptions,
-    )
-    if not source_issues:
-        descriptions.append(ticket["issue_description"])
-    selected = [item for description in descriptions for item in images.selection(description)]
-    image_catalogue, blobs = [], {}
-    if selected:
-        if not source_issues:
-            raise ProposalError("Image selection requires an authorized Jira source batch")
-        image_catalogue, blobs = images.catalogue(descriptions, source_issues,
-            validate_jira_configuration(configuration), min(timeout, JIRA_REQUEST_TIMEOUT), image_downloader,
-            selected=selected)
-        if len(image_catalogue) != len(selected):
-            raise ProposalError("Image selection was lost while building the catalogue")
+    ticket, image_catalogue, blobs = resolve_image_catalogue(
+        ticket, configuration, jira_transport, timeout, jira_epic_key, jira_task_keys, image_downloader)
     documents = read_documentation(repo_root)
     trusted_prompt = read_prompt(prompt_file)
     request = (build_request(trusted_prompt, ticket, documents, image_catalogue) if image_catalogue
@@ -1151,7 +1192,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--agent-report", type=Path)
     parser.add_argument("--timeout", type=float, default=120.0)
     parser.add_argument("--base-sha")
-    parser.add_argument("--diagnose-jira-context", action="store_true")
+    modes = parser.add_mutually_exclusive_group()
+    modes.add_argument("--diagnose-jira-context", action="store_true")
+    modes.add_argument("--diagnose-images", action="store_true")
+    parser.add_argument("--diagnostic-report", type=Path)
     parser.add_argument("--jira-epic-key", default="")
     parser.add_argument("--jira-task-keys", default="")
     parser.add_argument("--image-artifacts", type=Path)
@@ -1163,11 +1207,21 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parser.parse_args(argv)
     if args.timeout <= 0:
         parser.error("--timeout must be positive")
-    if not args.diagnose_jira_context and (args.prompt_file is None or args.agent_report is None):
-        parser.error("--prompt-file and --agent-report are required unless --diagnose-jira-context is used")
+    if args.diagnose_images and (args.base_sha is None or args.diagnostic_report is None):
+        parser.error("--base-sha and --diagnostic-report are required for --diagnose-images")
+    if args.diagnose_images and args.diagnostic_report.resolve().is_relative_to(args.repo_root.resolve()):
+        parser.error("--diagnostic-report must be outside the repository")
+    if not (args.diagnose_jira_context or args.diagnose_images) and (args.prompt_file is None or args.agent_report is None):
+        parser.error("--prompt-file and --agent-report are required for generation")
     if args.diagnose_jira_context and (args.prompt_file is None or args.base_sha is None):
         parser.error("--prompt-file and --base-sha are required for --diagnose-jira-context")
     try:
+        if args.diagnose_images:
+            diagnostics = diagnose_images(
+                args.repo_root, args.ticket_file, args.base_sha, jira_configuration_from_environment(),
+                args.timeout, args.jira_epic_key, args.jira_task_keys)
+            write_agent_report(args.diagnostic_report, json.dumps(diagnostics, indent=2) + "\n")
+            return 0
         if args.diagnose_jira_context:
             diagnostics = diagnose_jira_context(
                 ticket_file=args.ticket_file,
@@ -1188,6 +1242,13 @@ def main(argv: Sequence[str] | None = None) -> int:
             image_artifacts=args.image_artifacts,
         )
     except (ProposalError, images.ImageError, OSError) as error:
+        failure = json.dumps(technical_failure(error), indent=2) + "\n"
+        if args.diagnose_images:
+            write_agent_report(args.diagnostic_report, failure)
+            sys.stderr.write("Image diagnosis failed; see safe diagnostic report\n")
+            return 1
+        if not args.diagnose_jira_context and args.agent_report:
+            write_agent_report(args.agent_report, failure)
         sys.stderr.write(f"Documentation proposal generation failed: {error}\n")
         return 1
     return 0

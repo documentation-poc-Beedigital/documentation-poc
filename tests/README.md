@@ -40,8 +40,11 @@ La regresión sintética de DOC-104 en esa suite comprueba la precedencia de la
 solicitud ADF obtenida por API sobre el texto de Automation sin identificador,
 la lectura de solicitud, épica y seis tareas, y una petición capturada con cuatro
 imágenes y URLs deterministas. La propuesta simulada verifica referencias Markdown
-y binarios recuperables, sin red ni secretos reales. El diagnóstico sigue sin
-descargar imágenes ni llamar a Claude; verifica el contexto canónico textual.
+y binarios recuperables, sin red ni secretos reales. `diagnose-context` verifica
+el contexto textual; `diagnose-images` descarga y valida el catálogo compartido
+con generación, sin Claude ni acciones de publicación o notificación. Véanse
+los inputs exactos de DOC-104 y la descarga del informe en
+[el flujo del agente](../project-docs/flujo-agente-documentacion.md#diagnóstico-manual-de-imágenes-después-del-merge).
 
 La suite histórica exige que `docs/production-snapshots/` no exista. Si hay
 snapshots locales previos, esa prueba falla aunque el build los excluya. No deben
