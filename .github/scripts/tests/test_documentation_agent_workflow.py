@@ -8,6 +8,7 @@ import sys
 import tempfile
 import textwrap
 import unittest
+from unittest import mock
 from pathlib import Path
 
 
@@ -73,9 +74,9 @@ class DocumentationAgentWorkflowTests(unittest.TestCase):
         dispatch = self.workflow[: self.workflow.index("concurrency:")]
         for field in ("issue_key", "issue_summary", "issue_description"):
             self.assertIn(f"      {field}:\n", dispatch)
-        self.assertIn("      diagnose_only:\n", dispatch)
-        self.assertIn("        type: boolean", dispatch)
-        self.assertIn("        default: false", dispatch)
+        self.assertIn("      mode:\n", dispatch)
+        self.assertIn("        type: choice", dispatch)
+        self.assertIn("        default: generate", dispatch)
         self.assertNotIn("old_text", dispatch)
         self.assertNotIn("new_text", dispatch)
 
@@ -83,7 +84,7 @@ class DocumentationAgentWorkflowTests(unittest.TestCase):
         diagnostic_start = self.workflow.index("  diagnose-jira-context:")
         proposal_start = self.workflow.index("  prepare-proposal:")
         diagnostic = self.workflow[diagnostic_start:proposal_start]
-        self.assertIn("if: ${{ inputs.diagnose_only }}", diagnostic)
+        self.assertIn("if: ${{ inputs.mode == 'diagnose-context' || inputs.mode == 'diagnose-images' }}", diagnostic)
         self.assertIn("contents: read", diagnostic)
         self.assertIn("--diagnose-jira-context", diagnostic)
         self.assertIn("parse_jira_source_inputs", diagnostic)
@@ -92,7 +93,7 @@ class DocumentationAgentWorkflowTests(unittest.TestCase):
         for forbidden in (
             "ANTHROPIC_API_KEY", "Claude", "git commit", "git push", "gh pr create",
             "prepare-documentation-pull-request.py",
-            "notify-", "SLACK", "upload-artifact", "contents: write", "pull-requests:",
+            "notify-", "SLACK", "contents: write", "pull-requests:",
             "generate_and_apply", "http_transport",
             "ISSUE_SUMMARY:", "ISSUE_DESCRIPTION:", "inputs.issue_summary", "inputs.issue_description",
         ):
@@ -107,7 +108,43 @@ class DocumentationAgentWorkflowTests(unittest.TestCase):
         credentials = diagnostic.index("JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}")
         self.assertLess(serialize, credentials)
         proposal_header = self.workflow[proposal_start:self.workflow.index("    steps:", proposal_start)]
-        self.assertIn("if: ${{ !inputs.diagnose_only }}", proposal_header)
+        self.assertIn("if: ${{ inputs.mode == 'generate' || inputs.mode == '' }}", proposal_header)
+
+    def test_build_requires_successful_proposal_and_node_24(self):
+        setup = self.workflow.index('- name: Set up Node.js')
+        build = self.workflow.index('- name: Validate documentation site after applying proposal')
+        self.assertLess(setup, build)
+        self.assertIn('node-version: 24', self.workflow[setup:build])
+        gate = "steps.claude.outcome == 'success' && steps.validation.outcome == 'success' && steps.validation.outputs.requires_build == 'true'"
+        self.assertEqual(2, self.workflow.count('if: ' + gate))
+        self.assertIn('result["decision"] == "proposal"', self.workflow)
+        self.assertIn('bool(result["changed_files"])', self.workflow)
+        self.assertIn("if: success() && steps.claude.outcome == 'success' && steps.validation.outcome == 'success'", self.workflow)
+        diagnostic = self.workflow.split('  prepare-proposal:')[0]
+        self.assertIn('--diagnose-images', diagnostic)
+        upload = diagnostic.split('- name: Upload safe image diagnostic report')[1]
+        self.assertIn("if: always() && inputs.mode == 'diagnose-images'", upload)
+        self.assertIn('path: ${{ runner.temp }}/image-diagnostic-report.json', upload)
+        self.assertNotIn('documentation-proposal-files', upload)
+        self.assertNotIn('if: ${{ !inputs.', self.workflow)
+
+    def test_emergency_execution_preserves_only_successful_model_abstention(self):
+        code = self.serialization_code("Ensure an agent report exists")
+        abstention = {"decision": "abstention", "summary": "No change", "reason": "No evidence",
+                      "evidence": "None", "documents": []}
+        with tempfile.TemporaryDirectory() as temporary:
+            report = Path(temporary) / "agent-report.md"
+            for outcome in ("failure", "skipped", "success"):
+                with self.subTest(outcome=outcome):
+                    report.write_text(json.dumps(abstention), encoding="utf-8")
+                    with mock.patch.dict(os.environ, {"RUNNER_TEMP": temporary, "GENERATION_OUTCOME": outcome}):
+                        exec(code, {})
+                    actual = json.loads(report.read_text(encoding="utf-8"))
+                    if outcome == "success":
+                        self.assertEqual(abstention, actual)
+                    else:
+                        self.assertEqual("technical_error", actual["status"])
+                        self.assertNotIn("decision", actual)
 
     def serialization_code(self, step_name: str) -> str:
         step = self.workflow[self.workflow.index(f"- name: {step_name}"):]
@@ -281,7 +318,7 @@ class DocumentationAgentWorkflowTests(unittest.TestCase):
         self.assertEqual(inputs["ISSUE_DESCRIPTION"], normal["issue_description"])
         self.assertEqual({"issue_key", "issue_summary", "issue_description"}, set(normal))
         for flag in ('--jira-epic-key "${JIRA_EPIC_KEY}"', '--jira-task-keys "${JIRA_TASK_KEYS}"'):
-            self.assertEqual(2, self.workflow.count(flag))
+            self.assertEqual(3, self.workflow.count(flag))
 
     def test_normal_serialization_rejects_incomplete_invalid_or_duplicate_references(self) -> None:
         for epic, tasks in (("APP-1", ""), ("", "APP-2"), ("app-1", "APP-2"),
@@ -330,19 +367,20 @@ class DocumentationAgentWorkflowTests(unittest.TestCase):
         positions = [self.workflow.index(f"- name: {name}") for name in expected_steps]
         self.assertEqual(sorted(positions), positions)
 
-    def test_emergency_report_abstains_and_skipped_claude_is_not_validated(self) -> None:
+    def test_emergency_report_is_technical_and_failed_generation_is_not_validated(self) -> None:
         report_step = self.workflow.index("- name: Ensure an agent report exists")
         validation_step = self.workflow.index("- name: Validate the generated proposal")
         report = self.workflow[report_step:validation_step]
-        self.assertIn('"decision": "abstention"', report)
+        self.assertIn('"status": "technical_error"', report)
+        self.assertNotIn('"decision"', report)
         self.assertNotIn('"decision": "error"', report)
-        self.assertIn("El flujo no produjo una propuesta de Claude validable", report)
+        self.assertIn("MissingAgentReport", report)
 
         validation = self.workflow[
             validation_step:self.workflow.index("- name: Capture generated diff")
         ]
         self.assertIn(
-            "if: always() && steps.claude.outcome != 'skipped'", validation
+            "if: always() && steps.claude.outcome == 'success'", validation
         )
 
     def test_multi_document_publication_uses_one_commit_and_one_pr_creation(self) -> None:

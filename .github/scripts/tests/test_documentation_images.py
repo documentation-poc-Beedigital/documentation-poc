@@ -64,6 +64,22 @@ class Response(io.BytesIO):
 
 
 class ImageContractTests(unittest.TestCase):
+    def test_binary_negotiation_and_406_are_safe(self):
+        calls = []
+        def opener(request, **kwargs):
+            calls.append(request)
+            # Simulate an endpoint which offers application/octet-stream.
+            if request.get_header("Accept") != "*/*":
+                raise urllib.error.HTTPError(request.full_url, 406, "Not acceptable", {}, io.BytesIO())
+            return Response(PNG)
+        self.assertEqual(PNG, IMAGES.download("https://tenant.atlassian.net/file", *CONFIG.values(), 30, opener=opener))
+        error = urllib.error.HTTPError("https://api.media.atlassian.com/file?token=secret", 406,
+                                      "secret", {}, io.BytesIO(b"private body"))
+        with self.assertRaisesRegex(IMAGES.ImageError, "^Jira image download returned HTTP 406$"):
+            IMAGES.download("https://tenant.atlassian.net/file", *CONFIG.values(), 30,
+                            opener=mock.Mock(side_effect=error))
+        self.assertTrue(error.fp.closed)
+
     def test_old_description_and_strict_json(self):
         self.assertEqual([], IMAGES.selection("Descripción histórica"))
         self.assertEqual([item()], IMAGES.selection(block([item()])))
@@ -103,6 +119,7 @@ class ImageContractTests(unittest.TestCase):
         self.assertTrue(requests[0].get_header("Authorization").startswith("Basic "))
         self.assertIsNotNone(requests[1].get_header("Authorization"))
         self.assertIsNone(requests[2].get_header("Authorization"))
+        self.assertTrue(all(r.get_header("Accept") == "*/*" for r in requests))
 
     def test_rejected_redirects_timeouts_http_and_loops(self):
         for target in ("http://tenant.atlassian.net/file", "https://evil.invalid/file",
@@ -133,6 +150,92 @@ class ImageContractTests(unittest.TestCase):
 
 
 class ImageWorkflowTests(unittest.TestCase):
+    def test_post_claude_failure_cannot_retain_a_valid_abstention(self):
+        generate = GENERATOR.generate_and_apply
+        def simulated(*args, **kwargs):
+            return generate(*args, **kwargs) if args else self.run_proposal(abstain=True)
+        with mock.patch.object(GENERATOR, "generate_and_apply", side_effect=simulated), \
+             mock.patch.object(GENERATOR, "apply_changes_atomically", side_effect=OSError("apply failed")), \
+             mock.patch("sys.stderr", new_callable=io.StringIO):
+            result = GENERATOR.main(["--repo-root", str(self.root), "--ticket-file", str(self.ticket),
+                "--prompt-file", str(self.prompt), "--agent-report", str(self.report)])
+        self.assertEqual(1, result)
+        self.assertEqual(1, len(self.requests))
+        self.assertEqual("technical_error", json.loads(self.report.read_text())["status"])
+        self.assertFalse(VALIDATOR.validate_repository(self.root, self.report, self.base)["valid"])
+
+    def test_cli_technical_failures_replace_even_an_existing_abstention(self):
+        for error in (IMAGES.ImageError("Jira image download returned HTTP 406"),
+                      GENERATOR.ProposalError("private context must not reach report"),
+                      OSError("https://signed.invalid/?token=private")):
+            with self.subTest(error=type(error).__name__):
+                self.run_proposal(abstain=True)
+                with mock.patch.object(GENERATOR, "generate_and_apply", side_effect=error), \
+                     mock.patch("sys.stderr", new_callable=io.StringIO):
+                    result = GENERATOR.main(["--repo-root", str(self.root), "--ticket-file", str(self.ticket),
+                        "--prompt-file", str(self.prompt), "--agent-report", str(self.report)])
+                self.assertEqual(1, result)
+                report = json.loads(self.report.read_text(encoding="utf-8"))
+                self.assertEqual("technical_error", report["status"])
+                self.assertNotIn("decision", report)
+                self.assertNotIn("private", json.dumps(report))
+                self.assertFalse(VALIDATOR.validate_repository(self.root, self.report, self.base)["valid"])
+
+    def test_diagnostic_cli_cannot_enter_generation_or_model_transport(self):
+        diagnostic = Path(self.temp.name) / "safe.json"
+        with mock.patch.object(GENERATOR, "diagnose_images", side_effect=IMAGES.ImageError("Jira image download returned HTTP 406")), \
+             mock.patch.object(GENERATOR, "generate_and_apply", side_effect=AssertionError("Generation forbidden")), \
+             mock.patch.object(GENERATOR, "http_transport", side_effect=AssertionError("Claude forbidden")), \
+             mock.patch("sys.stderr", new_callable=io.StringIO):
+            result = GENERATOR.main(["--ticket-file", str(self.ticket), "--diagnose-images",
+                "--base-sha", self.base, "--diagnostic-report", str(diagnostic)])
+        self.assertEqual(1, result)
+        self.assertEqual({"status": "technical_error", "error_type": "ImageError", "http_status": 406},
+                         json.loads(diagnostic.read_text()))
+        self.assertFalse(self.report.exists())
+        with mock.patch("sys.stderr", new_callable=io.StringIO), self.assertRaises(SystemExit):
+            GENERATOR.main(["--ticket-file", str(self.ticket), "--diagnose-images", "--diagnose-jira-context"])
+
+    def test_image_diagnostic_uses_canonical_incident_without_model_or_mutations(self):
+        self.incident_fixture()
+        before = self.git("status", "--porcelain")
+        temp_paths = []
+        temporary_directory = tempfile.TemporaryDirectory
+        def temporary(*args, **kwargs):
+            directory = temporary_directory(*args, **kwargs)
+            temp_paths.append(Path(directory.name))
+            return directory
+        with mock.patch.object(GENERATOR, "http_transport", side_effect=AssertionError("Claude forbidden")), \
+             mock.patch.object(GENERATOR, "generate_and_apply", side_effect=AssertionError("Generation forbidden")), \
+             mock.patch.object(GENERATOR, "build_request", side_effect=AssertionError("Model request forbidden")), \
+             mock.patch.object(GENERATOR, "apply_changes_atomically", side_effect=AssertionError("Apply forbidden")), \
+             mock.patch.object(GENERATOR.tempfile, "TemporaryDirectory", side_effect=temporary):
+            report = GENERATOR.diagnose_images(self.root, self.ticket, self.base, CONFIG,
+                jira_transport=self.jira, image_downloader=self.downloader, **self.source_references)
+        self.assertEqual(4, report["images_count"])
+        self.assertEqual(8, len(self.jira_calls))
+        self.assertEqual(4, len(self.downloads))
+        for image in report["images"]:
+            self.assertEqual({"issue_key", "attachment_id", "size", "mime_type", "sha256"}, set(image))
+            self.assertEqual(hashlib.sha256(PNG).hexdigest(), image["sha256"])
+        self.assertEqual(before, self.git("status", "--porcelain"))
+        self.assertTrue(temp_paths)
+        self.assertTrue(all(not p.exists() for p in temp_paths))
+        self.assertFalse(self.report.exists())
+        self.assertFalse(self.artifacts.exists())
+
+    def test_image_diagnostic_rejects_invalid_content_and_406_before_claude(self):
+        self.incident_fixture()
+        for data in (b"<html>unauthorized</html>", b"<svg/>", PNG[:-1], JPEG):
+            with self.subTest(data=data[:10]), self.assertRaises(IMAGES.ImageError):
+                GENERATOR.diagnose_images(self.root, self.ticket, self.base, CONFIG,
+                    jira_transport=self.jira, image_downloader=mock.Mock(return_value=data), **self.source_references)
+        self.downloader = mock.Mock(side_effect=IMAGES.ImageError("Jira image download returned HTTP 406"))
+        with self.assertRaisesRegex(IMAGES.ImageError, "HTTP 406"):
+            self.run_proposal()
+        self.assertEqual([], self.requests)
+        self.assertEqual(self.before, self.doc.read_text(encoding="utf-8"))
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)

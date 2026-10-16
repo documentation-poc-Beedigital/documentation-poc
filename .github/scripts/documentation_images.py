@@ -187,7 +187,9 @@ def download(endpoint: str, base_url: str, email: str, token: str, timeout: floa
         same_origin = (parsed.hostname, parsed.port or 443) == (base.hostname, base.port or 443)
         if not same_origin and parsed.hostname != "api.media.atlassian.com":
             raise ImageError("Jira image redirect host is not authorized")
-        headers = {"Accept": "image/png,image/jpeg"}
+        # The content endpoint can negotiate an opaque binary representation.
+        # Publication types are enforced against bytes and metadata in catalogue().
+        headers = {"Accept": "*/*"}
         if same_origin:
             headers["Authorization"] = f"Basic {credentials}"
         request = urllib.request.Request(url, headers=headers)
@@ -205,7 +207,8 @@ def download(endpoint: str, base_url: str, email: str, token: str, timeout: floa
                     raise ImageError("Jira image redirect has no location") from error
                 url = urllib.parse.urljoin(url, location)
                 continue
-            raise ImageError(f"Jira image download returned HTTP {error.code}") from error
+            error.close()
+            raise ImageError(f"Jira image download returned HTTP {error.code}") from None
         except (OSError, urllib.error.URLError) as error:
             raise ImageError("Jira image download failed") from error
     raise ImageError("Too many Jira image redirects")

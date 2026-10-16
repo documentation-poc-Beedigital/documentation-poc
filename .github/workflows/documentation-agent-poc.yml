@@ -23,11 +23,15 @@ on:
         description: Comma-separated Jira source task keys (provide together with jira_epic_key)
         required: false
         type: string
-      diagnose_only:
-        description: Diagnose the prepared request without Claude or repository changes
-        required: false
-        default: false
-        type: boolean
+      mode:
+        description: Select exactly one operation
+        required: true
+        default: generate
+        type: choice
+        options:
+          - generate
+          - diagnose-context
+          - diagnose-images
 
 concurrency:
   group: documentation-agent-poc-${{ inputs.issue_key }}
@@ -35,7 +39,7 @@ concurrency:
 
 jobs:
   diagnose-jira-context:
-    if: ${{ inputs.diagnose_only }}
+    if: ${{ inputs.mode == 'diagnose-context' || inputs.mode == 'diagnose-images' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     env:
@@ -115,7 +119,7 @@ jobs:
                   inputs.get("jira_epic_key", ""), inputs.get("jira_task_keys", "")
               )
               if source is None:
-                  raise generator.ProposalError("diagnose_only requires jira_epic_key and jira_task_keys")
+                  raise generator.ProposalError("Diagnostic modes require jira_epic_key and jira_task_keys")
           except generator.ProposalError as error:
               raise SystemExit(f"Invalid diagnostic inputs: {error}") from None
           ticket = {
@@ -130,6 +134,7 @@ jobs:
           PY
 
       - name: Diagnose validated Jira context in the prepared request
+        if: inputs.mode == 'diagnose-context'
         env:
           JIRA_EPIC_KEY: ${{ inputs.jira_epic_key }}
           JIRA_TASK_KEYS: ${{ inputs.jira_task_keys }}
@@ -149,8 +154,38 @@ jobs:
             --jira-task-keys "${JIRA_TASK_KEYS}" \
             --timeout 300
 
+      - name: Diagnose validated image catalogue
+        if: inputs.mode == 'diagnose-images'
+        env:
+          JIRA_EPIC_KEY: ${{ inputs.jira_epic_key }}
+          JIRA_TASK_KEYS: ${{ inputs.jira_task_keys }}
+          JIRA_BASE_URL: ${{ secrets.JIRA_BASE_URL }}
+          JIRA_API_EMAIL: ${{ secrets.JIRA_API_EMAIL }}
+          JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python "${RUNNER_TEMP}/trusted-documentation/scripts/generate-documentation-proposal.py" \
+            --repo-root "${GITHUB_WORKSPACE}" \
+            --base-sha "${{ steps.base.outputs.sha }}" \
+            --ticket-file "${RUNNER_TEMP}/documentation-ticket.json" \
+            --diagnose-images \
+            --diagnostic-report "${RUNNER_TEMP}/image-diagnostic-report.json" \
+            --jira-epic-key "${JIRA_EPIC_KEY}" \
+            --jira-task-keys "${JIRA_TASK_KEYS}" \
+            --timeout 300
+
+      - name: Upload safe image diagnostic report
+        if: always() && inputs.mode == 'diagnose-images'
+        uses: actions/upload-artifact@v4
+        with:
+          name: documentation-image-diagnostic-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/image-diagnostic-report.json
+          if-no-files-found: error
+          retention-days: 14
+
   prepare-proposal:
-    if: ${{ !inputs.diagnose_only }}
+    if: ${{ inputs.mode == 'generate' || inputs.mode == '' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     env:
@@ -330,6 +365,8 @@ jobs:
 
       - name: Ensure an agent report exists
         if: always()
+        env:
+          GENERATION_OUTCOME: ${{ steps.claude.outcome }}
         shell: bash
         run: |
           python - <<'PY'
@@ -338,15 +375,21 @@ jobs:
           from pathlib import Path
 
           report = Path(os.environ["RUNNER_TEMP"]) / "agent-report.md"
-          if not report.exists():
+          failed = os.environ["GENERATION_OUTCOME"] != "success"
+          existing = {}
+          if report.exists():
+              try:
+                  existing = json.loads(report.read_text(encoding="utf-8"))
+                  if not isinstance(existing, dict):
+                      existing = {}
+              except (ValueError, OSError):
+                  pass
+          if not report.exists() or (failed and existing.get("status") != "technical_error"):
               report.write_text(
                   json.dumps(
                       {
-                          "decision": "abstention",
-                          "summary": "No se generó una propuesta documental",
-                          "reason": "El flujo no produjo una propuesta de Claude validable",
-                          "evidence": "No se aplicaron cambios documentales",
-                          "documents": [],
+                          "status": "technical_error",
+                          "error_type": "MissingAgentReport",
                       },
                       ensure_ascii=False,
                       indent=2,
@@ -358,7 +401,7 @@ jobs:
 
       - name: Validate the generated proposal
         id: validation
-        if: always() && steps.claude.outcome != 'skipped'
+        if: always() && steps.claude.outcome == 'success'
         continue-on-error: true
         env:
           BASE_SHA: ${{ steps.base.outputs.sha }}
@@ -410,6 +453,16 @@ jobs:
             --agent-report "${RUNNER_TEMP}/agent-report.md" \
             --output "${RUNNER_TEMP}/validation-result.json"
 
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          result = json.loads((Path(os.environ["RUNNER_TEMP"]) / "validation-result.json").read_text())
+          build = result["valid"] and result["decision"] == "proposal" and bool(result["changed_files"])
+          with open(os.environ["GITHUB_OUTPUT"], "a") as output:
+              output.write(f"requires_build={str(build).lower()}\n")
+          PY
+
       - name: Capture generated diff
         if: always()
         env:
@@ -419,8 +472,15 @@ jobs:
           git diff --binary "${BASE_SHA}" -- \
             > "${RUNNER_TEMP}/documentation-proposal.diff"
 
+      - name: Set up Node.js
+        if: steps.claude.outcome == 'success' && steps.validation.outcome == 'success' && steps.validation.outputs.requires_build == 'true'
+        uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+
       - name: Validate documentation site after applying proposal
-        if: steps.validation.outcome == 'success'
+        if: steps.claude.outcome == 'success' && steps.validation.outcome == 'success' && steps.validation.outputs.requires_build == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -459,6 +519,7 @@ jobs:
           fi
 
       - name: Prepare validated pull request publication
+        if: success() && steps.claude.outcome == 'success' && steps.validation.outcome == 'success'
         id: publication
         env:
           BASE_SHA: ${{ steps.base.outputs.sha }}

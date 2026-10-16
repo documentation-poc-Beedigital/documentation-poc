@@ -1,7 +1,7 @@
 ---
 article_id: ART-DOC-AGENT-001
 title: Flujo del agente de documentación
-version: 1.9
+version: 1.10
 status: published
 owner: Product
 last_reviewed: 2026-10-16
@@ -44,7 +44,7 @@ El flujo normal acepta `jira_epic_key` y `jira_task_keys` como referencias estru
     "issue_description": "# Contexto para PM\nRevisar invitaciones y permisos.\n[Diseño](https://example.invalid/diseno)",
     "jira_epic_key": "APP-123",
     "jira_task_keys": "APP-124, TEAM-125",
-    "diagnose_only": "false"
+    "mode": "generate"
   }
 }
 ```
@@ -82,23 +82,23 @@ Las tareas documentales antiguas que no contienen `DOCUMENTATION_SOURCE_V1` mant
 El workflow **Documentation agent PoC** permite comprobar desde **Actions > Run workflow** que las descripciones completas de Jira llegan a la petición final preparada para Claude, sin enviarla.
 
 1. Seleccionar en **Use workflow from** la rama que se quiere diagnosticar. El job de diagnóstico hace checkout de esa referencia, captura su SHA y lo verifica antes de consultar Jira y después de preparar la petición. El flujo automático normal continúa usando `main`.
-2. Rellenar estos campos y activar `diagnose_only`:
+2. Rellenar estos campos y seleccionar `mode=diagnose-context`:
 
    | Campo | Valor en diagnóstico | Valor en flujo normal |
    |---|---|---|
    | `issue_key` | Clave de la tarea documental, por ejemplo `DOC-999`; obligatorio | Obligatorio, sin cambios |
    | `issue_summary` | Resumen de la tarea documental; obligatorio | Obligatorio, sin cambios |
    | `issue_description` | Puede dejarse vacío: en modo estructurado se usa la descripción actual de la solicitud por API | Obligatorio por validación del job, aunque el formulario lo muestre opcional; conserva sus validaciones. En modo estructurado prevalece la descripción API |
-   | `jira_epic_key` | Una clave de épica, por ejemplo `APP-123`; obligatorio cuando `diagnose_only=true` | Opcional, junto con `jira_task_keys` activa el modo estructurado |
-   | `jira_task_keys` | Claves separadas por comas, por ejemplo `APP-124, TEAM-125`; obligatorio cuando `diagnose_only=true` | Opcional, junto con `jira_epic_key` activa el modo estructurado |
-   | `diagnose_only` | `true` | `false` por defecto; los payloads antiguos sin referencias siguen siendo compatibles |
+   | `jira_epic_key` | Una clave de épica, por ejemplo `APP-123`; obligatorio cuando `mode=diagnose-context` | Opcional, junto con `jira_task_keys` activa el modo estructurado |
+   | `jira_task_keys` | Claves separadas por comas, por ejemplo `APP-124, TEAM-125`; obligatorio cuando `mode=diagnose-context` | Opcional, junto con `jira_epic_key` activa el modo estructurado |
+   | `mode` | `diagnose-context` | `generate` por defecto; omitir el campo también ejecuta generación. El booleano antiguo `diagnose_only` se sustituye por este selector |
 
 3. El paso **Serialize diagnostic ticket input** valida las referencias con `parse_jira_source_inputs`, igual que el flujo normal. Rechaza campos ausentes, elementos vacíos —incluidas comas iniciales, finales o consecutivas—, claves inválidas, duplicados y texto adicional antes de exponer credenciales o consultar Jira. Conserva el ticket temporal de tres campos, sin construir un manifiesto; al resolver el contexto prevalece la descripción API. Para comparar una ejecución normal, usar los mismos inputs y el mismo estado de Jira.
 4. El paso **Diagnose validated Jira context in the prepared request** recibe únicamente los tres secretos Jira indicados arriba. Lee la solicitud por su clave y consulta y valida la épica y las tareas hijas directas con las mismas funciones del flujo normal: tipo Epic, relación con la épica, etiqueta `documentation-required` y categoría Done. Convierte todas las descripciones ADF a Markdown y usa la misma composición de solicitud canónica, épica y tareas, sin truncarlo. Si el conjunto supera 60.000 caracteres, falla antes de construir la petición.
 5. Lee `.github/prompts/documentation-agent-poc.md` y los documentos bajo `docs/` mediante las mismas funciones del flujo normal. Usa `build_request` con el mismo modelo, `max_tokens` y contrato. Deserializa el JSON del mensaje de usuario y compara exactamente `ticket.issue_description` con el contexto Jira consolidado.
 6. Consultar el JSON del paso de diagnóstico en los logs. `contexts_match=true` confirma la coincidencia exacta. Si hay discrepancia, publica las métricas seguras con `contexts_match=false` y el paso termina con código de error. Un fallo de inputs, consulta, validación, lectura o SHA detiene el diagnóstico sin publicar el payload.
 
-El job tiene únicamente `contents: read`, no persiste credenciales de Git y no recibe ni lee `ANTHROPIC_API_KEY`. Lee los inputs desde el archivo local del evento (`GITHUB_EVENT_PATH`), evitando que Actions muestre el resumen o la descripción como variables de entorno del paso. No llama al transporte HTTP de Claude ni ejecuta `generate_and_apply`. Tampoco modifica documentos, crea ramas, commits o PRs, ni envía notificaciones a Jira o Slack. Solo serializa el ticket original en el directorio temporal del runner; la petición completa permanece en memoria. No publica artefactos.
+El job tiene únicamente `contents: read`, no persiste credenciales de Git y no recibe ni lee `ANTHROPIC_API_KEY`. Lee los inputs desde el archivo local del evento (`GITHUB_EVENT_PATH`), evitando que Actions muestre el resumen o la descripción como variables de entorno del paso. No llama al transporte HTTP de Claude ni ejecuta `generate_and_apply`. Tampoco modifica documentos, crea ramas, commits o PRs, ni envía notificaciones a Jira o Slack. Solo serializa el ticket original en el directorio temporal del runner; la petición completa permanece en memoria. El modo de contexto no publica artefactos. El modo de imágenes publica únicamente su informe seguro.
 
 El informe usa listas explícitas de campos permitidos, también para los objetos anidados:
 
@@ -117,6 +117,37 @@ El informe usa listas explícitas de campos permitidos, también para los objeto
 `adf_text_characters` suma las longitudes de todos los nodos `text` del ADF original, incluidos espacios y saltos de línea presentes en esos textos; no incluye sintaxis Markdown añadida durante la conversión. `adf_code_block_count` cuenta sus nodos `codeBlock`, también los vacíos. `description_characters` y `description_sha256` siguen midiendo el Markdown convertido completo, incluidos los delimitadores de código.
 
 Todas las longitudes cuentan caracteres del texto Python, no bytes ni tokens; las huellas SHA-256 se calculan sobre su codificación UTF-8. No se registran estados o etiquetas arbitrarios, textos de descripciones, resúmenes, prompts, documentos, respuestas Jira ni credenciales. El informe tampoco contiene el payload completo.
+
+### Diagnóstico manual de imágenes (después del merge)
+
+En **Actions > Documentation agent PoC > Run workflow**, seleccionar **main** después del merge y rellenar exactamente:
+
+| Input | Valor |
+|---|---|
+| `mode` | `diagnose-images` |
+| `issue_key` | `DOC-104` |
+| `issue_summary` | `Diagnóstico de imágenes DOC-104` |
+| `issue_description` | Vacío |
+| `jira_epic_key` | `DOC-95` |
+| `jira_task_keys` | `DOC-96,DOC-97,DOC-98,DOC-99,DOC-100,DOC-101` |
+
+Pulsar **Run workflow**. Al terminar, abrir la ejecución y descargar desde **Artifacts** el ZIP `documentation-image-diagnostic-<run_id>-<run_attempt>`. Contiene `image-diagnostic-report.json`; está disponible durante 14 días. Revisarlo también si el job falla. Un fallo anterior al arranque del diagnóstico puede impedir crear el informe: en ese caso los pasos fallidos y el error de artefacto ausente identifican el fallo, nunca un resultado satisfactorio.
+
+El selector único admite `generate`, `diagnose-context` y `diagnose-images`. Los jobs de diagnóstico y generación tienen condiciones excluyentes; un valor desconocido no activa generación. Actualizar cualquier consumidor del booleano antiguo `diagnose_only` al selector `mode`.
+
+El diagnóstico de imágenes reutiliza `resolve_image_catalogue`, la misma función que generación: lee la solicitud canónica desde Jira, resuelve y valida épica y tareas, extrae `documentation-images-v1`, comprueba pertenencia y descarga el catálogo completo con los mismos límites, negociación, redirecciones y validación binaria. Verifica el SHA capturado antes y después; ejecuta las copias de confianza obtenidas mediante `git show SHA:.github/...`, conservando la estructura `scripts/`, catálogo y prompt del staging. Una imagen inválida aborta el diagnóstico. Cero imágenes seleccionadas produce un informe explícito con cantidad cero; no confirma la selección esperada de cuatro imágenes de DOC-104.
+
+Solo recibe `JIRA_BASE_URL`, `JIRA_API_EMAIL` y `JIRA_API_TOKEN`, con `contents: read` y sin persistir credenciales Git. No recibe `ANTHROPIC_API_KEY`, no construye peticiones al modelo ni alcanza generación, escritura del repositorio, ramas, PRs o notificaciones. Los binarios permanecen en memoria y se escriben únicamente dentro de `TemporaryDirectory`, eliminado al salir incluso ante error; el artefacto no incluye esa carpeta.
+
+Lista explícita de campos del informe satisfactorio: `status`, `commit_sha`, `issue_key`, `epic_key`, `task_keys`, `images_count`, `total_bytes`, `images`. Cada imagen contiene únicamente `issue_key`, `attachment_id`, `size`, `mime_type` validado y `sha256`. No contiene descripciones, alt, binarios, nombres de archivo originales, credenciales ni URLs. Ante fallo contiene solo `status=technical_error`, `error_type` y, si procede, `http_status`; termina con código distinto de cero.
+
+### Incidente 38882727627: negociación y errores técnicos
+
+El incidente comunicado de DOC-104 falla antes de Claude con HTTP 406. El código enviaba `Accept: image/png,image/jpeg`. La [documentación oficial de Get attachment content](https://developer.atlassian.com/cloud/jira/platform/rest/v3/api-group-issue-attachments/#api-rest-api-3-attachment-content-id-get) describe contenido de adjuntos, respuesta 200 con `redirect=false` y redirección 303; su ejemplo no limita Accept a formatos de imagen. Se usa ahora `Accept: */*` para admitir la representación HTTP binaria sin ampliar los formatos publicables: metadatos, bytes, estructura, dimensiones, tamaños y hashes siguen comprobándose después. No se cambian hosts, HTTPS, límites ni alcance de credenciales.
+
+Demostrado localmente: la cabecera restrictiva existía; una simulación de negociación que ofrece contenido binario reproduce su rechazo y acepta la cabecera corregida. El 406 por sí solo no demuestra que esta fuera la causa real; no se ha consultado la ejecución ni descargado sus adjuntos. Queda pendiente comprobar DOC-104 con el diagnóstico anterior después del merge, sin Claude.
+
+El informe de emergencia ya no representa una abstención: usa un sobre técnico `status=technical_error`, sin `decision`. El contrato de Claude conserva solo `proposal` y `abstention`. Un fallo de generación, incluso después de escribir un informe del modelo, impide validación, build, PR y notificación de abstención. El fallback sustituye cualquier informe del modelo si generación falla. El validador rechaza el sobre técnico. Solo una generación correcta alcanza validación; solo una propuesta válida con archivos cambiados requiere build. Las abstenciones auténticas y válidas conservan su recorrido de notificación y omiten el build. Node 24 se configura explícitamente con `actions/setup-node@v5` antes de `npm ci`, como en los otros workflows. La recogida de informe y diff y la subida de evidencias conservan `always()`.
 
 ## Funcionamiento del agente
 
@@ -144,7 +175,7 @@ El informe determinista permite un campo opcional `images` con las imágenes usa
 
 `--image-artifacts` apunta fuera del repositorio. El artefacto `documentation-proposal-files` conserva `catalogue.json` (versión, catálogo disponible y publicado) y `files/` con documentos completos e imágenes usadas, también las reutilizadas. Se conserva además el informe con hashes de documentos y binarios y el diff existente: el diff por sí solo no recupera creaciones sin seguimiento ni imágenes. Verifica hashes antes de recuperar y revisar una propuesta; los archivos preparados pueden existir aunque la aplicación haya fallado, por lo que el resultado del validador determina si son publicables. Las imágenes descargadas pero omitidas solo constan como metadatos, sin su binario.
 
-El diagnóstico continúa verificando el contexto textual sin descargar imágenes; no prueba catálogo ni píxeles. Las pruebas nuevas son offline y usan transportes simulados. La suite de renderizado construye una página temporal con las `baseUrl` de producción y preview; los artículos reales permanecen intactos. El refuerzo general de reintentos de publicación sigue pendiente.
+El modo `diagnose-context` verifica el contexto textual; `diagnose-images` comprueba el catálogo y los binarios sin Claude. Las pruebas nuevas son offline y usan transportes simulados. La suite de renderizado construye una página temporal con las `baseUrl` de producción y preview; los artículos reales permanecen intactos. El refuerzo general de reintentos de publicación sigue pendiente.
 
 Cuando una tarea con la etiqueta `documentation-task` pasa a **In Progress**, Jira añade automáticamente la etiqueta `documentation-agent-ready`.
 
