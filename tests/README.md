@@ -36,6 +36,13 @@ No modifica artículos reales ni llama a Jira o Claude. La suite Python de
 `.github/scripts/tests/test_documentation_images.py` simula selección, descarga,
 validación, aplicación atómica, publicación y recuperación de binarios.
 
+La regresión sintética de DOC-104 en esa suite comprueba la precedencia de la
+solicitud ADF obtenida por API sobre el texto de Automation sin identificador,
+la lectura de solicitud, épica y seis tareas, y una petición capturada con cuatro
+imágenes y URLs deterministas. La propuesta simulada verifica referencias Markdown
+y binarios recuperables, sin red ni secretos reales. El diagnóstico sigue sin
+descargar imágenes ni llamar a Claude; verifica el contexto canónico textual.
+
 La suite histórica exige que `docs/production-snapshots/` no exista. Si hay
 snapshots locales previos, esa prueba falla aunque el build los excluya. No deben
 eliminarse datos locales para ocultar ese fallo.

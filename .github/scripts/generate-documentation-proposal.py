@@ -356,6 +356,7 @@ def resolve_jira_source_with_diagnostics(
     timeout: float, *, require_manifest: bool = False,
     jira_epic_key: str = "", jira_task_keys: str = "",
     source_issues: dict | None = None,
+    source_descriptions: list[str] | None = None,
 ) -> tuple[dict[str, str], dict[str, object] | None]:
     structured_source = parse_jira_source_inputs(jira_epic_key, jira_task_keys)
     manifest = structured_source if structured_source is not None else parse_documentation_source_manifest(ticket["issue_description"])
@@ -366,6 +367,14 @@ def resolve_jira_source_with_diagnostics(
     base_url, email, token = validate_jira_configuration(configuration)
     epic_key, task_keys = manifest
     request_timeout = min(timeout, JIRA_REQUEST_TIMEOUT)
+    request_description = None
+    if structured_source is not None:
+        request_issue = jira_issue(base_url, ticket["issue_key"], email, token, request_timeout, transport)
+        _, _, request_fields = validated_jira_issue(request_issue, ticket["issue_key"])
+        request_description, _ = convert_jira_description(request_fields.get("description"), ticket["issue_key"])
+        # The request supplies context, never attachment authorization.
+        if source_descriptions is not None:
+            source_descriptions.append(request_description)
     epic = jira_issue(base_url, epic_key, email, token, request_timeout, transport)
     resolved_epic_key, epic_summary, epic_fields = validated_jira_issue(epic, epic_key)
     if source_issues is not None:
@@ -374,10 +383,12 @@ def resolve_jira_source_with_diagnostics(
     if not isinstance(issue_type, dict) or not isinstance(issue_type.get("name"), str) or issue_type["name"].casefold() != "epic":
         raise ProposalError(f"Jira source {epic_key} is not an epic")
     epic_description, epic_diagnostics = convert_jira_description(epic_fields.get("description"), resolved_epic_key)
+    if source_descriptions is not None:
+        source_descriptions.append(epic_description)
     sections = [f"Epic {resolved_epic_key}: {epic_summary}\n\n{epic_description}".rstrip()]
     if structured_source is not None:
-        # Keep human text verbatim inside the existing untrusted ticket payload.
-        sections.insert(0, f"Documentation task {ticket['issue_key']}: {ticket['issue_summary']}\n\n{ticket['issue_description']}")
+        # API ADF is canonical; Automation text must not duplicate or override it.
+        sections.insert(0, f"Documentation task {ticket['issue_key']}: {ticket['issue_summary']}\n\n{request_description}")
     task_diagnostics: list[dict[str, object]] = []
     for task_key in task_keys:
         task = jira_issue(base_url, task_key, email, token, request_timeout, transport)
@@ -394,6 +405,8 @@ def resolve_jira_source_with_diagnostics(
         if not isinstance(category_key, str) or category_key.casefold() != "done":
             raise ProposalError(f"Jira task {task_key} is not in the Done status category")
         task_description, task_diagnostic = convert_jira_description(task_fields.get("description"), resolved_task_key)
+        if source_descriptions is not None:
+            source_descriptions.append(task_description)
         sections.append(f"Task {resolved_task_key}: {task_summary}\n\n{task_description}".rstrip())
         task_diagnostics.append(task_diagnostic)
         if source_issues is not None:
@@ -1062,26 +1075,28 @@ def generate_and_apply(
         raise ProposalError("ANTHROPIC_API_KEY is not configured")
     verify_head(repo_root, base_sha)
     ticket = load_ticket(ticket_file)
-    original_ticket = ticket
     configuration = jira_configuration_from_environment() if jira_configuration is None else jira_configuration
     source_issues: dict = {}
+    descriptions: list[str] = []
     ticket, _ = resolve_jira_source_with_diagnostics(
         ticket, configuration,
         jira_transport, timeout,
         jira_epic_key=jira_epic_key, jira_task_keys=jira_task_keys,
         source_issues=source_issues,
+        source_descriptions=descriptions,
     )
-    descriptions = [convert_jira_description(fields.get("description"), key)[0]
-                    for key, fields in source_issues.items()]
-    if parse_jira_source_inputs(jira_epic_key, jira_task_keys) is not None or not source_issues:
-        descriptions.insert(0, original_ticket["issue_description"])
+    if not source_issues:
+        descriptions.append(ticket["issue_description"])
     selected = [item for description in descriptions for item in images.selection(description)]
     image_catalogue, blobs = [], {}
     if selected:
         if not source_issues:
             raise ProposalError("Image selection requires an authorized Jira source batch")
         image_catalogue, blobs = images.catalogue(descriptions, source_issues,
-            validate_jira_configuration(configuration), min(timeout, JIRA_REQUEST_TIMEOUT), image_downloader)
+            validate_jira_configuration(configuration), min(timeout, JIRA_REQUEST_TIMEOUT), image_downloader,
+            selected=selected)
+        if len(image_catalogue) != len(selected):
+            raise ProposalError("Image selection was lost while building the catalogue")
     documents = read_documentation(repo_root)
     trusted_prompt = read_prompt(prompt_file)
     request = (build_request(trusted_prompt, ticket, documents, image_catalogue) if image_catalogue
