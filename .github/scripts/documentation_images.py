@@ -228,8 +228,9 @@ def asset_path(root: Path, raw: str) -> Path:
 
 
 def catalogue(descriptions: list[str], issues: dict, configuration: tuple[str, str, str], timeout: float,
-              downloader=download) -> tuple[list[dict], dict[str, bytes]]:
-    selected = [item for description in descriptions for item in selection(description)]
+              downloader=download, *, selected: list[dict] | None = None) -> tuple[list[dict], dict[str, bytes]]:
+    if selected is None:
+        selected = [item for description in descriptions for item in selection(description)]
     if len(selected) > MAX_IMAGES:
         raise ImageError("Image batch exceeds count limit")
     seen, result, blobs, total = set(), [], {}, 0

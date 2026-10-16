@@ -34,7 +34,8 @@ class MeasureBatchTests(unittest.TestCase):
         value = batch()
         value["documentation_task"]["description"] = " Contexto\r\n🚀 "
         issues = {}
-        for issue in [value["epic"], *value["tasks"]]:
+        # Measurement consumes the canonical converted Markdown, including the request.
+        for issue in [value["documentation_task"], value["epic"], *value["tasks"]]:
             adf = {"type": "doc", "version": 1, "content": [
                 {"type": "paragraph", "content": [{"type": "text", "text": issue["description"]}]},
                 {"type": "codeBlock", "content": [{"type": "text", "text": "ñ\n  ejemplo"}]},
@@ -55,7 +56,7 @@ class MeasureBatchTests(unittest.TestCase):
         human = value["documentation_task"]
         resolved = generator.resolve_jira_source(
             {"issue_key": human["key"], "issue_summary": human["summary"],
-             "issue_description": human["description"]},
+             "issue_description": "Representación Automation sustituida por API"},
             {"base_url": "https://example.invalid", "email": "fixture@example.invalid",
              "token": "offline-fixture"},
             fake_transport, 1,

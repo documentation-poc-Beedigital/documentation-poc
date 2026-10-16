@@ -997,6 +997,8 @@ class JiraSourceManifestTests(unittest.TestCase):
 
     def source_transport(self, overrides: dict[str, dict[str, object]] | None = None):
         responses = {
+            "DOC-999": self.issue("DOC-999", "Solicitud actual", parent=None),
+            "OTHER-999": self.issue("OTHER-999", "Solicitud actual", parent=None),
             "DOC-123": self.issue("DOC-123", "Epic summary", issue_type="Epic", parent=None),
             "DOC-124": self.issue("DOC-124", "First task"),
             "DOC-125": self.issue("DOC-125", "Second task"),
@@ -1365,6 +1367,8 @@ class JiraSourceManifestTests(unittest.TestCase):
     def test_structured_cross_project_context_matches_normal_and_diagnostic_request(self) -> None:
         human = "  # Solicitud PM\n[Referencia](https://example.invalid)\nDOCUMENTATION_SOURCE_V1\ntexto libre\n  "
         sources = {
+            "DOC-999": self.issue("DOC-999", "Solicitud actual", parent=None, description={
+                "type": "doc", "content": [{"type": "paragraph", "content": [{"type": "text", "text": human}]}]}),
             "APP-10": self.issue("APP-10", "Product epic", issue_type="Epic", parent=None),
             "TEAM-20": self.issue("TEAM-20", "Team task", parent="APP-10", description={
                 "type": "doc", "content": [{"type": "codeBlock", "content": [
@@ -1392,12 +1396,12 @@ class JiraSourceManifestTests(unittest.TestCase):
                     ticket_file, self.configuration, jira, repo_root=root, prompt_file=prompt_file,
                     base_sha="a" * 40, **references,
                 )
-            self.assertEqual(["APP-10", "TEAM-20", "APP-21"] * 2, calls)
+            self.assertEqual(["DOC-999", "APP-10", "TEAM-20", "APP-21"] * 2, calls)
             self.assertEqual(build.call_args_list[0], build.call_args_list[1])
             request = claude.call_args.args[2]
             context = json.loads(request["messages"][0]["content"])["ticket"]["issue_description"]
             self.assertEqual(
-                f"Documentation task DOC-999: Documentation\n\n{human}\n\n"
+                f"Documentation task DOC-999: Documentation\n\n{human.strip()}\n\n"
                 "Epic APP-10: Product epic\n\nProduct epic\n\n"
                 "Task TEAM-20: Team task\n\n````\n\n  ```evidence```\n  \n````\n\n"
                 "Task APP-21: Product task\n\nProduct task", context,
@@ -1415,11 +1419,14 @@ class JiraSourceManifestTests(unittest.TestCase):
         jira, _ = self.source_transport()
         ticket = {"issue_key": "OTHER-999", "issue_summary": "Documentation", "issue_description": "x"}
         resolved = GENERATOR.resolve_jira_source(ticket, self.configuration, jira, 30, **references)
-        overhead = len(resolved["issue_description"]) - 1
+        overhead = len(resolved["issue_description"]) - len("Solicitud actual")
         for length in (60_000 - overhead, 60_001 - overhead):
             with self.subTest(length=length), tempfile.TemporaryDirectory() as temporary:
                 root, ticket_file, prompt_file = self.diagnostic_files(temporary)
                 ticket["issue_description"] = "x" * length
+                jira, _ = self.source_transport({"OTHER-999": self.issue(
+                    "OTHER-999", "Solicitud actual", parent=None, description={"type": "doc", "content": [
+                        {"type": "paragraph", "content": [{"type": "text", "text": "x" * length}]}]})})
                 ticket_file.write_text(json.dumps(ticket), encoding="utf-8")
                 claude = mock.Mock(return_value={"content": [{"type": "text", "text": json.dumps({
                     "decision": "abstention", "summary": "Test", "reason": "Test", "evidence": "Test", "documents": [],
@@ -1467,7 +1474,7 @@ class JiraSourceManifestTests(unittest.TestCase):
                     repo_root=root, prompt_file=prompt_file, base_sha="a" * 40,
                     jira_epic_key="DOC-123", jira_task_keys="DOC-124,DOC-125")
             self.assertTrue(report["contexts_match"])
-            self.assertEqual(["DOC-123", "DOC-124", "DOC-125"], calls)
+            self.assertEqual(["DOC-999", "DOC-123", "DOC-124", "DOC-125"], calls)
             with self.assertRaisesRegex(GENERATOR.ProposalError, "non-empty strings"):
                 GENERATOR.load_ticket(ticket_file)
 

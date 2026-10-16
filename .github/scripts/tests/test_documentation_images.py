@@ -14,6 +14,7 @@ import tempfile
 import unittest
 import urllib.error
 import zlib
+from contextlib import nullcontext
 from pathlib import Path
 from unittest import mock
 
@@ -176,6 +177,10 @@ class ImageWorkflowTests(unittest.TestCase):
     def jira(self, endpoint, *args):
         self.assertIn("attachment", endpoint)
         key = endpoint.split("/issue/")[1].split("?")[0]
+        if key == "DOC-1":
+            return {"key": key, "fields": {"summary": "Solicitud actual",
+                "description": {"type": "doc", "content": [{"type": "paragraph", "content": [
+                    {"type": "text", "text": json.loads(self.ticket.read_text(encoding="utf-8"))["issue_description"]}]}]}}}
         return {"key": key, "fields": self.issues[key]}
 
     def downloader(self, endpoint, *args):
@@ -199,8 +204,144 @@ class ImageWorkflowTests(unittest.TestCase):
             return {"content": [{"type": "text", "text": json.dumps(proposal)}]}
         return GENERATOR.generate_and_apply(self.root, self.ticket, self.prompt, self.report, "test-only", model,
             base_sha=self.base, jira_configuration=CONFIG, jira_transport=self.jira,
-            jira_epic_key="APP-1", jira_task_keys="APP-2", image_downloader=self.downloader,
+            **getattr(self, "source_references", {"jira_epic_key": "APP-1", "jira_task_keys": "APP-2"}),
+            image_downloader=self.downloader,
             image_artifacts=self.artifacts)
+
+    def incident_fixture(self):
+        """Synthetic equivalents only; no incident descriptions or downloaded assets."""
+        selected = [dict(item(identity, "DOC-95"), alt=f"Vista aprobada {number}")
+                    for number, identity in enumerate(("10109", "10110", "10111", "10117"), 1)]
+        literal = json.dumps({"version": 1, "images": selected})
+        automation = "Contexto Automation sin identificador.\n```\n" + literal + "\n```"
+        self.ticket.write_text(json.dumps({"issue_key": "DOC-104", "issue_summary": "Solicitud sintética",
+                                          "issue_description": automation}), encoding="utf-8")
+        request_adf = {"type": "doc", "version": 1, "content": [
+            {"type": "paragraph", "content": [{"type": "text", "text": "Contexto canónico sintético."}]},
+            {"type": "codeBlock", "attrs": {"language": "documentation-images-v1"},
+             "content": [{"type": "text", "text": literal}]}]}
+        self.issues = {
+            "DOC-104": {"summary": "Solicitud API", "description": request_adf},
+            "DOC-95": {"summary": "Épica sintética", "issuetype": {"name": "Epic"}, "description": None,
+                       "attachment": [{"id": entry["attachment_id"], "size": len(PNG),
+                                       "mimeType": "image/png", "filename": "fixture.png"} for entry in selected]},
+            **{f"DOC-{n}": {"summary": f"Tarea sintética {n}", "parent": {"key": "DOC-95"},
+                           "labels": ["documentation-required"], "status": {"statusCategory": {"key": "done"}},
+                           "description": None, "attachment": []} for n in range(96, 102)},
+        }
+        self.source_references = {"jira_epic_key": "DOC-95",
+                                  "jira_task_keys": ",".join(f"DOC-{n}" for n in range(96, 102))}
+        self.jira_calls = []
+        previous_jira = self.jira
+        def jira(endpoint, *args):
+            self.jira_calls.append(endpoint.split("/issue/")[1].split("?")[0])
+            return previous_jira(endpoint, *args)
+        self.jira = jira
+        for target in ("urllib.request.urlopen", "socket.create_connection"):
+            patcher = mock.patch(target, side_effect=AssertionError("Real network forbidden"))
+            patcher.start()
+            self.addCleanup(patcher.stop)
+        return selected, automation
+
+    def test_incident_four_images_in_captured_request_and_recoverable_proposal(self):
+        selected, automation = self.incident_fixture()
+        # Reproduces the pre-fix empty selection when the language marker is absent.
+        self.assertEqual([], IMAGES.selection(automation))
+        with mock.patch.object(IMAGES, "selection", wraps=IMAGES.selection) as extract, \
+             mock.patch.object(GENERATOR, "convert_jira_description", wraps=GENERATOR.convert_jira_description) as convert:
+            self.run_proposal()
+        self.assertEqual(["DOC-104", "DOC-95", *[f"DOC-{n}" for n in range(96, 102)]], self.jira_calls)
+        self.assertEqual(8, convert.call_count)
+        self.assertEqual(8, extract.call_count)
+        payload = json.loads(self.requests[0]["messages"][0]["content"])
+        self.assertEqual({"issue_key", "issue_summary", "issue_description"}, set(payload["ticket"]))
+        context = payload["ticket"]["issue_description"]
+        self.assertNotIn("Contexto Automation", context)
+        self.assertEqual(1, context.count("Contexto canónico sintético."))
+        self.assertEqual(1, context.count("documentation-images-v1"))
+        self.assertEqual(1, context.count("Documentation task DOC-104:"))
+        catalogue = payload["images"]
+        self.assertEqual(4, len(catalogue))
+        sha = hashlib.sha256(PNG).hexdigest()
+        self.assertEqual([f"/img/jira/doc-95-{i['attachment_id']}-{sha}.png" for i in selected],
+                         [i["url"] for i in catalogue])
+        self.assertEqual([i["alt"] for i in selected], [i["alt"] for i in catalogue])
+        self.assertEqual([f"{CONFIG['base_url']}/rest/api/3/attachment/content/{i['attachment_id']}" for i in selected],
+                         self.downloads)
+        artifacts = json.loads((self.artifacts / "catalogue.json").read_text(encoding="utf-8"))
+        self.assertEqual(catalogue, artifacts["available"])
+        self.assertEqual(catalogue, artifacts["published"])
+        proposed = self.doc.read_text(encoding="utf-8")
+        for image in catalogue:
+            self.assertIn(f"![{image['alt']}]({image['url']})", proposed)
+            self.assertEqual(PNG, (self.artifacts / "files" / image["path"]).read_bytes())
+            self.assertEqual(sha, hashlib.sha256((self.root / image["path"]).read_bytes()).hexdigest())
+        self.assertEqual(self.doc.read_bytes(),
+                         (self.artifacts / "files" / self.doc.relative_to(self.root)).read_bytes())
+        validation = VALIDATOR.validate_repository(self.root, self.report, self.base)
+        self.assertTrue(validation["valid"], validation)
+        self.assertEqual(4, len(validation["images"]))
+
+    def test_incident_api_description_without_selection_overrides_automation_selection(self):
+        self.incident_fixture()
+        value = json.loads(self.ticket.read_text(encoding="utf-8"))
+        value["issue_description"] = block([item("999", "FOREIGN-1")])
+        self.ticket.write_text(json.dumps(value), encoding="utf-8")
+        self.issues["DOC-104"]["description"]["content"].pop()
+        self.run_proposal()
+        self.assertEqual([], self.downloads)
+        self.assertNotIn("images", json.loads(self.requests[0]["messages"][0]["content"]))
+
+    def test_incident_invalid_selection_and_api_conversion_failures_abort_before_claude(self):
+        selected, _ = self.incident_fixture()
+        original = copy.deepcopy(self.issues["DOC-104"]["description"])
+        for failure in ("malformed", "foreign", "request_attachment", "missing_attachment", "api", "conversion", "lost_text"):
+            with self.subTest(failure=failure):
+                adf = copy.deepcopy(original)
+                self.issues["DOC-104"]["description"] = adf
+                chosen = copy.deepcopy(selected)
+                if failure == "foreign":
+                    chosen[0]["issue_key"] = "OTHER-999"
+                if failure == "request_attachment":
+                    chosen[0]["issue_key"] = "DOC-104"
+                    self.issues["DOC-104"]["attachment"] = self.issues["DOC-95"]["attachment"]
+                if failure == "missing_attachment":
+                    chosen[0]["attachment_id"] = "99999"
+                adf["content"][1]["content"][0]["text"] = ("{" if failure == "malformed" else
+                    json.dumps({"version": 1, "images": chosen}))
+                if failure == "conversion":
+                    self.issues["DOC-104"]["description"] = "Invalid ADF"
+                patcher = (mock.patch.object(self, "jira", side_effect=GENERATOR.ProposalError("Jira API failed"))
+                           if failure == "api" else mock.patch.object(GENERATOR, "adf_to_markdown", return_value="")
+                           if failure == "lost_text" else nullcontext())
+                with patcher, self.assertRaises((GENERATOR.ProposalError, IMAGES.ImageError)):
+                    self.run_proposal()
+                self.assertEqual([], self.requests)
+                self.assertEqual(self.before, self.doc.read_text(encoding="utf-8"))
+                self.assertFalse(self.artifacts.exists())
+
+    def test_incident_nonempty_selection_cannot_produce_empty_catalogue(self):
+        self.incident_fixture()
+        with mock.patch.object(IMAGES, "catalogue", return_value=([], {})), \
+             self.assertRaisesRegex(GENERATOR.ProposalError, "selection was lost"):
+            self.run_proposal()
+        self.assertEqual([], self.requests)
+
+    def test_incident_diagnosis_uses_canonical_context_without_download_or_claude(self):
+        self.incident_fixture()
+        with mock.patch.object(IMAGES, "download", side_effect=AssertionError("No download")), \
+             mock.patch.object(GENERATOR, "http_transport", side_effect=AssertionError("No Claude")):
+            report = GENERATOR.diagnose_jira_context(self.ticket, CONFIG, self.jira,
+                repo_root=self.root, prompt_file=self.prompt, base_sha=self.base, **self.source_references)
+        self.assertTrue(report["contexts_match"])
+        self.assertEqual(8, len(self.jira_calls))
+        safe = json.dumps(report)
+        for forbidden in ("Contexto canónico", "Vista aprobada", "documentation-images-v1", CONFIG["token"],
+                          CONFIG["email"], CONFIG["base_url"]):
+            self.assertNotIn(forbidden, safe)
+        self.assertEqual([], self.requests)
+        self.assertEqual([], self.downloads)
+        self.assertEqual("", self.git("status", "--porcelain"))
 
     def test_valid_image_publication_artifacts_and_unchanged_model_schema(self):
         self.run_proposal()

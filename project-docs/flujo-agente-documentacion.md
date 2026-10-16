@@ -1,10 +1,10 @@
 ---
 article_id: ART-DOC-AGENT-001
 title: Flujo del agente de documentación
-version: 1.8
+version: 1.9
 status: published
 owner: Product
-last_reviewed: 2026-10-14
+last_reviewed: 2026-10-16
 ---
 
 # Flujo del agente de documentación
@@ -63,7 +63,9 @@ TASK_KEYS:
 
 Cuando la tarea documental pasa a **In Progress**, el workflow recupera desde Jira Cloud la épica y las tareas de las referencias estructuradas o del manifiesto. Antes de usar el contenido, comprueba que la fuente principal es una épica y que cada tarea funcional es hija directa, conserva `documentation-required` y pertenece a la categoría Done. Las claves pueden tener prefijos diferentes; la relación se valida con el campo `parent` de Jira, sin consultar ni exigir parentesco a la tarea documental.
 
-En modo estructurado, `ticket.issue_description` se compone en este orden: `Documentation task CLAVE: RESUMEN`, dos saltos de línea y la descripción humana original sin recortar; después `Epic CLAVE: RESUMEN` y la descripción completa de la épica convertida de ADF; después cada sección `Task CLAVE: RESUMEN` y su descripción completa convertida, en el orden de los inputs. Las secciones se unen con dos saltos de línea. Las secciones recuperadas de Jira mantienen la conversión existente y eliminan únicamente espacios exteriores. Todo el contexto, incluidos títulos, separadores y texto humano, tiene un límite de 60.000 caracteres; si se supera, falla sin truncar y antes de preparar la petición. En modo manifiesto, se conserva exactamente la composición anterior de épica y tareas, sin añadir el manifiesto como contexto humano.
+En modo estructurado se consulta también la solicitud documental por `ticket.issue_key`, con el cliente autenticado existente y el mismo conversor ADF. Su descripción actual de API es canónica: sustituye completamente la representación de Automation (`issue.description.jsonEncode`), sin concatenarlas ni usar esta última como fallback. Un fallo de lectura o conversión aborta antes de Claude. No se exige parentesco, etiqueta ni estado funcional a la solicitud, y leerla no autoriza sus adjuntos.
+
+En ese modo, `ticket.issue_description` se compone en este orden: `Documentation task CLAVE: RESUMEN` (identidad y resumen del ticket de entrada), dos saltos de línea y la descripción canónica convertida; después `Epic CLAVE: RESUMEN` y la descripción completa de la épica convertida de ADF; después cada sección `Task CLAVE: RESUMEN` y su descripción completa convertida, en el orden de los inputs. Las secciones se unen con dos saltos de línea. Las descripciones recuperadas de Jira mantienen la conversión común y eliminan únicamente espacios exteriores. Todo el contexto, incluidos títulos y separadores, tiene un límite de 60.000 caracteres; si se supera, falla sin truncar y antes de preparar la petición. En modo manifiesto, se conserva exactamente la composición anterior de épica y tareas, sin consultar la solicitud ni añadir el manifiesto como contexto humano. El modo histórico sin fuentes sigue usando el ticket de entrada.
 
 El contexto permanece dentro del ticket no confiable que recibe `build_request`, con las instrucciones de seguridad existentes. El JSON del ticket conserva exactamente `issue_key`, `issue_summary` e `issue_description`: las referencias se validan por separado y llegan al generador mediante `--jira-epic-key` y `--jira-task-keys`. Los consumidores de publicación y notificación siguen recibiendo el ticket original de tres campos.
 
@@ -86,13 +88,13 @@ El workflow **Documentation agent PoC** permite comprobar desde **Actions > Run 
    |---|---|---|
    | `issue_key` | Clave de la tarea documental, por ejemplo `DOC-999`; obligatorio | Obligatorio, sin cambios |
    | `issue_summary` | Resumen de la tarea documental; obligatorio | Obligatorio, sin cambios |
-   | `issue_description` | Contexto humano conservado completo; puede dejarse vacío si solo se quiere diagnosticar las fuentes | Obligatorio por validación del job, aunque el formulario lo muestre opcional; conserva el límite de 60.000 caracteres y las validaciones de texto |
+   | `issue_description` | Puede dejarse vacío: en modo estructurado se usa la descripción actual de la solicitud por API | Obligatorio por validación del job, aunque el formulario lo muestre opcional; conserva sus validaciones. En modo estructurado prevalece la descripción API |
    | `jira_epic_key` | Una clave de épica, por ejemplo `APP-123`; obligatorio cuando `diagnose_only=true` | Opcional, junto con `jira_task_keys` activa el modo estructurado |
    | `jira_task_keys` | Claves separadas por comas, por ejemplo `APP-124, TEAM-125`; obligatorio cuando `diagnose_only=true` | Opcional, junto con `jira_epic_key` activa el modo estructurado |
    | `diagnose_only` | `true` | `false` por defecto; los payloads antiguos sin referencias siguen siendo compatibles |
 
-3. El paso **Serialize diagnostic ticket input** valida las referencias con `parse_jira_source_inputs`, igual que el flujo normal. Rechaza campos ausentes, elementos vacíos —incluidas comas iniciales, finales o consecutivas—, claves inválidas, duplicados y texto adicional antes de exponer credenciales o consultar Jira. Conserva la descripción humana en el ticket temporal, sin construir un manifiesto. Para comparar una ejecución normal, usar los mismos inputs, incluida la descripción.
-4. El paso **Diagnose validated Jira context in the prepared request** recibe únicamente los tres secretos Jira indicados arriba. Consulta y valida la épica y las tareas hijas directas con las mismas funciones del flujo normal: tipo Epic, relación con la épica, etiqueta `documentation-required` y categoría Done. Convierte las descripciones ADF a Markdown y usa la misma composición de contexto humano, épica y tareas, sin truncarlo. Si el conjunto supera 60.000 caracteres, falla antes de construir la petición.
+3. El paso **Serialize diagnostic ticket input** valida las referencias con `parse_jira_source_inputs`, igual que el flujo normal. Rechaza campos ausentes, elementos vacíos —incluidas comas iniciales, finales o consecutivas—, claves inválidas, duplicados y texto adicional antes de exponer credenciales o consultar Jira. Conserva el ticket temporal de tres campos, sin construir un manifiesto; al resolver el contexto prevalece la descripción API. Para comparar una ejecución normal, usar los mismos inputs y el mismo estado de Jira.
+4. El paso **Diagnose validated Jira context in the prepared request** recibe únicamente los tres secretos Jira indicados arriba. Lee la solicitud por su clave y consulta y valida la épica y las tareas hijas directas con las mismas funciones del flujo normal: tipo Epic, relación con la épica, etiqueta `documentation-required` y categoría Done. Convierte todas las descripciones ADF a Markdown y usa la misma composición de solicitud canónica, épica y tareas, sin truncarlo. Si el conjunto supera 60.000 caracteres, falla antes de construir la petición.
 5. Lee `.github/prompts/documentation-agent-poc.md` y los documentos bajo `docs/` mediante las mismas funciones del flujo normal. Usa `build_request` con el mismo modelo, `max_tokens` y contrato. Deserializa el JSON del mensaje de usuario y compara exactamente `ticket.issue_description` con el contexto Jira consolidado.
 6. Consultar el JSON del paso de diagnóstico en los logs. `contexts_match=true` confirma la coincidencia exacta. Si hay discrepancia, publica las métricas seguras con `contexts_match=false` y el paso termina con código de error. Un fallo de inputs, consulta, validación, lectura o SHA detiene el diagnóstico sin publicar el payload.
 
@@ -125,6 +127,10 @@ La selección pública viaja en un bloque JSON `documentation-images-v1` separad
 La skill distingue evidencia de publicación en A, muestra selección, motivo, ubicación y alt, excluye imágenes obsoletas/contradictorias y solicita versiones sin datos sensibles. En B recupera los IDs reales después de adjuntar a los tickets documentales autorizados. Las capturas no sustituyen la descripción de hechos ni modifican CREAR o la autorización independiente de ejecución.
 
 El generador solicita `attachment` junto a los campos Jira existentes y valida primero el lote de origen. Solo puede seleccionar adjuntos de la épica o de sus Task autorizadas, comprobando pertenencia por ID en sus metadatos. No acepta adjuntos de la tarea documental ni de tickets originales ajenos al lote. Usa los secretos Jira existentes y construye `/rest/api/3/attachment/content/ID`; no utiliza el nombre o `content` recibido como URL de descarga o ruta de destino.
+
+En modo estructurado, la selección de la solicitud se extrae de su conversión ADF canónica, conservando `attrs.language="documentation-images-v1"` en la cerca Markdown. Cada descripción se convierte una vez y su selección se procesa una vez; la copia de Automation no participa. El JSON de selección no amplía el lote autorizado ni provoca consultas a claves mencionadas. Una selección válida no vacía debe producir el mismo número de entradas en el catálogo; cualquier pérdida aborta antes del transporte Claude.
+
+La regresión offline del incidente 38745474171 (DOC-104, fuentes DOC-95 y DOC-96 a DOC-101) usa únicamente descripciones sintéticas y cuatro PNG simulados para los IDs 10109, 10110, 10111 y 10117. Reproduce que un texto de Automation sin el identificador devuelve selección vacía, mientras el codeBlock ADF identificado conserva cuatro entradas. El código anterior usaba esa primera representación sin consultar la solicitud. Es un mecanismo reproducido localmente; no confirma la serialización exacta de aquella ejecución, que no se ha consultado. Las pruebas capturan la petición con cuatro URLs deterministas y alt aprobados, aplican una propuesta simulada y verifican Markdown, hashes y binarios recuperables del artefacto. También cubren ausencia de selección, errores de API/conversión, JSON malformado, adjuntos ajenos y catálogo vacío inesperado.
 
 Se admiten hasta diez PNG/JPEG, 2.000.000 bytes por archivo, 8.000.000 bytes por lote y 20.000.000 píxeles por imagen. Se contrastan tamaño real, MIME, estructura binaria y SHA-256; PNG también comprueba CRC y datos comprimidos. JPEG comprueba marcadores y dimensiones, sin decodificar sus píxeles. No se certifican privacidad, vigencia o correspondencia visual automáticamente.
 
