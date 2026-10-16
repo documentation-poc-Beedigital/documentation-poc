@@ -1,7 +1,8 @@
 ---
 article_id: GITHUB-6274BA706E64091E96A83280061A2AAA
 title: "Registrarte, probar Beesible y activar el Plan Start"
-version: 1.1
+version: 1.2
+sidebar_position: 2
 ---
 # <HelpIcon name="signIn" /> Registrarte, probar Beesible y activar el Plan Start
 
@@ -35,7 +36,7 @@ Está pensada para nuevos usuarios de España.
 
 ### <HelpIcon name="steps" />  Paso 1. Crea tu cuenta
 
-1. Abre el registro desde un botón de la web de Beesible.
+1. Abre el registro desde un botón de la [web de Beesible](https://www.beesible.ai/).
 2. Elige cómo quieres registrarte:
     - **Registro con Google**
     - **Registro con Apple**
@@ -57,6 +58,8 @@ Si ya tienes cuenta y solo quieres entrar, consulta [Acceder a la plataforma](ac
 ### <HelpIcon name="google" />  Paso 2. Conecta tu Perfil de Empresa en Google y elige tu negocio
 
 Verás la pantalla **«Así vamos a trabajar por tu negocio»** con dos opciones.
+
+![Opciones para conectar tu Perfil de Empresa en Google](/img/jira/doc-95-10109-56600f05fe77ec253324d1cb74dc3a2468c914466e16ffdfa2eedbf42164191c.png)
 
 **Si ya tienes un Perfil de Empresa en Google:**
 
@@ -85,6 +88,8 @@ En el panel puedes probar, sin pagar:
 - Un **primer post para Google**.
 - Un **análisis de tus reseñas**.
 - Un **análisis de tus estadísticas**.
+
+![Panel de prueba con el primer post y los análisis de Beelma](/img/jira/doc-95-10110-ecd98f84584668b4a51d4fd08974abb190788cb938b499a6f3fcedb5d065b1ad.png)
 
 #### Tu primer post para Google
 
@@ -138,6 +143,8 @@ Ten en cuenta estas diferencias:
 
 Otras funciones, como la web, el logotipo, las zonas, WhatsApp, los atributos, las fotos y la sincronización, requieren una suscripción. Cuando intentes usar una de ellas, se abrirá la información del plan.
 
+![Acciones de Beelma que requieren suscripción](/img/jira/doc-95-10111-13e491a3fa8e532a8931e4ee22041e187ed3be53e3579d0572c9bac6df533491.png)
+
 ---
 
 ### <HelpIcon name="billing" />  Paso 4. Revisa el plan y completa tus datos fiscales
@@ -189,6 +196,8 @@ Para gestionar tu plan o consultar tus facturas más adelante, consulta [Gestion
 ### Si empiezas desde el análisis gratuito de tu negocio
 
 También puedes llegar al registro desde el análisis gratuito de tu negocio en la [web de Beesible](https://www.beesible.ai/). Tras solicitar el informe, puedes usar un botón de registro del informe o la opción **«Quiero registrarme en Beesible»**.
+
+![Informe del análisis gratuito con la opción de registrarse en Beesible](/img/jira/doc-95-10117-559ce748f2bb8279c90da991fc826f8c23cc9fadad3cfc962c55274a72e9a748.png)
 
 Solicitar el informe no equivale a tener una cuenta ni a contratar. Después, el registro sigue el mismo camino de esta guía, desde el paso 1.
 

@@ -1,11 +1,12 @@
 ---
 article_id: NOTION-29CB7527AC25802184E3E9E42CF145C4
 title: "Acceder a la plataforma"
-version: 1.2
+version: 1.3
 status: published
 owner: Product
 last_reviewed: 2026-09-09
 notion_id: 29cb7527ac25802184e3e9e42cf145c4
+sidebar_position: 3
 ---
 # <HelpIcon name="signIn" /> Acceder a la plataforma
 
