@@ -99,6 +99,12 @@ Este texto humano solo llega completo al agente en el modo estructurado descrito
 
 ## Registro de [VERIFICAR]
 
+En el plan A, para cada imagen destinada a publicación, incluye original o
+recorte, finalidad, motivo, ubicación y alt. Si propones recorte, muestra su
+preview real y registra coordenadas enteras, dimensiones y SHA-256 del original
+según [el contrato de imágenes](imagenes-publicacion.md). La aprobación del plan
+incluye esos recortes; no autoriza ejecutar el agente.
+
 En la entrega de revisión se puede usar esta tabla. En descripciones Jira prefiere listas y conserva la pregunta junto a cada ID para no depender de un registro externo.
 
 | ID | Pregunta y clase | Motivo y efecto en el alcance | Fuentes o evidencia necesaria | Respuesta, procedencia y estado | Afecta a |

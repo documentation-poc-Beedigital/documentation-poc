@@ -7,6 +7,7 @@ import subprocess
 import sys
 import tempfile
 import textwrap
+import shutil
 import unittest
 from unittest import mock
 from pathlib import Path
@@ -24,6 +25,16 @@ class DocumentationAgentWorkflowTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         cls.workflow = WORKFLOW.read_text(encoding="utf-8")
+        # Execute staging against the working version, not stale HEAD. Commits
+        # exist only inside this disposable synthetic repository.
+        cls.fixture = tempfile.TemporaryDirectory(prefix="trusted-workflow-")
+        cls.addClassCleanup(cls.fixture.cleanup)
+        cls.repository = Path(cls.fixture.name)
+        shutil.copytree(WORKFLOW.parents[1], cls.repository / ".github")
+        for args in (("init", "--quiet"), ("add", ".github"),
+                     ("-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid",
+                      "commit", "--quiet", "-m", "Synthetic workflow snapshot")):
+            subprocess.run(["git", *args], cwd=cls.repository, check=True, capture_output=True)
 
     def test_slack_runs_only_for_a_newly_confirmed_pull_request(self) -> None:
         confirmation = self.workflow.index('confirmed_pr_url="$(gh pr view')
@@ -196,7 +207,7 @@ class DocumentationAgentWorkflowTests(unittest.TestCase):
         )
 
     def stage_trusted_files(self, temporary: str, step_name: str) -> Path:
-        repository = WORKFLOW.parents[2]
+        repository = self.repository
         sha = subprocess.run(
             ["git", "-C", str(repository), "rev-parse", "HEAD"],
             check=True, capture_output=True, text=True,
@@ -236,6 +247,18 @@ class DocumentationAgentWorkflowTests(unittest.TestCase):
                         f"runpy.run_path({str(script)!r}, run_name='__main__')\n", {})
                     self.assertEqual(0, result.returncode, f"{script.name}: {result.stderr}")
                     self.assertIn("usage:", result.stdout)
+
+    def test_image_dependencies_are_staged_and_installed_in_both_jobs(self) -> None:
+        for job in self.workflow.split("  prepare-proposal:"):
+            stage = job.index('"requirements-documentation.txt",')
+            install = job.index('python -m pip install --requirement "${RUNNER_TEMP}/trusted-documentation/requirements-documentation.txt"')
+            self.assertLess(stage, install)
+            # No secret-bearing operation can precede the dependency install.
+            self.assertLess(install, job.index("${{ secrets."))
+        with tempfile.TemporaryDirectory() as temporary:
+            root = self.stage_trusted_files(temporary, "Stage trusted automation scripts and prompt")
+            dependency = (root / "requirements-documentation.txt").read_text(encoding="utf-8")
+            self.assertIn("Pillow==13.0.0", dependency)
 
     def test_startup_regression_detects_missing_dependencies_and_resources(self) -> None:
         for missing in ("scripts/documentation_contract.py", "scripts/documentation_images.py",

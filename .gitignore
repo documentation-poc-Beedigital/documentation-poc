@@ -7,3 +7,6 @@ design-system/local/
 
 # Local browser-test artifacts
 test-results/
+
+# Local Python dependencies for offline validation
+.local-python-deps/

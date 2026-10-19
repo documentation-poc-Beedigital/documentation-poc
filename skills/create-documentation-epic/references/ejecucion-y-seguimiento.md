@@ -4,6 +4,14 @@ Lee esta referencia al preparar la ejecución y tras el disparo. Usa [jira-workf
 
 ## Antes de ejecutar
 
+Si hay recortes, verifica que sus previews estaban en el plan aprobado y que el
+hash y las dimensiones del adjunto definitivo coinciden con el original
+inspeccionado. Revisa el bloque convertido, conserva coordenadas en continuidad
+y mide el contexto con él incluido. Un error de hash, dimensiones u orientación
+en `diagnose-images` es técnico: no autoriza un fallback al original ni una
+ejecución del agente sin resolverlo. La aprobación del plan con recortes sigue
+siendo independiente de la autorización para ejecutar el agente.
+
 Entrega una revisión breve y comprensible con:
 
 - Alcance preparado y excluido o aplazado, audiencia y estado de lanzamiento.

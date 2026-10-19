@@ -4,6 +4,7 @@ Requiere Node 24 y Python 3. Ejecutar desde la raíz:
 
 ```sh
 npm ci
+python -m pip install -r .github/requirements-documentation.txt
 python -B -m unittest discover -s tests
 python -B -m unittest discover -s .github/scripts/tests
 npm run build
@@ -25,6 +26,13 @@ desbordamiento horizontal, búsqueda en español, límite de resultados, navegac
 con teclado y ausencia de peticiones externas. La prueba del build recorre enlaces
 y anclas, verifica las 32 URLs documentales e impide publicar documentos internos,
 snapshots y PDF. Revisar también las capturas visualmente.
+
+El recorte usa Pillow fijado en el manifiesto Python. La suite de imágenes y
+`test_documentation_crops.py` comprueban píxeles sintéticos, EXIF, discrepancias,
+trazabilidad y binarios recuperables con transportes simulados. El render de
+`jira-images-build.cjs` usa un PNG recortado por el código real bajo ambas bases
+URL. Los escenarios de la skill son un guion de evaluación manual, no una prueba
+de integración ejecutada. Véase [recortes y prueba real](../project-docs/recortes-capturas.md).
 
 `fixtures/public-docs-sha256.json` fija el contenido original de los 24 artículos y
 los ocho índices, normalizando únicamente CRLF/LF. Solo debe actualizarse ante una
