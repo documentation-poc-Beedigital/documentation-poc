@@ -150,6 +150,79 @@ class ImageContractTests(unittest.TestCase):
 
 
 class ImageWorkflowTests(unittest.TestCase):
+    def prepare_crop(self):
+        from test_documentation_crops import raster, crop_for
+        data = raster()
+        crop = crop_for(data)
+        self.set_selection([{**item(), "crop": crop}])
+        self.issues["APP-2"]["attachment"][0]["size"] = len(data)
+        self.downloader = mock.Mock(return_value=data)
+        return data, crop
+
+    def test_crop_catalogue_markdown_artifacts_validation_and_pr(self):
+        data, crop = self.prepare_crop()
+        self.run_proposal()
+        image = json.loads(self.report.read_text(encoding="utf-8"))["images"][0]
+        self.assertEqual(crop, image["crop"])
+        self.assertEqual(hashlib.sha256(data).hexdigest(), image["original"]["sha256"])
+        self.assertEqual((6, 3), (image["width"], image["height"]))
+        derived = (self.root / image["path"]).read_bytes()
+        self.assertNotEqual(data, derived)
+        self.assertEqual(derived, (self.artifacts / "files" / image["path"]).read_bytes())
+        self.assertIn(f"![{image['alt']}]({image['url']})", self.doc.read_text(encoding="utf-8"))
+        validation = VALIDATOR.validate_repository(self.root, self.report, self.base)
+        self.assertTrue(validation["valid"], validation)
+        output = Path(self.temp.name) / "validation.json"
+        output.write_text(json.dumps(validation), encoding="utf-8")
+        body = Path(self.temp.name) / "pr.md"
+        publication = PREPARER.prepare_publication(self.root, output, self.ticket, self.report, body,
+            self.base, "123", "1", "example/repo", "https://github.com")
+        self.assertIn(image["path"], json.loads(publication["files_json"]))
+        self.assertIn(image["original"]["sha256"], body.read_text(encoding="utf-8"))
+        self.assertIn("left=1, top=2, right=7, bottom=5", body.read_text(encoding="utf-8"))
+        # Restore using only the recoverable artifact, then revalidate.
+        (self.root / image["path"]).unlink()
+        (self.root / image["path"]).write_bytes((self.artifacts / "files" / image["path"]).read_bytes())
+        self.assertTrue(VALIDATOR.validate_repository(self.root, self.report, self.base)["valid"])
+
+    def test_crop_failure_aborts_before_claude_and_without_publication(self):
+        data, crop = self.prepare_crop()
+        for changes in ({"original_sha256": "0" * 64}, {"original_width": 9}, {"original_height": 7},
+                        {"left": True}, {"bottom": 99}):
+            self.set_selection([{**item(), "crop": {**crop, **changes}}])
+            with self.subTest(changes=changes), self.assertRaises(IMAGES.ImageError):
+                self.run_proposal()
+            self.assertEqual([], self.requests)
+            self.assertEqual(self.before, self.doc.read_text(encoding="utf-8"))
+            self.assertFalse(self.artifacts.exists())
+            self.assertFalse((self.root / "static").exists())
+
+    def test_crop_application_failure_rolls_back(self):
+        self.prepare_crop()
+        with mock.patch.object(GENERATOR.os, "link", side_effect=OSError("Simulated failure")), \
+             self.assertRaises(GENERATOR.ProposalError):
+            self.run_proposal()
+        self.assertEqual(self.before, self.doc.read_text(encoding="utf-8"))
+        self.assertFalse((self.root / "static").exists())
+
+    def test_crop_diagnosis_matches_production_without_claude_or_publication(self):
+        data, crop = self.prepare_crop()
+        with mock.patch.object(GENERATOR, "http_transport", side_effect=AssertionError("Claude forbidden")), \
+             mock.patch.object(GENERATOR, "apply_changes_atomically", side_effect=AssertionError("Apply forbidden")):
+            diagnostic = GENERATOR.diagnose_images(self.root, self.ticket, self.base, CONFIG,
+                jira_epic_key="APP-1", jira_task_keys="APP-2", jira_transport=self.jira,
+                image_downloader=self.downloader)
+        self.assertFalse(self.artifacts.exists())
+        self.assertEqual("", self.git("status", "--porcelain"))
+        self.run_proposal()
+        image = json.loads(self.report.read_text(encoding="utf-8"))["images"][0]
+        safe = diagnostic["images"][0]
+        for field in ("sha256", "size", "width", "height", "original", "crop"):
+            self.assertEqual(image[field], safe[field])
+        self.assertEqual("valid", safe["validation"])
+        for forbidden in (CONFIG["token"], CONFIG["base_url"], item()["description"], item()["reason"]):
+            self.assertNotIn(forbidden, json.dumps(diagnostic))
+
     def test_post_claude_failure_cannot_retain_a_valid_abstention(self):
         generate = GENERATOR.generate_and_apply
         def simulated(*args, **kwargs):
@@ -216,7 +289,8 @@ class ImageWorkflowTests(unittest.TestCase):
         self.assertEqual(8, len(self.jira_calls))
         self.assertEqual(4, len(self.downloads))
         for image in report["images"]:
-            self.assertEqual({"issue_key", "attachment_id", "size", "mime_type", "sha256"}, set(image))
+            self.assertEqual({"issue_key", "attachment_id", "size", "mime_type", "sha256", "width", "height",
+                              "original", "crop", "validation"}, set(image))
             self.assertEqual(hashlib.sha256(PNG).hexdigest(), image["sha256"])
         self.assertEqual(before, self.git("status", "--porcelain"))
         self.assertTrue(temp_paths)
@@ -355,7 +429,9 @@ class ImageWorkflowTests(unittest.TestCase):
             self.run_proposal()
         self.assertEqual(["DOC-104", "DOC-95", *[f"DOC-{n}" for n in range(96, 102)]], self.jira_calls)
         self.assertEqual(8, convert.call_count)
-        self.assertEqual(8, extract.call_count)
+        # Eight source descriptions, then strict validation of the combined
+        # selection before downloads (including callers supplying selected=).
+        self.assertEqual(9, extract.call_count)
         payload = json.loads(self.requests[0]["messages"][0]["content"])
         self.assertEqual({"issue_key", "issue_summary", "issue_description"}, set(payload["ticket"]))
         context = payload["ticket"]["issue_description"]

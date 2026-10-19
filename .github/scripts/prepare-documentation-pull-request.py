@@ -407,6 +407,15 @@ def build_pull_request_body(
     for image in images.validate_entries(report.get("images", [])):
         image_sections += (f"- `{image['path']}` — {image['operation']}; origen `{image['id']}`; "
                            f"SHA-256 `{image['sha256']}`; {escape_markdown_inline(image['reason'])}\n")
+        if "original" in image:
+            original = image["original"]
+            image_sections += (f"  Original: {original['width']}×{original['height']}, {original['size']} bytes, "
+                               f"SHA-256 `{original['sha256']}`. Publicado: {image['width']}×{image['height']}, "
+                               f"{image['size']} bytes.\n")
+        if "crop" in image:
+            crop = image["crop"]
+            image_sections += ("  Recorte aprobado (right/bottom exclusivos): "
+                               + ", ".join(f"{f}={crop[f]}" for f in ("left", "top", "right", "bottom")) + ".\n")
     return (
         "## Propuesta documental automatizada\n\n"
         f"**Clave Jira:** `{ticket['issue_key']}`\n\n"

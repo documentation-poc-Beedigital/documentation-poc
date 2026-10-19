@@ -1,0 +1,2 @@
+# Shared by generation, validation, PR preparation and image diagnostics.
+Pillow==13.0.0

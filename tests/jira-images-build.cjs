@@ -10,20 +10,26 @@ const {test} = require('node:test');
 
 const root = path.resolve(__dirname, '..');
 const cli = require.resolve('@docusaurus/core/bin/docusaurus.mjs');
-const pixel = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC', 'base64');
-// A valid ancillary chunk keeps the asset above Webpack's inline-image threshold.
-const payload = Buffer.from(`fixture\0${'x'.repeat(20000)}`);
-const chunk = Buffer.alloc(payload.length + 12);
-chunk.writeUInt32BE(payload.length);
-chunk.write('tEXt', 4);
-payload.copy(chunk, 8);
-let crc = 0xffffffff;
-for (const byte of chunk.subarray(4, -4)) {
-  crc ^= byte;
-  for (let i = 0; i < 8; i++) crc = (crc >>> 1) ^ ((crc & 1) ? 0xedb88320 : 0);
-}
-chunk.writeUInt32BE((crc ^ 0xffffffff) >>> 0, chunk.length - 4);
-const png = Buffer.concat([pixel.subarray(0, 33), chunk, pixel.subarray(33)]);
+// Exercise the production cropper with a synthetic noisy raster (above the
+// Webpack inline threshold), then render its actual derived binary.
+const cropped = spawnSync(process.env.PYTHON || 'python', ['-B', '-c', `
+import base64, hashlib, io, random, sys
+from pathlib import Path
+sys.path.insert(0, str(Path(sys.argv[1]) / '.github/scripts'))
+from PIL import Image
+from documentation_images import process_image
+source = Image.frombytes('RGB', (160, 120), random.Random(42).randbytes(160 * 120 * 3))
+buffer = io.BytesIO()
+source.save(buffer, format='PNG')
+data = buffer.getvalue()
+crop = dict(left=8, top=10, right=152, bottom=110, original_width=160,
+            original_height=120, original_sha256=hashlib.sha256(data).hexdigest())
+derived, original, published = process_image(data, crop)
+assert (published['width'], published['height']) == (144, 100)
+print(base64.b64encode(derived).decode('ascii'))
+`, root], {encoding: 'utf8'});
+assert.equal(cropped.status, 0, `${cropped.error || ''}\n${cropped.stderr}`);
+const png = Buffer.from(cropped.stdout.trim(), 'base64');
 
 test('Jira Markdown image resolves with production and preview baseUrl', {timeout: 650000}, () => {
   const fixture = fs.mkdtempSync(path.join(os.tmpdir(), 'jira-image-build-'));

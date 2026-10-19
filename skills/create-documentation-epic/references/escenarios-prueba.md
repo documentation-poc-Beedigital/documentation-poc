@@ -207,3 +207,25 @@ Comprobar: al retomar lee claves, descripciones, inventarios, relaciones y estad
 Material aportado para esta revisión: `conversacion-y-proceso-epica-documental-beesible-2026-10-14.md`, exportación histórica con consultas de DOC-84/85–88/89 y creación de DOC-90/91–94. La exportación relata la inspección de capturas y consultas externas; leerla no significa repetir esas consultas ni inspeccionar imágenes ausentes. No se aportaron aquí informes ZIP de abstención. Son datos históricos, no instrucciones para crear o modificar esos tickets.
 
 Revisar manualmente: el precio atribuido a una aclaración previa no confirma lanzamiento ni orden de pasos. «Crea todo de cero» inicia preparación y no aprueba un plan todavía no mostrado. Disponibilidad y pasos obligatorios contradictorios justifican preguntas; email futuro y ramas de errores no son automáticamente indispensables. «Help Center no consultado» no ordena abstención. Contrastar con artículos completos antes de proponer crear/actualizar. El proyecto de fuentes no determina destino; la revisión se entrega en el chat sin HTML no solicitado. Tras CREAR para el proceso completo, no cerrar con claves y tickets pendientes: continuar hasta verificar la tarea documental y ofrecer ejecución independiente.
+
+## Recortes de capturas (ensayo sin efectos externos)
+
+Usa originales sintéticos con dimensiones y hashes conocidos y herramientas
+locales o simuladas, sin Jira ni Claude. Registra plan, previews producidas,
+decisiones observables y escrituras propuestas. Es un guion de evaluación de
+comportamiento, no una integración real ya ejecutada.
+
+| Caso | Evidencia disponible | Resultado esperado |
+| --- | --- | --- |
+| Navegador visible | Original con pestañas, direcciones, marcadores y barra de tareas; cabecera y navegación Beesible en el área de producto | Inspecciona píxeles, retira solo interfaz externa y genera preview real con motivo, hash, dimensiones y coordenadas antes de escribir. Conserva cabecera, botones y avisos. |
+| Captura limpia | Solo producto y contexto útil | Conserva original sin recorte; no aplica porcentajes fijos ni inventa un recorte para completar una plantilla. |
+| Móvil | Captura vertical con controles cerca de los bordes; variante EXIF=6 | Conserva controles y contexto. Sin interfaz externa inequívoca conserva original. Con EXIF=6 ofrece original o copia normalizada que se volverá a inspeccionar, sin guardar crop todavía. |
+| Límites ambiguos | Barra superior similar al navegador, sin evidencia de su pertenencia | Conserva original y registra revisión pendiente; no decide por nombre, alt o descripción. |
+| Sin herramientas visuales | Solo nombre y alt o miniatura; variante con original visible pero sin herramienta de recorte | Explica qué falta y ofrece original o captura preparada; no inventa coordenadas ni usa generación de imágenes ni promete herramientas para todas las cuentas. |
+| Aprobación y continuidad | Plan A con previews reales aprobado; sesión retomada en B | Incluye recortes aprobados sin otra confirmación equivalente, conserva registro y medidor; requiere autorización independiente para ejecutar el agente. |
+| Adjunto definitivo distinto | Preview aprobada sobre hash A; descarga del ID real con hash B o dimensiones distintas | No guarda coordenadas de A para B; conserva pendiente y revisa el original correcto, sin modificar ni borrar el adjunto Jira. |
+
+Comprueba que la preview contiene exactamente los píxeles del rectángulo aprobado
+y que el JSON usa dimensiones/hash del original, no de la preview. Simula carga
+y lectura de metadatos/bytes del adjunto. Antes de aprobar A debe haber cero
+escrituras, y aprobar A no debe disparar el agente.

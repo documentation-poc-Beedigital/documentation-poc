@@ -1105,12 +1105,15 @@ def diagnose_images(
         for index, image in enumerate(catalogue):
             (Path(temporary) / str(index)).write_bytes(blobs[image["path"]])
     verify_head(repo_root, base_sha)
-    fields = ("issue_key", "attachment_id", "size", "mime_type", "sha256")
+    # Explicit allowlist: no descriptions, URLs, paths, credentials or binaries.
+    fields = ("issue_key", "attachment_id", "size", "mime_type", "sha256", "width", "height", "original")
     return {"status": "success", "commit_sha": base_sha,
             "issue_key": ticket["issue_key"], "epic_key": jira_epic_key,
             "task_keys": source[1],
             "images_count": len(catalogue), "total_bytes": sum(i["size"] for i in catalogue),
-            "images": [{field: image[field] for field in fields} for image in catalogue]}
+            "original_total_bytes": sum(i["original"]["size"] for i in catalogue),
+            "images": [{**{field: image[field] for field in fields},
+                        "crop": image.get("crop"), "validation": "valid"} for image in catalogue]}
 
 
 def technical_failure(error: Exception) -> dict[str, object]:

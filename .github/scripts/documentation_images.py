@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import io
 import json
 import re
 import struct
@@ -10,6 +11,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 import zlib
+import warnings
 from pathlib import Path
 
 MAX_IMAGES = 10
@@ -19,11 +21,81 @@ MAX_PIXELS = 20_000_000
 KEY = r"[A-Z][A-Z0-9]*(?:-[A-Z0-9]+)*-[1-9][0-9]*"
 SELECTION_FIELDS = {"issue_key", "attachment_id", "description", "alt", "placement", "reason"}
 IMAGE_FIELDS = SELECTION_FIELDS | {"id", "path", "url", "sha256", "size", "mime_type", "operation"}
+CROP_FIELDS = {"left", "top", "right", "bottom", "original_width", "original_height", "original_sha256"}
+ORIGINAL_FIELDS = {"width", "height", "size", "sha256", "mime_type"}
 ASSET_PATH = re.compile(r"static/img/jira/([a-z0-9-]+)-([1-9][0-9]*)-([0-9a-f]{64})\.(png|jpg)")
 
 
 class ImageError(ValueError):
     pass
+
+
+def validate_crop(value: object) -> dict:
+    if not isinstance(value, dict) or set(value) != CROP_FIELDS:
+        raise ImageError("Invalid crop fields")
+    if any(type(value[f]) is not int for f in CROP_FIELDS - {"original_sha256"}):
+        raise ImageError("Crop coordinates and dimensions must be integers")
+    w, h = value["original_width"], value["original_height"]
+    if (w <= 0 or h <= 0 or w * h > MAX_PIXELS
+            or not 0 <= value["left"] < value["right"] <= w
+            or not 0 <= value["top"] < value["bottom"] <= h
+            or not isinstance(value["original_sha256"], str)
+            or re.fullmatch(r"[0-9a-f]{64}", value["original_sha256"]) is None):
+        raise ImageError("Invalid crop bounds or original hash")
+    return value
+
+
+def process_image(data: bytes, crop: dict | None = None) -> tuple[bytes, dict, dict]:
+    """Decode bounded originals; crop raw raster coordinates, never EXIF-transpose.
+
+    Non-identity EXIF is refused for crops so viewers cannot disagree about axes.
+    Uncropped originals keep their exact bytes. Derived PNGs contain only pixels.
+    """
+    from PIL import Image
+    mime = image_type(data)
+    try:
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", Image.DecompressionBombWarning)
+            with Image.open(io.BytesIO(data), formats=["PNG", "JPEG"]) as source:
+                w, h = source.size
+                if w <= 0 or h <= 0 or w * h > MAX_PIXELS or getattr(source, "n_frames", 1) != 1:
+                    raise ImageError("Excessive or multi-frame image")
+                source.verify()
+            with Image.open(io.BytesIO(data), formats=["PNG", "JPEG"]) as source:
+                if source.size != (w, h):
+                    raise ImageError("Inconsistent decoded dimensions")
+                source.load()
+                original = {"width": w, "height": h, "size": len(data), "mime_type": mime,
+                            "sha256": hashlib.sha256(data).hexdigest()}
+                if crop is None:
+                    return data, original, dict(original)
+                validate_crop(crop)
+                if mime == "image/png" and data[24] == 16:
+                    raise ImageError("16-bit PNG cropping would lose pixel precision")
+                if (crop["original_width"], crop["original_height"], crop["original_sha256"]) != (w, h, original["sha256"]):
+                    raise ImageError("Crop original dimensions or hash mismatch")
+                if source.getexif().get(274, 1) != 1:
+                    raise ImageError("Crop requires EXIF orientation 1 or absent")
+                # Refuse modes that would require quantization/color conversion.
+                if source.mode not in ("RGB", "RGBA", "L", "LA", "P"):
+                    raise ImageError("Unsupported pixel mode for lossless crop")
+                if source.mode == "P":
+                    source = source.convert("RGBA" if "transparency" in source.info else "RGB")
+                elif "transparency" in source.info:
+                    source = source.convert("RGBA")
+                region = source.crop(tuple(crop[f] for f in ("left", "top", "right", "bottom")))
+                # Fresh image drops EXIF, ICC, comments, DPI and ancillary metadata.
+                clean = Image.frombytes(region.mode, region.size, region.tobytes())
+                output = io.BytesIO()
+                clean.save(output, format="PNG", optimize=False, compress_level=9)
+                derived = output.getvalue()
+                published = {"width": clean.width, "height": clean.height, "size": len(derived),
+                             "sha256": hashlib.sha256(derived).hexdigest(), "mime_type": image_type(derived)}
+                return derived, original, published
+    except ImageError:
+        raise
+    except (OSError, ValueError, SyntaxError, Image.DecompressionBombError, Image.DecompressionBombWarning) as error:
+        raise ImageError("Malformed or excessive image decoding") from error
 
 
 def text(value: object, label: str) -> str:
@@ -59,9 +131,11 @@ def selection(description: str) -> list[dict]:
         raise ImageError("Invalid image selection schema/version")
     result = []
     for item in value["images"]:
-        if not isinstance(item, dict) or set(item) != SELECTION_FIELDS:
+        if not isinstance(item, dict) or set(item) not in (SELECTION_FIELDS, SELECTION_FIELDS | {"crop"}):
             raise ImageError("Invalid selected image fields")
         parsed = {field: text(item[field], field) for field in SELECTION_FIELDS}
+        if "crop" in item:
+            parsed["crop"] = validate_crop(item["crop"])
         if not re.fullmatch(KEY, parsed["issue_key"]) or not re.fullmatch(r"[1-9][0-9]*", parsed["attachment_id"]):
             raise ImageError("Invalid image issue key or attachment ID")
         if any(c in parsed["alt"] for c in "[]\\"):
@@ -234,9 +308,11 @@ def catalogue(descriptions: list[str], issues: dict, configuration: tuple[str, s
               downloader=download, *, selected: list[dict] | None = None) -> tuple[list[dict], dict[str, bytes]]:
     if selected is None:
         selected = [item for description in descriptions for item in selection(description)]
+    else:
+        selected = selection("```documentation-images-v1\n" + json.dumps({"version": 1, "images": selected}) + "\n```")
     if len(selected) > MAX_IMAGES:
         raise ImageError("Image batch exceeds count limit")
-    seen, result, blobs, total = set(), [], {}, 0
+    seen, result, blobs, total, published_total = set(), [], {}, 0, 0
     base, email, token = configuration
     for item in selected:
         key, identity = item["issue_key"], item["attachment_id"]
@@ -263,11 +339,15 @@ def catalogue(descriptions: list[str], issues: dict, configuration: tuple[str, s
         data = downloader(f"{base}/rest/api/3/attachment/content/{identity}", base, email, token, timeout)
         if len(data) != size or image_type(data) != mime:
             raise ImageError("Downloaded image differs from Jira metadata")
-        sha = hashlib.sha256(data).hexdigest()
-        extension = "png" if mime == "image/png" else "jpg"
+        data, original, published = process_image(data, item.get("crop"))
+        published_total += published["size"]
+        if published_total > MAX_BATCH_BYTES:
+            raise ImageError("Derived image batch exceeds byte limit")
+        sha = published["sha256"]
+        extension = "png" if published["mime_type"] == "image/png" else "jpg"
         path = f"static/img/jira/{key.lower()}-{identity}-{sha}.{extension}"
         result.append({**item, "id": image_id, "path": path, "url": "/" + path[len("static/"):],
-                       "sha256": sha, "size": size, "mime_type": mime, "operation": "create"})
+                       **published, "original": original, "operation": "create"})
         blobs[path] = data
     return result, blobs
 
@@ -277,10 +357,14 @@ def validate_entries(images: object) -> list[dict]:
         raise ImageError("Invalid image catalogue")
     seen, identities = set(), set()
     for image in images:
-        if not isinstance(image, dict) or set(image) != IMAGE_FIELDS:
+        if not isinstance(image, dict) or set(image) not in (
+                IMAGE_FIELDS, IMAGE_FIELDS | {"width", "height", "original"},
+                IMAGE_FIELDS | {"width", "height", "original", "crop"}):
             raise ImageError("Invalid image catalogue fields")
         selection("```documentation-images-v1\n" + json.dumps({"version": 1, "images": [
-            {f: image[f] for f in SELECTION_FIELDS}]}) + "\n```")
+            {f: image[f] for f in SELECTION_FIELDS | ({"crop"} if "crop" in image else set())}]}) + "\n```")
+        if "original" in image:
+            validate_provenance(image)
         match = ASSET_PATH.fullmatch(image["path"]) if isinstance(image["path"], str) else None
         if (not match or image["id"] != f"{image['issue_key']}/{image['attachment_id']}"
                 or match.group(1) != image["issue_key"].lower() or match.group(2) != image["attachment_id"]
@@ -294,7 +378,31 @@ def validate_entries(images: object) -> list[dict]:
         identities.add(image["id"])
     if sum(image["size"] for image in images) > MAX_BATCH_BYTES:
         raise ImageError("Image batch exceeds byte limit")
+    if sum(image.get("original", image)["size"] for image in images) > MAX_BATCH_BYTES:
+        raise ImageError("Original image batch exceeds byte limit")
     return images
+
+
+def validate_provenance(image: dict) -> None:
+    original = image["original"]
+    if (not isinstance(original, dict) or set(original) != ORIGINAL_FIELDS
+            or any(type(original[f]) is not int or original[f] <= 0 for f in ("width", "height", "size"))
+            or original["width"] * original["height"] > MAX_PIXELS or original["size"] > MAX_IMAGE_BYTES
+            or original["mime_type"] not in ("image/png", "image/jpeg")
+            or not isinstance(original["sha256"], str) or re.fullmatch(r"[0-9a-f]{64}", original["sha256"]) is None
+            or any(type(image[f]) is not int or image[f] <= 0 for f in ("width", "height"))
+            or image["width"] * image["height"] > MAX_PIXELS):
+        raise ImageError("Invalid original/published image metadata")
+    if "crop" in image:
+        crop = validate_crop(image["crop"])
+        if (crop["original_width"], crop["original_height"], crop["original_sha256"]) != (
+                original["width"], original["height"], original["sha256"]):
+            raise ImageError("Crop provenance mismatch")
+        if (image["width"], image["height"], image["mime_type"]) != (
+                crop["right"] - crop["left"], crop["bottom"] - crop["top"], "image/png"):
+            raise ImageError("Derived crop metadata mismatch")
+    elif any(image[f] != original[f] for f in ORIGINAL_FIELDS):
+        raise ImageError("Uncropped image differs from original")
 
 
 def verify_file(root: Path, image: dict) -> None:
@@ -304,6 +412,11 @@ def verify_file(root: Path, image: dict) -> None:
     data = candidate.read_bytes()
     if hashlib.sha256(data).hexdigest() != image["sha256"] or image_type(data) != image["mime_type"]:
         raise ImageError("Image file type or hash does not match catalogue")
+    _, _, actual = process_image(data)
+    if "original" in image:
+        validate_provenance(image)
+        if any(actual[f] != image[f] for f in ORIGINAL_FIELDS):
+            raise ImageError("Published dimensions differ from catalogue")
 
 
 def references(body: str, images: list[dict], before: str = "") -> set[str]:
