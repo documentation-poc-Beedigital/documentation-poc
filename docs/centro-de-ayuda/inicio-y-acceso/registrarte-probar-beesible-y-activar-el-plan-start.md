@@ -1,7 +1,8 @@
 ---
 article_id: GITHUB-6274BA706E64091E96A83280061A2AAA
 title: "Registrarte, probar Beesible y activar el Plan Start"
-version: 1.1
+version: 1.2
+sidebar_position: 2
 ---
 # <HelpIcon name="signIn" /> Registrarte, probar Beesible y activar el Plan Start
 
@@ -35,7 +36,7 @@ Está pensada para nuevos usuarios de España.
 
 ### <HelpIcon name="steps" />  Paso 1. Crea tu cuenta
 
-1. Abre el registro desde un botón de la web de Beesible.
+1. Abre el registro desde un botón de la [web de Beesible](https://www.beesible.ai/).
 2. Elige cómo quieres registrarte:
     - **Registro con Google**
     - **Registro con Apple**
@@ -57,6 +58,8 @@ Si ya tienes cuenta y solo quieres entrar, consulta [Acceder a la plataforma](ac
 ### <HelpIcon name="google" />  Paso 2. Conecta tu Perfil de Empresa en Google y elige tu negocio
 
 Verás la pantalla **«Así vamos a trabajar por tu negocio»** con dos opciones.
+
+![Opciones para conectar tu Perfil de Empresa en Google](/img/jira/doc-95-10109-b776e78a0bf71d4dad908286b2bf4b0df863ebbb12e83fb5525bf7f70b66d3a1.png)
 
 **Si ya tienes un Perfil de Empresa en Google:**
 
@@ -85,6 +88,8 @@ En el panel puedes probar, sin pagar:
 - Un **primer post para Google**.
 - Un **análisis de tus reseñas**.
 - Un **análisis de tus estadísticas**.
+
+![Panel de prueba con el primer post y los análisis de Beelma](/img/jira/doc-95-10110-18d090dc2b8cb2b9aef0c3d214ac7dad51d0d3e2ba1187d727e0eb9c5dedf4a5.png)
 
 #### Tu primer post para Google
 
@@ -137,6 +142,8 @@ Ten en cuenta estas diferencias:
 - Que una acción aparezca en Google es un paso posterior a su publicación.
 
 Otras funciones, como la web, el logotipo, las zonas, WhatsApp, los atributos, las fotos y la sincronización, requieren una suscripción. Cuando intentes usar una de ellas, se abrirá la información del plan.
+
+![Acciones de Beelma que requieren suscripción](/img/jira/doc-95-10111-56be0db80c157aa9bbae10d6a10145244864516b9e4cc983c45f869950f385d8.png)
 
 ---
 
