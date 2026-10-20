@@ -1,7 +1,7 @@
 ---
 article_id: NOTION-29CB7527AC2580569616CB6FF64994C5
 title: "Inicio y acceso"
-version: 1.1
+version: 1.2
 status: published
 owner: Product
 last_reviewed: 2026-09-09
@@ -12,9 +12,9 @@ sidebar_position: 1
 
 ## <HelpIcon name="security" />  Inicio y acceso
 
-[Acceder a la plataforma](acceder-a-la-plataforma.md)
-
 [Registrarte, probar Beesible y activar el Plan Start](registrarte-probar-beesible-y-activar-el-plan-start.md)
+
+[Acceder a la plataforma](acceder-a-la-plataforma.md)
 
 [Configurar opciones de seguridad](configurar-opciones-de-seguridad.md)
 
