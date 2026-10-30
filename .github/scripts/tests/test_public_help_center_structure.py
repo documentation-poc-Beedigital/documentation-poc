@@ -44,6 +44,101 @@ def frontmatter(path: Path) -> dict[str, str]:
     return values
 
 
+def broken_internal_links(repository_root: Path) -> list[str]:
+    # Match complete legacy Notion IDs, not 32-character slices of SHA-256 hashes.
+    notion_id = re.compile(
+        r"(?<![0-9a-f])(?:[0-9a-f]{32}|"
+        r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})"
+        r"(?![0-9a-f])",
+        re.IGNORECASE,
+    )
+    docs_root = (repository_root / "docs").resolve()
+    static_root = (repository_root / "static").resolve()
+    broken: list[str] = []
+    for source in (docs_root / "centro-de-ayuda").rglob("*.md"):
+        text = source.read_text(encoding="utf-8")
+        for target in re.findall(r"!?\[[^]]*]\(([^)]+)\)", text):
+            if re.match(r"^(?:https?|mailto|tel):|^#", target, re.IGNORECASE):
+                continue
+            path = target.split("#", 1)[0]
+            if path.startswith("/img/"):
+                allowed_root = static_root
+                destination = static_root / path.lstrip("/")
+            else:
+                allowed_root = docs_root
+                destination = source.parent / path
+            # Resolve before checking containment to reject traversal and symlink escapes.
+            destination = destination.resolve()
+            if (
+                notion_id.search(target)
+                or not destination.is_relative_to(allowed_root)
+                or not destination.is_file()
+            ):
+                broken.append(f"{source.relative_to(repository_root.resolve())} -> {target}")
+    return broken
+
+
+class InternalLinkValidationTests(unittest.TestCase):
+    def setUp(self) -> None:
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        self.root = Path(temporary.name)
+        self.source = self.write("docs/centro-de-ayuda/category/article.md")
+
+    def write(self, relative: str, content: str = "") -> Path:
+        path = self.root / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content, encoding="utf-8")
+        return path
+
+    def check_link(self, target: str, *, valid: bool, image: bool = False) -> None:
+        self.source.write_text(f"{'!' if image else ''}[Link]({target})", encoding="utf-8")
+        expected = [] if valid else [f"{self.source.relative_to(self.root)} -> {target}"]
+        self.assertEqual(expected, broken_internal_links(self.root))
+
+    def test_existing_jira_image_with_sha256_is_valid(self) -> None:
+        filename = "doc-95-10109-" + "b776e78a0bf71d4dad908286b2bf4b0df863ebbb12e83fb5525bf7f70b66d3a1.png"
+        self.write(f"static/img/jira/{filename}")
+        self.check_link(f"/img/jira/{filename}", valid=True, image=True)
+
+    def test_missing_jira_image_with_sha256_is_rejected(self) -> None:
+        self.check_link(f"/img/jira/doc-95-10109-{'a' * 64}.png", valid=False, image=True)
+
+    def test_relative_document_links_with_fragments_are_valid(self) -> None:
+        self.write("docs/centro-de-ayuda/category/sibling.md")
+        self.write("docs/centro-de-ayuda/other/destination.md")
+        for target in ("sibling.md", "../other/destination.md#section"):
+            with self.subTest(target=target):
+                self.check_link(target, valid=True)
+
+    def test_missing_document_is_rejected(self) -> None:
+        self.check_link("missing.md", valid=False)
+
+    def test_legacy_notion_references_are_rejected_even_when_files_exist(self) -> None:
+        for identifier in ("a" * 32, "12345678-1234-1234-1234-123456789abc"):
+            for image in (False, True):
+                with self.subTest(identifier=identifier, image=image):
+                    filename = f"legacy-{identifier}.{'png' if image else 'md'}"
+                    if image:
+                        self.write(f"static/img/{filename}")
+                        target = f"/img/{filename}"
+                    else:
+                        self.write(f"docs/centro-de-ayuda/category/{filename}")
+                        target = filename
+                    self.check_link(target, valid=False, image=image)
+
+    def test_existing_files_outside_allowed_roots_are_rejected(self) -> None:
+        self.write("outside.png")
+        self.write("outside.md")
+        for target, image in (
+            ("/img/../../outside.png", True),
+            ("../../../outside.md", False),
+            ((self.root / "outside.md").as_posix(), False),
+        ):
+            with self.subTest(target=target):
+                self.check_link(target, valid=False, image=image)
+
+
 class PublicHelpCenterStructureTests(unittest.TestCase):
     def assert_public_docs_contract(self, docs_root: Path) -> None:
         repository_root = docs_root.parent
@@ -244,17 +339,7 @@ class PublicHelpCenterStructureTests(unittest.TestCase):
         self.assertNotIn("project-docs", config)
 
     def test_all_migrated_internal_links_resolve_without_uuids(self) -> None:
-        uuid = re.compile(r"[0-9a-f]{32}", re.IGNORECASE)
-        broken: list[str] = []
-        for source in HELP_CENTER_ROOT.rglob("*.md"):
-            text = source.read_text(encoding="utf-8")
-            for target in re.findall(r"!?\[[^]]*]\(([^)]+)\)", text):
-                if re.match(r"^(?:https?|mailto|tel):|^#", target, re.IGNORECASE):
-                    continue
-                path = target.split("#", 1)[0]
-                if uuid.search(target) or not (source.parent / path).is_file():
-                    broken.append(f"{source.relative_to(REPO_ROOT)} -> {target}")
-        self.assertEqual([], broken)
+        self.assertEqual([], broken_internal_links(REPO_ROOT))
 
     def test_manifest_represents_only_notion_pages(self) -> None:
         manifest = json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
