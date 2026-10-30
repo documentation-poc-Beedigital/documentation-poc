@@ -223,3 +223,55 @@ El índice se edita aparte conservando contenido ajeno. `sidebars.js` usa autoge
 ## Resultado esperado
 
 El tiempo entre una necesidad de documentación y una propuesta revisable se reduce, mientras se conserva una aprobación humana explícita antes de publicar cualquier cambio.
+
+
+## Diagn?stico seguro de fallos de generaci?n
+
+Un fallo t?cnico sustituye cualquier propuesta o abstenci?n anterior en `agent-report.md`.
+El generador registra la etapa alcanzada tanto desde la CLI como desde su funci?n de generaci?n.
+El respaldo del workflow conserva ese informe byte a byte y lo sube con `always()`.
+Si falta el informe, el respaldo emite `MissingAgentReport` / `report_unavailable`, sin deducir
+una etapa ni un estado de llamada que no conoce. No se publica una propuesta si falla la generaci?n.
+
+Los campos permitidos del diagn?stico est?n enumerados en `FAILURE_REPORT_FIELDS` y el
+serializador valida los valores; no copia diccionarios de excepciones ni interpreta sus mensajes.
+El informe de propuesta de ?xito mantiene su contrato documental existente.
+
+| Campo | Valores y tipos admitidos |
+|---|---|
+| `status` | Cadena fija `technical_error` |
+| `error_type` | `ProposalError`, `ClaudeResponseError`, `ImageError`, `OSError` o `UnclassifiedError`; el respaldo usa `MissingAgentReport` |
+| `error_code` | Cadena del cat?logo expl?cito `ERROR_CODES`, asignada en los puntos de rechazo; `unclassified_error` para errores sin clasificar |
+| `failure_stage` | `configuration`, `ticket_jira_read`, `image_preparation`, `documentation_prompt_read`, `request_construction`, `claude_http_transport`, `response_interpretation`, `change_validation_preparation` o `application` |
+| `claude_call_state` | `not_started`, `started_no_response` o `response_received` |
+| `service` | Opcional: `jira` o `claude` |
+| `http_status` | Opcional: entero entre 100 y 599, excluidos booleanos; solo con servicio v?lido |
+| `failure_kind` | Opcional: `truncated`, `invalid_json`, `incompatible_stop_reason` o `invalid_content` |
+| `claude_diagnostics` | Objeto opcional con la lista cerrada descrita a continuaci?n |
+
+`claude_diagnostics` admite `stop_reason` del cat?logo `CLAUDE_STOP_REASONS`,
+`max_tokens`, `input_tokens`, `output_tokens`, `cache_creation_input_tokens`,
+`cache_read_input_tokens`, `text_length`, `json_error_position`, `json_error_line`
+y `json_error_column`. Los n?meros son enteros hasta 2???1, sin booleanos, negativos,
+fracciones ni cadenas; `max_tokens`, l?nea y columna empiezan en 1, los dem?s en 0.
+Se conservan el motivo de parada y el uso disponible tambi?n cuando falla la validaci?n
+posterior o la aplicaci?n. Los errores de JSON solo aportan posici?n, l?nea y columna.
+
+`not_started` significa que no se ha invocado el transporte HTTP de Claude;
+`started_no_response` significa que se ha invocado sin observar ninguna respuesta;
+`response_received` significa que se ha observado una respuesta HTTP, incluidos errores HTTP
+y fallos al leer o interpretar el cuerpo. El estado no retrocede si un intento posterior falla.
+Ninguno de estos estados confirma generaci?n facturada. La decodificaci?n del sobre JSON,
+aunque se ejecuta dentro del transporte, se identifica como `response_interpretation`.
+
+El diagn?stico excluye texto de tickets, documentos, prompt y respuesta, mensajes arbitrarios
+de excepciones, cuerpo de errores HTTP, URLs, cabeceras y credenciales. Los errores HTTP
+usan metadatos estructurados; no se lee su cuerpo para producir mensajes ni c?digos.
+Las pruebas de `test_safe_generation_diagnostics.py` simulan las nueve etapas, HTTP de Jira
+y Claude, ausencia de respuesta, lectura fallida, sobres y propuestas inv?lidos, fallos tras
+respuesta v?lida y reversi?n al fallar el segundo archivo. Las regresiones de im?genes y del
+workflow comprueban adem?s la atomicidad conjunta y los controles de publicaci?n existentes.
+
+Estos campos permiten distinguir fallos futuros. El diagn?stico de contexto posterior a la
+ejecuci?n 41045495951 no demuestra en qu? etapa fall? aquella generaci?n ni si llam? a Claude;
+el informe antiguo carece de esa evidencia. No se han realizado llamadas reales para deducirlo.

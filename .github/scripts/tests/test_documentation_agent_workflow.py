@@ -166,6 +166,8 @@ class DocumentationAgentWorkflowTests(unittest.TestCase):
                     with self.subTest(outcome=outcome, kind=kind):
                         content = json.dumps({
                             "status": "technical_error", "error_type": "ClaudeResponseError",
+                            "failure_stage": "response_interpretation", "error_code": "claude_" + kind,
+                            "claude_call_state": "response_received", "service": "claude", "http_status": 400,
                             "failure_kind": kind, "claude_diagnostics": {
                                 "stop_reason": "max_tokens" if kind == "truncated" else "end_turn",
                                 "max_tokens": 16384, "output_tokens": 100, "text_length": 200,
@@ -184,7 +186,7 @@ class DocumentationAgentWorkflowTests(unittest.TestCase):
                     report.write_text(content, encoding="utf-8")
                 with mock.patch.dict(os.environ, {"RUNNER_TEMP": temporary, "GENERATION_OUTCOME": "failure"}):
                     exec(code, {})
-                self.assertEqual({"status": "technical_error", "error_type": "MissingAgentReport"},
+                self.assertEqual({"status": "technical_error", "error_type": "MissingAgentReport", "error_code": "report_unavailable"},
                                  json.loads(report.read_text(encoding="utf-8")))
         upload = self.workflow.split("- name: Upload proposal evidence", 1)
         self.assertEqual(2, len(upload))

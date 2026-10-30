@@ -256,14 +256,14 @@ class ImageWorkflowTests(unittest.TestCase):
 
     def test_diagnostic_cli_cannot_enter_generation_or_model_transport(self):
         diagnostic = Path(self.temp.name) / "safe.json"
-        with mock.patch.object(GENERATOR, "diagnose_images", side_effect=IMAGES.ImageError("Jira image download returned HTTP 406")), \
+        with mock.patch.object(GENERATOR, "diagnose_images", side_effect=IMAGES.ImageError("Jira image download returned HTTP 406", code="jira_image_http_error", service="jira", http_status=406)), \
              mock.patch.object(GENERATOR, "generate_and_apply", side_effect=AssertionError("Generation forbidden")), \
              mock.patch.object(GENERATOR, "http_transport", side_effect=AssertionError("Claude forbidden")), \
              mock.patch("sys.stderr", new_callable=io.StringIO):
             result = GENERATOR.main(["--ticket-file", str(self.ticket), "--diagnose-images",
                 "--base-sha", self.base, "--diagnostic-report", str(diagnostic)])
         self.assertEqual(1, result)
-        self.assertEqual({"status": "technical_error", "error_type": "ImageError", "http_status": 406},
+        self.assertEqual({"status": "technical_error", "error_type": "ImageError", "error_code": "jira_image_http_error", "service": "jira", "http_status": 406},
                          json.loads(diagnostic.read_text()))
         self.assertFalse(self.report.exists())
         with mock.patch("sys.stderr", new_callable=io.StringIO), self.assertRaises(SystemExit):

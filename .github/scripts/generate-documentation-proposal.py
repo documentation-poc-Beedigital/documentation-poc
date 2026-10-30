@@ -37,8 +37,6 @@ MAX_REPORT_BYTES = 262_144
 MAX_API_RESPONSE_BYTES = 2_000_000
 MAX_JIRA_RESPONSE_BYTES = 2_000_000
 JIRA_REQUEST_TIMEOUT = 30.0
-MAX_HTTP_ERROR_BODY_BYTES = 2_048
-MAX_HTTP_ERROR_MESSAGE_CHARACTERS = 240
 RETRY_DELAYS = (2.0, 5.0)
 TRANSIENT_HTTP_CODES = frozenset({429, 500, 502, 503, 504})
 ROOT_FIELDS = {"decision", "summary", "reason", "evidence", "documents"}
@@ -90,7 +88,14 @@ PROPOSAL_SCHEMA: dict[str, object] = {
 
 
 class ProposalError(ValueError):
-    """Raised when input or model output violates the proposal contract."""
+    """Controlled failure with metadata independent of its human-readable message."""
+
+    def __init__(self, message: str, *, code: str = "unclassified_error",
+                 service: str | None = None, http_status: int | None = None) -> None:
+        super().__init__(message)
+        self.code = code
+        self.service = service
+        self.http_status = http_status
 
 
 CLAUDE_STOP_REASONS = frozenset({
@@ -129,7 +134,11 @@ class ClaudeResponseError(ProposalError):
     def __init__(self, kind: str, diagnostics: Mapping[str, object]) -> None:
         if kind not in CLAUDE_FAILURE_KINDS:
             raise ValueError("Unknown Claude response failure kind")
-        super().__init__(f"Claude response rejected: {kind}")
+        super().__init__(f"Claude response rejected: {kind}", code={
+            "truncated": "claude_truncated", "invalid_json": "claude_invalid_json",
+            "incompatible_stop_reason": "claude_incompatible_stop_reason",
+            "invalid_content": "claude_invalid_content",
+        }[kind])
         self.kind = kind
         self.diagnostics = safe_claude_diagnostics(diagnostics)
 
@@ -142,18 +151,19 @@ def load_ticket(path: Path, *, allow_empty_description: bool = False) -> dict[st
     try:
         value = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
-        raise ProposalError(f"Could not read ticket JSON: {error}") from error
+        raise ProposalError(f"Could not read ticket JSON: {error}", code="ticket_read_failed") from error
     expected = {"issue_key", "issue_summary", "issue_description"}
     if not isinstance(value, dict) or set(value) != expected:
-        raise ProposalError("Ticket JSON must contain exactly the three expected fields")
+        raise ProposalError("Ticket JSON must contain exactly the three expected fields", code="ticket_invalid")
     if any(not isinstance(value[name], str) or (
         not value[name].strip() and not (allow_empty_description and name == "issue_description")
     ) for name in expected):
-        raise ProposalError("Ticket fields must be non-empty strings")
+        raise ProposalError("Ticket fields must be non-empty strings", code="ticket_invalid")
     if len(value["issue_description"]) > MAX_ISSUE_DESCRIPTION_CHARACTERS:
         raise ProposalError(
             "issue_description must contain at most "
-            f"{MAX_ISSUE_DESCRIPTION_CHARACTERS} characters"
+            f"{MAX_ISSUE_DESCRIPTION_CHARACTERS} characters",
+            code="ticket_invalid",
         )
     return {name: value[name] for name in sorted(expected)}
 
@@ -169,7 +179,7 @@ def parse_documentation_source_manifest(description: str) -> tuple[str, list[str
         normalized,
     )
     if match is None:
-        raise ProposalError("Invalid DOCUMENTATION_SOURCE_V1 manifest")
+        raise ProposalError("Invalid DOCUMENTATION_SOURCE_V1 manifest", code="jira_manifest_invalid")
     epic_key = match.group(1)
     task_keys: list[str] = []
     seen: set[str] = set()
@@ -179,7 +189,7 @@ def parse_documentation_source_manifest(description: str) -> tuple[str, list[str
             seen.add(key)
             task_keys.append(key)
     if not task_keys:
-        raise ProposalError("DOCUMENTATION_SOURCE_V1 must contain at least one TASK_KEY")
+        raise ProposalError("DOCUMENTATION_SOURCE_V1 must contain at least one TASK_KEY", code="jira_manifest_invalid")
     return epic_key, task_keys
 
 
@@ -188,17 +198,17 @@ def parse_jira_source_inputs(jira_epic_key: str = "", jira_task_keys: str = "") 
     if not jira_epic_key and not jira_task_keys:
         return None
     if not jira_epic_key or not jira_task_keys:
-        raise ProposalError("jira_epic_key and jira_task_keys must be provided together")
+        raise ProposalError("jira_epic_key and jira_task_keys must be provided together", code="jira_inputs_invalid")
     if JIRA_KEY.fullmatch(jira_epic_key) is None:
-        raise ProposalError("jira_epic_key must be a single valid uppercase Jira key")
+        raise ProposalError("jira_epic_key must be a single valid uppercase Jira key", code="jira_inputs_invalid")
     task_keys = [part.strip() for part in jira_task_keys.split(",")]
     for position, key in enumerate(task_keys, start=1):
         if not key:
-            raise ProposalError(f"jira_task_keys contains an empty element at position {position}")
+            raise ProposalError(f"jira_task_keys contains an empty element at position {position}", code="jira_inputs_invalid")
         if JIRA_KEY.fullmatch(key) is None:
-            raise ProposalError(f"jira_task_keys element at position {position} must be a single valid uppercase Jira key")
+            raise ProposalError(f"jira_task_keys element at position {position} must be a single valid uppercase Jira key", code="jira_inputs_invalid")
     if len(set(task_keys)) != len(task_keys):
-        raise ProposalError("jira_task_keys must not contain duplicate keys")
+        raise ProposalError("jira_task_keys must not contain duplicate keys", code="jira_inputs_invalid")
     return jira_epic_key, task_keys
 
 
@@ -206,14 +216,14 @@ def build_diagnostic_manifest(jira_epic_key: str, jira_task_keys: str) -> str:
     """Compatibility helper; structured inputs use the same validation in both modes."""
     source = parse_jira_source_inputs(jira_epic_key, jira_task_keys)
     if source is None:
-        raise ProposalError("diagnose_only requires jira_epic_key and jira_task_keys")
+        raise ProposalError("diagnose_only requires jira_epic_key and jira_task_keys", code="jira_inputs_invalid")
     jira_epic_key, task_keys = source
     manifest = (
         f"{DOCUMENTATION_SOURCE_MARKER}\nEPIC_KEY: {jira_epic_key}\nTASK_KEYS:\n"
         + "".join(f"- {key}\n" for key in task_keys)
     )
     if len(manifest) > MAX_ISSUE_DESCRIPTION_CHARACTERS:
-        raise ProposalError("Diagnostic manifest exceeds 60000 characters")
+        raise ProposalError("Diagnostic manifest exceeds 60000 characters", code="jira_inputs_invalid")
     parse_documentation_source_manifest(manifest)
     return manifest
 
@@ -232,10 +242,10 @@ def validate_jira_configuration(configuration: Mapping[str, str]) -> tuple[str, 
     email = configuration.get("email", "")
     token = configuration.get("token", "")
     if not all(isinstance(value, str) and value.strip() for value in (base_url, email, token)):
-        raise ProposalError("Jira source manifest requires JIRA_BASE_URL, JIRA_API_EMAIL and JIRA_API_TOKEN")
+        raise ProposalError("Jira source manifest requires JIRA_BASE_URL, JIRA_API_EMAIL and JIRA_API_TOKEN", code="jira_configuration_invalid")
     parsed = urllib.parse.urlsplit(base_url)
     if parsed.scheme != "https" or not parsed.netloc or parsed.username or parsed.password or parsed.query or parsed.fragment:
-        raise ProposalError("JIRA_BASE_URL must be an absolute HTTPS URL without credentials, query or fragment")
+        raise ProposalError("JIRA_BASE_URL must be an absolute HTTPS URL without credentials, query or fragment", code="jira_configuration_invalid")
     return base_url.rstrip("/"), email, token
 
 
@@ -250,21 +260,21 @@ def jira_http_transport(endpoint: str, email: str, token: str, timeout: float, *
         with (opener or urllib.request.urlopen)(request, timeout=timeout) as response:
             raw_response = response.read(MAX_JIRA_RESPONSE_BYTES + 1)
     except urllib.error.HTTPError as error:
-        raise ProposalError(f"Jira API returned HTTP {error.code}") from error
+        raise ProposalError(f"Jira API returned HTTP {error.code}", code="jira_http_error", service="jira", http_status=error.code) from error
     except (TimeoutError, socket.timeout) as error:
-        raise ProposalError("Jira API request timed out") from error
+        raise ProposalError("Jira API request timed out", code="jira_timeout") from error
     except urllib.error.URLError as error:
         if is_read_timeout(error):
-            raise ProposalError("Jira API request timed out") from error
-        raise ProposalError("Jira API connection failed") from error
+            raise ProposalError("Jira API request timed out", code="jira_timeout") from error
+        raise ProposalError("Jira API connection failed", code="jira_connection_failed") from error
     if len(raw_response) > MAX_JIRA_RESPONSE_BYTES:
-        raise ProposalError(f"Jira API response exceeds {MAX_JIRA_RESPONSE_BYTES} bytes")
+        raise ProposalError(f"Jira API response exceeds {MAX_JIRA_RESPONSE_BYTES} bytes", code="jira_response_invalid")
     try:
         value = json.loads(raw_response.decode("utf-8"))
     except (UnicodeDecodeError, json.JSONDecodeError) as error:
-        raise ProposalError("Jira API returned invalid JSON") from error
+        raise ProposalError("Jira API returned invalid JSON", code="jira_response_invalid") from error
     if not isinstance(value, dict):
-        raise ProposalError("Jira API response must be an object")
+        raise ProposalError("Jira API response must be an object", code="jira_response_invalid")
     return value
 
 
@@ -347,7 +357,7 @@ def adf_to_markdown(value: object) -> str:
     if value is None:
         return ""
     if not isinstance(value, dict) or value.get("type") != "doc":
-        raise ProposalError("Jira issue description must be ADF")
+        raise ProposalError("Jira issue description must be ADF", code="jira_description_invalid")
     return block(value).strip()
 
 
@@ -365,7 +375,7 @@ def convert_jira_description(value: object, key: str) -> tuple[str, dict[str, ob
             has_text = has_text or bool(text.strip())
     description = adf_to_markdown(value)
     if has_text and not description.strip():
-        raise ProposalError(f"Jira issue {key}: ADF text was lost during Markdown conversion")
+        raise ProposalError(f"Jira issue {key}: ADF text was lost during Markdown conversion", code="jira_description_conversion_failed")
     return description, {
         "key": key,
         "adf_text_characters": text_characters,
@@ -385,10 +395,10 @@ def validated_jira_issue(issue: Mapping[str, object], expected_key: str) -> tupl
     key = issue.get("key")
     fields = issue.get("fields")
     if key != expected_key or not isinstance(fields, dict):
-        raise ProposalError(f"Jira API returned an invalid issue for {expected_key}")
+        raise ProposalError(f"Jira API returned an invalid issue for {expected_key}", code="jira_issue_invalid")
     summary = fields.get("summary")
     if not isinstance(summary, str) or not summary.strip():
-        raise ProposalError(f"Jira issue {expected_key} has no usable summary")
+        raise ProposalError(f"Jira issue {expected_key} has no usable summary", code="jira_issue_invalid")
     return key, summary.strip(), fields
 
 
@@ -398,14 +408,19 @@ def resolve_jira_source_with_diagnostics(
     jira_epic_key: str = "", jira_task_keys: str = "",
     source_issues: dict | None = None,
     source_descriptions: list[str] | None = None,
+    progress: dict[str, object] | None = None,
 ) -> tuple[dict[str, str], dict[str, object] | None]:
     structured_source = parse_jira_source_inputs(jira_epic_key, jira_task_keys)
     manifest = structured_source if structured_source is not None else parse_documentation_source_manifest(ticket["issue_description"])
     if manifest is None:
         if require_manifest:
-            raise ProposalError("Jira context diagnosis requires DOCUMENTATION_SOURCE_V1")
+            raise ProposalError("Jira context diagnosis requires DOCUMENTATION_SOURCE_V1", code="jira_source_invalid")
         return ticket, None
+    if progress is not None:
+        progress["failure_stage"] = "configuration"
     base_url, email, token = validate_jira_configuration(configuration)
+    if progress is not None:
+        progress["failure_stage"] = "ticket_jira_read"
     epic_key, task_keys = manifest
     request_timeout = min(timeout, JIRA_REQUEST_TIMEOUT)
     request_description = None
@@ -422,7 +437,7 @@ def resolve_jira_source_with_diagnostics(
         source_issues[epic_key] = epic_fields
     issue_type = epic_fields.get("issuetype")
     if not isinstance(issue_type, dict) or not isinstance(issue_type.get("name"), str) or issue_type["name"].casefold() != "epic":
-        raise ProposalError(f"Jira source {epic_key} is not an epic")
+        raise ProposalError(f"Jira source {epic_key} is not an epic", code="jira_source_invalid")
     epic_description, epic_diagnostics = convert_jira_description(epic_fields.get("description"), resolved_epic_key)
     if source_descriptions is not None:
         source_descriptions.append(epic_description)
@@ -436,15 +451,15 @@ def resolve_jira_source_with_diagnostics(
         resolved_task_key, task_summary, task_fields = validated_jira_issue(task, task_key)
         parent = task_fields.get("parent")
         if not isinstance(parent, dict) or parent.get("key") != epic_key:
-            raise ProposalError(f"Jira task {task_key} is not a direct child of epic {epic_key}")
+            raise ProposalError(f"Jira task {task_key} is not a direct child of epic {epic_key}", code="jira_source_invalid")
         labels = task_fields.get("labels")
         if not isinstance(labels, list) or "documentation-required" not in labels:
-            raise ProposalError(f"Jira task {task_key} does not have documentation-required")
+            raise ProposalError(f"Jira task {task_key} does not have documentation-required", code="jira_source_invalid")
         status = task_fields.get("status")
         category = status.get("statusCategory") if isinstance(status, dict) else None
         category_key = category.get("key") if isinstance(category, dict) else None
         if not isinstance(category_key, str) or category_key.casefold() != "done":
-            raise ProposalError(f"Jira task {task_key} is not in the Done status category")
+            raise ProposalError(f"Jira task {task_key} is not in the Done status category", code="jira_source_invalid")
         task_description, task_diagnostic = convert_jira_description(task_fields.get("description"), resolved_task_key)
         if source_descriptions is not None:
             source_descriptions.append(task_description)
@@ -454,7 +469,7 @@ def resolve_jira_source_with_diagnostics(
             source_issues[task_key] = task_fields
     context = "\n\n".join(sections)
     if len(context) > MAX_ISSUE_DESCRIPTION_CHARACTERS:
-        raise ProposalError(f"Consolidated Jira source exceeds {MAX_ISSUE_DESCRIPTION_CHARACTERS} characters")
+        raise ProposalError(f"Consolidated Jira source exceeds {MAX_ISSUE_DESCRIPTION_CHARACTERS} characters", code="jira_source_invalid")
     resolved = dict(ticket)
     resolved["issue_description"] = context
     diagnostics: dict[str, object] = {
@@ -500,15 +515,15 @@ def diagnose_jira_context(
     try:
         message = request["messages"][0]
         if message["role"] != "user" or not isinstance(message["content"], str):
-            raise ProposalError("Prepared request must contain a JSON user message")
+            raise ProposalError("Prepared request must contain a JSON user message", code="request_context_invalid")
         user_message = message["content"]
         payload = json.loads(user_message)
         request_context = payload["ticket"]["issue_description"]
         included_documents = payload["documents"]
     except (KeyError, IndexError, TypeError, json.JSONDecodeError) as error:
-        raise ProposalError("Prepared request must contain a JSON ticket and documents") from error
+        raise ProposalError("Prepared request must contain a JSON ticket and documents", code="request_context_invalid") from error
     if not isinstance(request_context, str) or not isinstance(included_documents, list):
-        raise ProposalError("Prepared request has invalid context or documents")
+        raise ProposalError("Prepared request has invalid context or documents", code="request_context_invalid")
     verify_head(repo_root, base_sha)
     # Explicit allowlists at every level: never forward Jira fields or request data.
     report = {
@@ -532,14 +547,14 @@ def read_prompt(prompt_file: Path) -> str:
     try:
         return prompt_file.read_text(encoding="utf-8")
     except (OSError, UnicodeDecodeError) as error:
-        raise ProposalError("Could not read trusted UTF-8 prompt") from error
+        raise ProposalError("Could not read trusted UTF-8 prompt", code="prompt_read_failed") from error
 
 
 def read_documentation(repo_root: Path) -> list[dict[str, str]]:
     root = repo_root.resolve(strict=True)
     docs_root = root / "docs"
     if docs_root.is_symlink() or not docs_root.is_dir():
-        raise ProposalError("docs/ must be an existing, non-symlink directory")
+        raise ProposalError("docs/ must be an existing, non-symlink directory", code="documentation_read_failed")
     documents: list[dict[str, str]] = []
     total_bytes = 0
     for current, directory_names, file_names in os.walk(docs_root, topdown=True, followlinks=False):
@@ -550,20 +565,20 @@ def read_documentation(repo_root: Path) -> list[dict[str, str]]:
             try:
                 metadata = path.stat(follow_symlinks=False)
             except OSError as error:
-                raise ProposalError(f"Could not inspect {path}: {error}") from error
+                raise ProposalError(f"Could not inspect {path}: {error}", code="documentation_read_failed") from error
             if path.is_symlink() or not stat.S_ISREG(metadata.st_mode):
                 continue
             try:
                 relative = path.resolve(strict=True).relative_to(root).as_posix()
             except (OSError, ValueError) as error:
-                raise ProposalError(f"Documentation path escapes the repository: {path}") from error
+                raise ProposalError(f"Documentation path escapes the repository: {path}", code="documentation_read_failed") from error
             total_bytes += metadata.st_size
             if total_bytes > MAX_DOCUMENTATION_BYTES:
-                raise ProposalError(f"Documentation exceeds the safe request limit of {MAX_DOCUMENTATION_BYTES} bytes")
+                raise ProposalError(f"Documentation exceeds the safe request limit of {MAX_DOCUMENTATION_BYTES} bytes", code="documentation_read_failed")
             try:
                 content = path.read_text(encoding="utf-8")
             except (OSError, UnicodeDecodeError) as error:
-                raise ProposalError(f"Could not read UTF-8 documentation {relative}: {error}") from error
+                raise ProposalError(f"Could not read UTF-8 documentation {relative}: {error}", code="documentation_read_failed") from error
             documents.append({"path": relative, "content": content})
     return documents
 
@@ -591,32 +606,6 @@ def build_request(trusted_prompt: str, ticket: Mapping[str, str], documents: lis
     }
 
 
-def sanitize_http_error_body(error: urllib.error.HTTPError, api_key: str) -> str:
-    try:
-        raw_body = error.read(MAX_HTTP_ERROR_BODY_BYTES + 1)
-    except OSError:
-        raw_body = b""
-    text = raw_body[:MAX_HTTP_ERROR_BODY_BYTES].decode("utf-8", errors="replace")
-    try:
-        parsed = json.loads(text)
-    except json.JSONDecodeError:
-        parsed = None
-    if isinstance(parsed, dict):
-        nested = parsed.get("error")
-        if isinstance(nested, dict) and isinstance(nested.get("message"), str):
-            text = nested["message"]
-        elif isinstance(parsed.get("message"), str):
-            text = parsed["message"]
-    if api_key:
-        text = text.replace(api_key, "[REDACTED]")
-    text = " ".join(re.sub(r"[\x00-\x1f\x7f]+", " ", text).split())
-    if not text:
-        return "response body unavailable"
-    if len(text) > MAX_HTTP_ERROR_MESSAGE_CHARACTERS:
-        return text[: MAX_HTTP_ERROR_MESSAGE_CHARACTERS - 3] + "..."
-    return text
-
-
 def is_read_timeout(error: BaseException) -> bool:
     return isinstance(error, (TimeoutError, socket.timeout)) or (
         isinstance(error, urllib.error.URLError) and isinstance(error.reason, (TimeoutError, socket.timeout))
@@ -631,6 +620,7 @@ def http_transport(
     *,
     opener: Callable[..., object] | None = None,
     sleeper: Callable[[float], None] = time.sleep,
+    progress: dict[str, object] | None = None,
 ) -> dict[str, object]:
     request = urllib.request.Request(
         endpoint,
@@ -646,44 +636,53 @@ def http_transport(
     attempts = len(RETRY_DELAYS) + 1
     for attempt in range(attempts):
         try:
+            if progress is not None and progress["claude_call_state"] == "not_started":
+                progress["claude_call_state"] = "started_no_response"
             with open_request(request, timeout=timeout) as response:
+                if progress is not None:
+                    progress["claude_call_state"] = "response_received"
                 raw_response = response.read(MAX_API_RESPONSE_BYTES + 1)
                 if len(raw_response) > MAX_API_RESPONSE_BYTES:
                     raise ProposalError(
-                        f"Claude API response exceeds {MAX_API_RESPONSE_BYTES} bytes"
+                        f"Claude API response exceeds {MAX_API_RESPONSE_BYTES} bytes",
+                        code="claude_response_too_large",
                     )
             break
         except urllib.error.HTTPError as error:
-            detail = sanitize_http_error_body(error, api_key)
+            if progress is not None:
+                progress["claude_call_state"] = "response_received"
             if error.code in TRANSIENT_HTTP_CODES and attempt < attempts - 1:
                 sleeper(RETRY_DELAYS[attempt])
                 continue
-            raise ProposalError(f"Claude API returned HTTP {error.code}: {detail}") from error
+            raise ProposalError(f"Claude API returned HTTP {error.code}", code="claude_http_error", service="claude", http_status=error.code) from error
         except (TimeoutError, socket.timeout, urllib.error.URLError) as error:
             if is_read_timeout(error):
                 if attempt < attempts - 1:
                     sleeper(RETRY_DELAYS[attempt])
                     continue
-                raise ProposalError(f"Claude API request timed out after {attempts} attempts") from error
+                raise ProposalError(f"Claude API request timed out after {attempts} attempts", code="claude_timeout") from error
             if attempt < attempts - 1:
                 sleeper(RETRY_DELAYS[attempt])
                 continue
             raise ProposalError(
-                f"Claude API connection failed after {attempts} attempts"
+                f"Claude API connection failed after {attempts} attempts",
+                code="claude_connection_failed",
             ) from error
+    if progress is not None:
+        progress["failure_stage"] = "response_interpretation"
     try:
         parsed = json.loads(raw_response.decode("utf-8"))
     except (UnicodeDecodeError, json.JSONDecodeError) as error:
-        raise ProposalError("Claude API returned an invalid JSON envelope") from error
+        raise ProposalError("Claude API returned an invalid JSON envelope", code="claude_envelope_invalid") from error
     if not isinstance(parsed, dict):
-        raise ProposalError("Claude API response envelope must be an object")
+        raise ProposalError("Claude API response envelope must be an object", code="claude_envelope_invalid")
     return parsed
 
 
 def extract_output_text(response: Mapping[str, object]) -> str:
     content = response.get("content")
     if not isinstance(content, list) or not content:
-        raise ProposalError("Claude Messages response contains no content blocks")
+        raise ProposalError("Claude Messages response contains no content blocks", code="claude_content_invalid")
     text = "".join(
         block["text"]
         for block in content
@@ -692,11 +691,11 @@ def extract_output_text(response: Mapping[str, object]) -> str:
         and isinstance(block.get("text"), str)
     )
     if not text:
-        raise ProposalError("Claude Messages response contains no textual content")
+        raise ProposalError("Claude Messages response contains no textual content", code="claude_content_invalid")
     return text
 
 
-def parse_claude_response(response: Mapping[str, object], max_tokens: object) -> dict[str, object]:
+def claude_response_diagnostics(response: Mapping[str, object], max_tokens: object) -> dict[str, object]:
     # Never copy the envelope or arbitrary metadata into a diagnostic.
     metadata = {"max_tokens": max_tokens, "stop_reason": response.get("stop_reason")}
     usage = response.get("usage")
@@ -707,7 +706,15 @@ def parse_claude_response(response: Mapping[str, object], max_tokens: object) ->
     except ProposalError:
         text = ""
     metadata["text_length"] = len(text)
-    diagnostics = safe_claude_diagnostics(metadata)
+    return safe_claude_diagnostics(metadata)
+
+
+def parse_claude_response(response: Mapping[str, object], max_tokens: object) -> dict[str, object]:
+    diagnostics = claude_response_diagnostics(response, max_tokens)
+    try:
+        text = extract_output_text(response)
+    except ProposalError:
+        text = ""
     # Check completion before parsing, including when a cut response is valid JSON.
     reason = diagnostics.get("stop_reason")
     if reason == "max_tokens":
@@ -732,11 +739,11 @@ def parse_claude_response(response: Mapping[str, object], max_tokens: object) ->
 
 def validate_text_field(value: object, label: str) -> str:
     if not isinstance(value, str) or not value.strip():
-        raise ProposalError(f"Claude proposal field {label} must be a non-empty string")
+        raise ProposalError(f"Claude proposal field {label} must be a non-empty string", code="proposal_field_invalid")
     if value != value.strip() or "\n" in value or "\r" in value:
-        raise ProposalError(f"Claude proposal field {label} must be a trimmed single line")
+        raise ProposalError(f"Claude proposal field {label} must be a trimmed single line", code="proposal_field_invalid")
     if len(value) > MAX_TEXT_FIELD_CHARACTERS or any(ord(character) < 32 or ord(character) == 127 for character in value):
-        raise ProposalError(f"Claude proposal field {label} is unsafe or too long")
+        raise ProposalError(f"Claude proposal field {label} is unsafe or too long", code="proposal_field_invalid")
     return value
 
 
@@ -744,30 +751,30 @@ def parse_proposal(output_text: str) -> dict[str, object]:
     try:
         value = json.loads(output_text)
     except json.JSONDecodeError as error:
-        raise ProposalError("Claude output is not valid JSON") from error
+        raise ProposalError("Claude output is not valid JSON", code="proposal_schema_invalid") from error
     if not isinstance(value, dict) or set(value) != ROOT_FIELDS:
-        raise ProposalError("Claude proposal must contain exactly the required root fields")
+        raise ProposalError("Claude proposal must contain exactly the required root fields", code="proposal_schema_invalid")
     decision = value["decision"]
     if decision not in {"proposal", "abstention"}:
-        raise ProposalError("Claude proposal decision must be proposal or abstention")
+        raise ProposalError("Claude proposal decision must be proposal or abstention", code="proposal_schema_invalid")
     for field in ("summary", "reason", "evidence"):
         value[field] = validate_text_field(value[field], field)
     documents = value["documents"]
     if not isinstance(documents, list):
-        raise ProposalError("Claude proposal documents must be a list")
+        raise ProposalError("Claude proposal documents must be a list", code="proposal_schema_invalid")
     if len(documents) > MAX_PROPOSED_DOCUMENTS:
-        raise ProposalError(f"Claude proposal exceeds {MAX_PROPOSED_DOCUMENTS} documents")
+        raise ProposalError(f"Claude proposal exceeds {MAX_PROPOSED_DOCUMENTS} documents", code="proposal_schema_invalid")
     if decision == "proposal" and not documents:
-        raise ProposalError("A proposal must contain at least one document")
+        raise ProposalError("A proposal must contain at least one document", code="proposal_schema_invalid")
     if decision == "abstention" and documents:
-        raise ProposalError("An abstention must contain an empty documents list")
+        raise ProposalError("An abstention must contain an empty documents list", code="proposal_schema_invalid")
     parsed_documents: list[dict[str, str]] = []
     for index, item in enumerate(documents):
         if not isinstance(item, dict) or set(item) not in (DOCUMENT_FIELDS, DOCUMENT_FIELDS | {"sidebar_position"}):
-            raise ProposalError(f"Document {index} must contain exactly the required fields")
+            raise ProposalError(f"Document {index} must contain exactly the required fields", code="proposal_schema_invalid")
         operation = item["operation"]
         if operation not in {"create", "update"}:
-            raise ProposalError(f"documents[{index}].operation must be create or update")
+            raise ProposalError(f"documents[{index}].operation must be create or update", code="proposal_schema_invalid")
         path = validate_text_field(item["path"], f"documents[{index}].path")
         title = validate_text_field(item["title"], f"documents[{index}].title")
         reason = validate_text_field(item["reason"], f"documents[{index}].reason")
@@ -786,14 +793,14 @@ def parse_proposal(output_text: str) -> dict[str, object]:
 
 def validate_markdown_body(value: object, label: str) -> str:
     if not isinstance(value, str) or not value.strip():
-        raise ProposalError(f"{label} must be a non-empty string")
+        raise ProposalError(f"{label} must be a non-empty string", code="proposal_body_invalid")
     if len(value) > MAX_PROPOSED_BODY_CHARACTERS or "\x00" in value:
-        raise ProposalError(f"{label} is unsafe or too long")
+        raise ProposalError(f"{label} is unsafe or too long", code="proposal_body_invalid")
     first_nonempty_line = next((line.strip() for line in value.splitlines() if line.strip()), "")
     if first_nonempty_line == "---":
-        raise ProposalError(f"{label} must not include frontmatter")
+        raise ProposalError(f"{label} must not include frontmatter", code="proposal_body_invalid")
     if any(re.search(r"[ \t]+$", line) for line in value.splitlines()):
-        raise ProposalError(f"{label} contains trailing whitespace")
+        raise ProposalError(f"{label} contains trailing whitespace", code="proposal_body_invalid")
     open_fence: str | None = None
     for line in value.splitlines():
         match = re.match(r"^\s*(```|~~~)", line)
@@ -804,22 +811,22 @@ def validate_markdown_body(value: object, label: str) -> str:
             elif marker == open_fence:
                 open_fence = None
     if open_fence is not None:
-        raise ProposalError(f"{label} contains an unclosed Markdown fence")
+        raise ProposalError(f"{label} contains an unclosed Markdown fence", code="proposal_body_invalid")
     return value
 
 
 def safe_relative_path(raw_path: str) -> PurePosixPath:
     if not raw_path or "\\" in raw_path:
-        raise ProposalError(f"Unsafe proposal document path: {raw_path!r}")
+        raise ProposalError(f"Unsafe proposal document path: {raw_path!r}", code="proposal_path_invalid")
     relative = PurePosixPath(raw_path)
     if relative.is_absolute() or any(part in {"", ".", ".."} for part in relative.parts):
-        raise ProposalError(f"Unsafe proposal document path: {raw_path!r}")
+        raise ProposalError(f"Unsafe proposal document path: {raw_path!r}", code="proposal_path_invalid")
     if not relative.parts or relative.parts[0] != "docs":
-        raise ProposalError(f"Proposal document is outside docs/: {raw_path}")
+        raise ProposalError(f"Proposal document is outside docs/: {raw_path}", code="proposal_path_invalid")
     if "production-snapshots" in relative.parts:
-        raise ProposalError(f"production-snapshots is read-only: {raw_path}")
+        raise ProposalError(f"production-snapshots is read-only: {raw_path}", code="proposal_path_invalid")
     if relative.suffix.lower() not in {".md", ".mdx"}:
-        raise ProposalError(f"Proposal document is not Markdown: {raw_path}")
+        raise ProposalError(f"Proposal document is not Markdown: {raw_path}", code="proposal_path_invalid")
     return relative
 
 
@@ -828,7 +835,7 @@ def ensure_no_symlink(root: Path, relative: PurePosixPath, raw_path: str) -> Non
     for part in relative.parts:
         cursor = cursor / part
         if cursor.is_symlink():
-            raise ProposalError(f"Proposal document path contains a symlink: {raw_path}")
+            raise ProposalError(f"Proposal document path contains a symlink: {raw_path}", code="proposal_path_invalid")
 
 
 def resolve_update_document(repo_root: Path, raw_path: str) -> Path:
@@ -839,34 +846,34 @@ def resolve_update_document(repo_root: Path, raw_path: str) -> Path:
     try:
         candidate.resolve(strict=True).relative_to(root)
     except (OSError, ValueError) as error:
-        raise ProposalError(f"Proposal document is not an existing repository file: {raw_path}") from error
+        raise ProposalError(f"Proposal document is not an existing repository file: {raw_path}", code="proposal_path_invalid") from error
     if not candidate.is_file():
-        raise ProposalError(f"Proposal document is not a regular file: {raw_path}")
+        raise ProposalError(f"Proposal document is not a regular file: {raw_path}", code="proposal_path_invalid")
     return candidate
 
 
 def resolve_create_document(repo_root: Path, raw_path: str) -> Path:
     relative = safe_relative_path(raw_path)
     if relative.suffix != ".md":
-        raise ProposalError(f"Created document must use the .md extension: {raw_path}")
+        raise ProposalError(f"Created document must use the .md extension: {raw_path}", code="proposal_path_invalid")
     if len(relative.parts) != 4 or PurePosixPath(*relative.parts[:2]) != CREATE_ROOT:
-        raise ProposalError(f"Created document must belong to an existing Help Center category: {raw_path}")
+        raise ProposalError(f"Created document must belong to an existing Help Center category: {raw_path}", code="proposal_path_invalid")
     if relative.name == "index.md":
-        raise ProposalError(f"Creating category indexes is not allowed: {raw_path}")
+        raise ProposalError(f"Creating category indexes is not allowed: {raw_path}", code="proposal_path_invalid")
     if not KEBAB_CASE_NAME.fullmatch(relative.name):
-        raise ProposalError(f"Created document name must be kebab-case: {raw_path}")
+        raise ProposalError(f"Created document name must be kebab-case: {raw_path}", code="proposal_path_invalid")
     root = repo_root.resolve(strict=True)
     candidate = root.joinpath(*relative.parts)
     ensure_no_symlink(root, relative, raw_path)
     parent = candidate.parent
     if not parent.is_dir() or not (parent / "index.md").is_file():
-        raise ProposalError(f"Created document category must already exist: {raw_path}")
+        raise ProposalError(f"Created document category must already exist: {raw_path}", code="proposal_path_invalid")
     if candidate.exists():
-        raise ProposalError(f"Created document path already exists: {raw_path}")
+        raise ProposalError(f"Created document path already exists: {raw_path}", code="proposal_path_invalid")
     try:
         parent.resolve(strict=True).relative_to(root)
     except (OSError, ValueError) as error:
-        raise ProposalError(f"Created document path escapes the repository: {raw_path}") from error
+        raise ProposalError(f"Created document path escapes the repository: {raw_path}", code="proposal_path_invalid") from error
     return candidate
 
 
@@ -911,10 +918,10 @@ def existing_document_purposes(repo_root: Path) -> set[str]:
 def split_frontmatter(text: str, path: str = "document") -> tuple[str, str]:
     lines = text.splitlines(keepends=True)
     if not lines or lines[0].rstrip("\r\n").strip() != "---":
-        raise ProposalError(f"Document must have frontmatter: {path}")
+        raise ProposalError(f"Document must have frontmatter: {path}", code="proposal_frontmatter_invalid")
     closing = next((index for index in range(1, len(lines)) if lines[index].rstrip("\r\n").strip() == "---"), None)
     if closing is None:
-        raise ProposalError(f"Document has unclosed frontmatter: {path}")
+        raise ProposalError(f"Document has unclosed frontmatter: {path}", code="proposal_frontmatter_invalid")
     return "".join(lines[: closing + 1]), "".join(lines[closing + 1 :])
 
 
@@ -925,11 +932,11 @@ def increment_frontmatter_version(frontmatter: str, path: str = "document") -> t
         if re.match(r"^\s*version\s*:", lines[index].rstrip("\r\n"))
     ]
     if len(version_indices) != 1:
-        raise ProposalError(f"Document frontmatter must contain exactly one version line: {path}")
+        raise ProposalError(f"Document frontmatter must contain exactly one version line: {path}", code="proposal_frontmatter_invalid")
     index = version_indices[0]
     match = re.fullmatch(r"version: ([0-9]+)\.([0-9]+)(\r?\n)?", lines[index])
     if match is None:
-        raise ProposalError(f"Document frontmatter version must use MAJOR.MINOR: {path}")
+        raise ProposalError(f"Document frontmatter version must use MAJOR.MINOR: {path}", code="proposal_frontmatter_invalid")
     major, minor, ending = match.groups()
     previous = f"{major}.{minor}"
     proposed = f"{major}.{int(minor) + 1}"
@@ -956,12 +963,12 @@ def prepare_changes(repo_root: Path, proposal: Mapping[str, object]) -> list[dic
     try:
         contract.check_navigation(repo_root, documents)
     except ValueError as error:
-        raise ProposalError(str(error)) from error
+        raise ProposalError(str(error), code="proposal_preparation_failed") from error
     for item in documents:
         assert isinstance(item, dict)
         raw_path = str(item["path"])
         if raw_path in seen:
-            raise ProposalError(f"Duplicate proposal document path: {raw_path}")
+            raise ProposalError(f"Duplicate proposal document path: {raw_path}", code="proposal_preparation_failed")
         seen.add(raw_path)
         operation = str(item["operation"])
         title = str(item["title"])
@@ -972,14 +979,14 @@ def prepare_changes(repo_root: Path, proposal: Mapping[str, object]) -> list[dic
         )
         target_identity = os.path.normcase(str(document.resolve(strict=False)))
         if target_identity in seen_targets:
-            raise ProposalError(f"Duplicate proposal document target: {raw_path}")
+            raise ProposalError(f"Duplicate proposal document target: {raw_path}", code="proposal_preparation_failed")
         seen_targets.add(target_identity)
         proposed_body = item["proposed_body"]
         assert isinstance(proposed_body, str)
         if operation == "create":
             purpose = normalized_purpose(title)
             if purpose in purposes:
-                raise ProposalError(f"Created document duplicates an existing document purpose: {raw_path}")
+                raise ProposalError(f"Created document duplicates an existing document purpose: {raw_path}", code="proposal_preparation_failed")
             purposes.add(purpose)
             before = None
             previous_version = None
@@ -989,10 +996,10 @@ def prepare_changes(repo_root: Path, proposal: Mapping[str, object]) -> list[dic
             try:
                 before = document.read_text(encoding="utf-8")
             except (OSError, UnicodeDecodeError) as error:
-                raise ProposalError(f"Could not read proposal document {raw_path}: {error}") from error
+                raise ProposalError(f"Could not read proposal document {raw_path}: {error}", code="proposal_preparation_failed") from error
             frontmatter, current_body = split_frontmatter(before, raw_path)
             if proposed_body == current_body and "sidebar_position" not in item:
-                raise ProposalError(f"Proposed body is unchanged: {raw_path}")
+                raise ProposalError(f"Proposed body is unchanged: {raw_path}", code="proposal_preparation_failed")
             updated_frontmatter, previous_version, proposed_version = increment_frontmatter_version(frontmatter, raw_path)
             after = updated_frontmatter + proposed_body
         try:
@@ -1002,9 +1009,9 @@ def prepare_changes(repo_root: Path, proposal: Mapping[str, object]) -> list[dic
             final_frontmatter, _ = split_frontmatter(after, raw_path)
             after = contract.position(final_frontmatter, item) + proposed_body
         except ValueError as error:
-            raise ProposalError(str(error)) from error
+            raise ProposalError(str(error), code="proposal_preparation_failed") from error
         if after == before:
-            raise ProposalError(f"Proposed document is unchanged: {raw_path}")
+            raise ProposalError(f"Proposed document is unchanged: {raw_path}", code="proposal_preparation_failed")
         diff = "".join(difflib.unified_diff(
             before.splitlines(keepends=True) if before is not None else [],
             after.splitlines(keepends=True),
@@ -1042,7 +1049,7 @@ def render_agent_report(proposal: Mapping[str, object], changes: Sequence[Mappin
         report["images"] = image_catalogue
     payload = json.dumps(report, ensure_ascii=False, indent=2) + "\n"
     if len(payload.encode("utf-8")) > MAX_REPORT_BYTES:
-        raise ProposalError(f"Agent report exceeds {MAX_REPORT_BYTES} bytes")
+        raise ProposalError(f"Agent report exceeds {MAX_REPORT_BYTES} bytes", code="report_too_large")
     return payload
 
 
@@ -1064,14 +1071,14 @@ def apply_changes_atomically(changes: Sequence[Mapping[str, object]]) -> None:
                 directory.mkdir()
                 created_directories.append(directory)
             if before is None and target.exists():
-                raise ProposalError(f"Created document appeared before apply: {change['path']}")
+                raise ProposalError(f"Created document appeared before apply: {change['path']}", code="application_failed")
             if isinstance(before, str):
                 try:
                     current = target.read_text(encoding="utf-8")
                 except (OSError, UnicodeDecodeError) as error:
-                    raise ProposalError(f"Could not revalidate {change['path']} before apply") from error
+                    raise ProposalError(f"Could not revalidate {change['path']} before apply", code="application_failed") from error
                 if current != before:
-                    raise ProposalError(f"Document changed after proposal generation: {change['path']}")
+                    raise ProposalError(f"Document changed after proposal generation: {change['path']}", code="application_failed")
             descriptor, temporary_name = tempfile.mkstemp(prefix=".documentation-proposal-", suffix=".tmp", dir=target.parent)
             temporary = Path(temporary_name)
             staged.append((temporary, target))
@@ -1085,7 +1092,7 @@ def apply_changes_atomically(changes: Sequence[Mapping[str, object]]) -> None:
         for temporary, target in staged:
             for ancestor in (target, *target.parents):
                 if ancestor.is_symlink() or (hasattr(ancestor, "is_junction") and ancestor.is_junction()):
-                    raise ProposalError("Proposal path changed to a symlink before apply")
+                    raise ProposalError("Proposal path changed to a symlink before apply", code="application_failed")
             original = target.read_bytes() if target.exists() else None
             change = next(item for item in changes if item["file"] == target)
             if isinstance(change["after"], bytes):
@@ -1105,7 +1112,7 @@ def apply_changes_atomically(changes: Sequence[Mapping[str, object]]) -> None:
             except OSError as rollback_error:
                 rollback_errors.append(str(rollback_error))
         detail = f"; rollback errors: {'; '.join(rollback_errors)}" if rollback_errors else ""
-        raise ProposalError(f"Could not apply proposal atomically: {error}{detail}") from error
+        raise ProposalError(f"Could not apply proposal atomically: {error}{detail}", code="application_failed") from error
     finally:
         for temporary, _ in staged:
             try:
@@ -1128,38 +1135,41 @@ def verify_head(repo_root: Path, base_sha: str | None) -> None:
     if base_sha is None:
         return
     if not re.fullmatch(r"(?:[0-9a-f]{40}|[0-9a-f]{64})", base_sha):
-        raise ProposalError("base_sha must be a full lowercase commit SHA")
+        raise ProposalError("base_sha must be a full lowercase commit SHA", code="base_revision_invalid")
     process = subprocess.run(
         ["git", "rev-parse", "--verify", "HEAD^{commit}"], cwd=repo_root,
         stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False,
     )
     if process.returncode != 0 or process.stdout.decode("ascii", errors="ignore").strip() != base_sha:
-        raise ProposalError("HEAD changed after the trusted base was captured")
+        raise ProposalError("HEAD changed after the trusted base was captured", code="base_revision_invalid")
 
 
 def resolve_image_catalogue(
     ticket: dict[str, str], configuration: Mapping[str, str], jira_transport: JiraTransport,
     timeout: float, jira_epic_key: str, jira_task_keys: str, image_downloader: Callable,
+    progress: dict[str, object] | None = None,
 ) -> tuple[dict[str, str], list[dict], dict[str, bytes]]:
     """Shared canonical source resolution and image validation for both modes."""
     source_issues, descriptions = {}, []
     ticket, _ = resolve_jira_source_with_diagnostics(
         ticket, configuration, jira_transport, timeout,
         jira_epic_key=jira_epic_key, jira_task_keys=jira_task_keys,
-        source_issues=source_issues, source_descriptions=descriptions,
+        source_issues=source_issues, source_descriptions=descriptions, progress=progress,
     )
+    if progress is not None:
+        progress["failure_stage"] = "image_preparation"
     if not source_issues:
         descriptions.append(ticket["issue_description"])
     selected = [item for description in descriptions for item in images.selection(description)]
     catalogue, blobs = [], {}
     if selected:
         if not source_issues:
-            raise ProposalError("Image selection requires an authorized Jira source batch")
+            raise ProposalError("Image selection requires an authorized Jira source batch", code="image_catalogue_invalid")
         catalogue, blobs = images.catalogue(
             descriptions, source_issues, validate_jira_configuration(configuration),
             min(timeout, JIRA_REQUEST_TIMEOUT), image_downloader, selected=selected)
         if len(catalogue) != len(selected):
-            raise ProposalError("Image selection was lost while building the catalogue")
+            raise ProposalError("Image selection was lost while building the catalogue", code="image_catalogue_invalid")
     return ticket, catalogue, blobs
 
 
@@ -1170,7 +1180,7 @@ def diagnose_images(
 ) -> dict[str, object]:
     source = parse_jira_source_inputs(jira_epic_key, jira_task_keys)
     if source is None:
-        raise ProposalError("Image diagnosis requires structured Jira source inputs")
+        raise ProposalError("Image diagnosis requires structured Jira source inputs", code="jira_inputs_invalid")
     verify_head(repo_root, base_sha)
     ticket = load_ticket(ticket_file, allow_empty_description=True)
     # Only the shared resolver/catalogue is reachable: no model request or apply.
@@ -1191,15 +1201,88 @@ def diagnose_images(
                         "crop": image.get("crop"), "validation": "valid"} for image in catalogue]}
 
 
-def technical_failure(error: Exception) -> dict[str, object]:
-    # Never serialize exception text, response bodies, URLs or credentials.
-    report = {"status": "technical_error", "error_type": type(error).__name__}
-    if isinstance(error, ClaudeResponseError) and error.kind in CLAUDE_FAILURE_KINDS:
+# Failure report schema: only these fields and their validated values are emitted.
+FAILURE_REPORT_FIELDS = frozenset({
+    "status", "error_type", "error_code", "failure_stage", "claude_call_state",
+    "service", "http_status", "failure_kind", "claude_diagnostics",
+})
+FAILURE_STAGES = frozenset({
+    "configuration", "ticket_jira_read", "image_preparation", "documentation_prompt_read",
+    "request_construction", "claude_http_transport", "response_interpretation",
+    "change_validation_preparation", "application",
+})
+CLAUDE_CALL_STATES = frozenset({"not_started", "started_no_response", "response_received"})
+ERROR_CODES = frozenset({
+    "request_context_invalid",
+    "proposal_path_invalid",
+    "proposal_body_invalid",
+    "anthropic_key_missing",
+    "application_failed",
+    "base_revision_invalid",
+    "claude_connection_failed",
+    "claude_content_invalid",
+    "claude_envelope_invalid",
+    "claude_http_error",
+    "claude_incompatible_stop_reason",
+    "claude_invalid_content",
+    "claude_invalid_json",
+    "claude_response_too_large",
+    "claude_timeout",
+    "claude_truncated",
+    "documentation_changed",
+    "documentation_read_failed",
+    "image_catalogue_invalid",
+    "jira_configuration_invalid",
+    "jira_connection_failed",
+    "jira_description_conversion_failed",
+    "jira_description_invalid",
+    "jira_http_error",
+    "jira_inputs_invalid",
+    "jira_issue_invalid",
+    "jira_manifest_invalid",
+    "jira_response_invalid",
+    "jira_source_invalid",
+    "jira_timeout",
+    "prompt_read_failed",
+    "proposal_field_invalid",
+    "proposal_frontmatter_invalid",
+    "proposal_preparation_failed",
+    "proposal_schema_invalid",
+    "report_too_large",
+    "report_unavailable",
+    "ticket_invalid",
+    "ticket_read_failed",
+    "unclassified_error",
+}) | images.ERROR_CODES
+ERROR_TYPES = frozenset({"ProposalError", "ClaudeResponseError", "ImageError", "OSError"})
+
+
+def technical_failure(error: Exception, progress: Mapping[str, object] | None = None) -> dict[str, object]:
+    # Never inspect str(error), __cause__, bodies, headers, URLs or arbitrary attributes.
+    context = progress or {}
+    report: dict[str, object] = {"status": "technical_error", "error_type": "UnclassifiedError",
+                                "error_code": "unclassified_error"}
+    error_type = type(error).__name__
+    if error_type in ERROR_TYPES:
+        report["error_type"] = error_type
+    for field, allowed in (("failure_stage", FAILURE_STAGES), ("claude_call_state", CLAUDE_CALL_STATES)):
+        value = context.get(field)
+        if type(value) is str and value in allowed:
+            report[field] = value
+    if isinstance(error, (ProposalError, images.ImageError)):
+        code = error.code
+        if type(code) is str and code in ERROR_CODES:
+            report["error_code"] = code
+        if type(error.service) is str and error.service in {"jira", "claude"}:
+            report["service"] = error.service
+            if type(error.http_status) is int and 100 <= error.http_status <= 599:
+                report["http_status"] = error.http_status
+    diagnostics = context.get("claude_diagnostics")
+    if isinstance(error, ClaudeResponseError) and type(error.kind) is str and error.kind in CLAUDE_FAILURE_KINDS:
         report["failure_kind"] = error.kind
-        report["claude_diagnostics"] = safe_claude_diagnostics(error.diagnostics)
-    match = re.fullmatch(r"Jira image download returned HTTP ([0-9]{3})", str(error))
-    if isinstance(error, images.ImageError) and match:
-        report["http_status"] = int(match[1])
+        diagnostics = error.diagnostics
+    if isinstance(diagnostics, Mapping):
+        report["claude_diagnostics"] = safe_claude_diagnostics(diagnostics)
     return report
 
 
@@ -1210,59 +1293,81 @@ def generate_and_apply(
     jira_transport: JiraTransport = jira_http_transport,
     jira_epic_key: str = "", jira_task_keys: str = "",
     image_downloader: Callable = images.download, image_artifacts: Path | None = None,
+    failure_context: dict[str, object] | None = None,
 ) -> dict[str, object]:
-    parse_jira_source_inputs(jira_epic_key, jira_task_keys)
-    if not api_key:
-        raise ProposalError("ANTHROPIC_API_KEY is not configured")
-    verify_head(repo_root, base_sha)
-    ticket = load_ticket(ticket_file)
-    configuration = jira_configuration_from_environment() if jira_configuration is None else jira_configuration
-    ticket, image_catalogue, blobs = resolve_image_catalogue(
-        ticket, configuration, jira_transport, timeout, jira_epic_key, jira_task_keys, image_downloader)
-    documents = read_documentation(repo_root)
-    trusted_prompt = read_prompt(prompt_file)
-    request = (build_request(trusted_prompt, ticket, documents, image_catalogue) if image_catalogue
-               else build_request(trusted_prompt, ticket, documents))
-    response = transport(API_URL, api_key, request, timeout)
-    proposal = parse_claude_response(response, request["max_tokens"])
-    if read_documentation(repo_root) != documents:
-        raise ProposalError("Documentation changed after the Claude request was built")
-    changes = prepare_changes(repo_root, proposal)
-    used = set()
-    for change in changes:
-        used.update(images.references(str(change["proposed_body"]), image_catalogue, str(change["before"] or "")))
-    published_images = [image for image in image_catalogue if image["path"] in used]
-    image_changes = []
-    for image in published_images:
-        target = images.asset_path(repo_root, image["path"])
-        if target.exists():
-            images.verify_file(repo_root, image)
-            if subprocess.run(["git", "ls-files", "--error-unmatch", "--", image["path"]], cwd=repo_root,
-                              stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode:
-                raise ProposalError("Cannot reuse a preexisting untracked image")
-            image["operation"] = "reuse"
+    progress = {} if failure_context is None else failure_context
+    progress.clear()
+    progress.update({"failure_stage": "configuration", "claude_call_state": "not_started"})
+    try:
+        parse_jira_source_inputs(jira_epic_key, jira_task_keys)
+        if not api_key:
+            raise ProposalError("ANTHROPIC_API_KEY is not configured", code="anthropic_key_missing")
+        verify_head(repo_root, base_sha)
+        progress["failure_stage"] = "ticket_jira_read"
+        ticket = load_ticket(ticket_file)
+        configuration = jira_configuration_from_environment() if jira_configuration is None else jira_configuration
+        ticket, image_catalogue, blobs = resolve_image_catalogue(
+            ticket, configuration, jira_transport, timeout, jira_epic_key, jira_task_keys, image_downloader, progress)
+        progress["failure_stage"] = "documentation_prompt_read"
+        documents = read_documentation(repo_root)
+        trusted_prompt = read_prompt(prompt_file)
+        progress["failure_stage"] = "request_construction"
+        request = (build_request(trusted_prompt, ticket, documents, image_catalogue) if image_catalogue
+                   else build_request(trusted_prompt, ticket, documents))
+        progress["failure_stage"] = "claude_http_transport"
+        if transport is http_transport:
+            response = http_transport(API_URL, api_key, request, timeout, progress=progress)
         else:
-            image_changes.append({"file": target, "path": image["path"], "before": None, "after": blobs[image["path"]]})
-    report = render_agent_report(proposal, changes, published_images)
-    verify_head(repo_root, base_sha)
-    if image_artifacts is not None:
-        if image_artifacts.resolve().is_relative_to(repo_root.resolve()):
-            raise ProposalError("Image artifacts must be outside the repository")
-        image_artifacts.mkdir(parents=True, exist_ok=True)
-        (image_artifacts / "catalogue.json").write_text(json.dumps({"version": 1, "available": image_catalogue,
-            "published": published_images}, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-        for change in changes + image_changes:
-            destination = image_artifacts / "files" / str(change["path"])
-            destination.parent.mkdir(parents=True, exist_ok=True)
-            after = change["after"]
-            destination.write_bytes(after if isinstance(after, bytes) else str(after).encode("utf-8"))
+            # Injected transport contract: invocation starts I/O; return means a response.
+            progress["claude_call_state"] = "started_no_response"
+            response = transport(API_URL, api_key, request, timeout)
+        progress["claude_call_state"] = "response_received"
+        progress["failure_stage"] = "response_interpretation"
+        progress["claude_diagnostics"] = claude_response_diagnostics(response, request["max_tokens"])
+        proposal = parse_claude_response(response, request["max_tokens"])
+        progress["failure_stage"] = "change_validation_preparation"
+        if read_documentation(repo_root) != documents:
+            raise ProposalError("Documentation changed after the Claude request was built", code="documentation_changed")
+        changes = prepare_changes(repo_root, proposal)
+        used = set()
+        for change in changes:
+            used.update(images.references(str(change["proposed_body"]), image_catalogue, str(change["before"] or "")))
+        published_images = [image for image in image_catalogue if image["path"] in used]
+        image_changes = []
         for image in published_images:
-            destination = image_artifacts / "files" / image["path"]
-            destination.parent.mkdir(parents=True, exist_ok=True)
-            destination.write_bytes(blobs[image["path"]])
-    write_agent_report(report_file, report)
-    apply_changes_atomically(changes + image_changes)
-    return proposal
+            target = images.asset_path(repo_root, image["path"])
+            if target.exists():
+                images.verify_file(repo_root, image)
+                if subprocess.run(["git", "ls-files", "--error-unmatch", "--", image["path"]], cwd=repo_root,
+                                  stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode:
+                    raise ProposalError("Cannot reuse a preexisting untracked image", code="proposal_preparation_failed")
+                image["operation"] = "reuse"
+            else:
+                image_changes.append({"file": target, "path": image["path"], "before": None, "after": blobs[image["path"]]})
+        report = render_agent_report(proposal, changes, published_images)
+        verify_head(repo_root, base_sha)
+        if image_artifacts is not None:
+            if image_artifacts.resolve().is_relative_to(repo_root.resolve()):
+                raise ProposalError("Image artifacts must be outside the repository", code="proposal_preparation_failed")
+            image_artifacts.mkdir(parents=True, exist_ok=True)
+            (image_artifacts / "catalogue.json").write_text(json.dumps({"version": 1, "available": image_catalogue,
+                "published": published_images}, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+            for change in changes + image_changes:
+                destination = image_artifacts / "files" / str(change["path"])
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                after = change["after"]
+                destination.write_bytes(after if isinstance(after, bytes) else str(after).encode("utf-8"))
+            for image in published_images:
+                destination = image_artifacts / "files" / image["path"]
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                destination.write_bytes(blobs[image["path"]])
+        write_agent_report(report_file, report)
+        progress["failure_stage"] = "application"
+        apply_changes_atomically(changes + image_changes)
+        return proposal
+    except Exception as error:
+        write_agent_report(report_file, json.dumps(technical_failure(error, progress), indent=2) + "\n")
+        raise
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -1296,6 +1401,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         parser.error("--prompt-file and --agent-report are required for generation")
     if args.diagnose_jira_context and (args.prompt_file is None or args.base_sha is None):
         parser.error("--prompt-file and --base-sha are required for --diagnose-jira-context")
+    failure_context: dict[str, object] = {}
     try:
         if args.diagnose_images:
             diagnostics = diagnose_images(
@@ -1320,10 +1426,10 @@ def main(argv: Sequence[str] | None = None) -> int:
             report_file=args.agent_report, api_key=os.environ.get("ANTHROPIC_API_KEY", ""), timeout=args.timeout,
             base_sha=args.base_sha, jira_configuration=jira_configuration_from_environment(),
             jira_epic_key=args.jira_epic_key, jira_task_keys=args.jira_task_keys,
-            image_artifacts=args.image_artifacts,
+            image_artifacts=args.image_artifacts, failure_context=failure_context,
         )
-    except (ProposalError, images.ImageError, OSError) as error:
-        failure = json.dumps(technical_failure(error), indent=2) + "\n"
+    except Exception as error:
+        failure = json.dumps(technical_failure(error, failure_context), indent=2) + "\n"
         if args.diagnose_images:
             write_agent_report(args.diagnostic_report, failure)
             sys.stderr.write("Image diagnosis failed; see safe diagnostic report\n")
