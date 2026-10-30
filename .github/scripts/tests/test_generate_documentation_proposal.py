@@ -52,7 +52,7 @@ class FakeResponse:
 
 def response_envelope(proposal: dict[str, object]) -> bytes:
     text = json.dumps(proposal)
-    return json.dumps({"content": [{"type": "text", "text": text}]}).encode()
+    return json.dumps({"stop_reason": "end_turn", "content": [{"type": "text", "text": text}]}).encode()
 
 
 class DocumentationProposalGeneratorTests(unittest.TestCase):
@@ -113,7 +113,7 @@ class DocumentationProposalGeneratorTests(unittest.TestCase):
         return value
 
     def transport_for(self, proposal: dict[str, object]):
-        response = {"content": [{"type": "text", "text": json.dumps(proposal)}]}
+        response = {"stop_reason": "end_turn", "content": [{"type": "text", "text": json.dumps(proposal)}]}
         def transport(endpoint: str, api_key: str, payload: dict[str, object], timeout: float) -> dict[str, object]:
             self.assertEqual(GENERATOR.API_URL, endpoint)
             self.assertEqual("test-secret-key", api_key)
@@ -152,6 +152,108 @@ class DocumentationProposalGeneratorTests(unittest.TestCase):
         self.assertEqual(["docs/invitaciones.md"], [item["path"] for item in report["documents"]])
         self.assertEqual(GENERATOR.sha256_text(body), report["documents"][0]["proposed_body_sha256"])
         self.assertIn("## Expiry", report["documents"][0]["diff"])
+
+    def test_response_completion_failures_are_safe_and_never_apply(self) -> None:
+        private = "PRIVATE_RESPONSE_PROMPT_JIRA_HEADER_SECRET"
+        self.prompt_file.write_text(private, encoding="utf-8")
+        self.ticket_file.write_text(json.dumps({
+            "issue_key": "DOC-1", "issue_summary": private, "issue_description": private,
+        }), encoding="utf-8")
+        valid_text = json.dumps(self.proposal())
+        invalid_text = '{\n"private": "' + private + '",\n'
+        cases = [
+            ("max_tokens", invalid_text, "truncated"),
+            ("max_tokens", valid_text, "truncated"),
+            ("end_turn", invalid_text, "invalid_json"),
+            *[(reason, valid_text, "incompatible_stop_reason") for reason in (
+                None, [], {}, True, 1, private, "stop_sequence", "tool_use",
+                "pause_turn", "refusal", "model_context_window_exceeded",
+            )],
+        ]
+        generate = GENERATOR.generate_and_apply
+        for reason, text, kind in cases:
+            with self.subTest(reason=reason, kind=kind):
+                before = {p.relative_to(self.root): p.read_bytes()
+                          for p in self.root.rglob("*") if p.is_file()}
+                response = {"stop_reason": reason, "content": [{"type": "text", "text": text}],
+                            "usage": {"input_tokens": 10, "output_tokens": 20,
+                                      "cache_creation_input_tokens": 0, "cache_read_input_tokens": 3,
+                                      "private": private}, "headers": {"secret": private}}
+                transport = mock.Mock(return_value=response)
+                stderr, stdout = io.StringIO(), io.StringIO()
+                def simulated(**kwargs):
+                    kwargs["jira_configuration"] = {}
+                    return generate(**kwargs, transport=transport)
+                with mock.patch.object(GENERATOR, "generate_and_apply", side_effect=simulated), \
+                     mock.patch.object(GENERATOR, "parse_proposal", wraps=GENERATOR.parse_proposal) as parse, \
+                     mock.patch.object(GENERATOR, "apply_changes_atomically") as apply, \
+                     mock.patch.object(GENERATOR, "prepare_changes") as prepare, \
+                     mock.patch.dict(os.environ, {"ANTHROPIC_API_KEY": private}), \
+                     mock.patch("sys.stderr", stderr), mock.patch("sys.stdout", stdout):
+                    result = GENERATOR.main([
+                        "--repo-root", str(self.root), "--ticket-file", str(self.ticket_file),
+                        "--prompt-file", str(self.prompt_file), "--agent-report", str(self.report_file),
+                    ])
+                self.assertEqual(1, result)
+                transport.assert_called_once()
+                prepare.assert_not_called()
+                apply.assert_not_called()
+                if kind != "invalid_json":
+                    parse.assert_not_called()
+                after = {p.relative_to(self.root): p.read_bytes()
+                         for p in self.root.rglob("*") if p.is_file()}
+                self.assertEqual(before, after)
+                raw_report = self.report_file.read_text(encoding="utf-8")
+                report = json.loads(raw_report)
+                self.assertEqual("technical_error", report["status"])
+                self.assertEqual(kind, report["failure_kind"])
+                self.assertNotIn("decision", report)
+                self.assertNotIn(private, raw_report + stdout.getvalue() + stderr.getvalue())
+                diagnostics = report["claude_diagnostics"]
+                self.assertEqual(16384, diagnostics["max_tokens"])
+                self.assertEqual(len(text), diagnostics["text_length"])
+                self.assertEqual(10, diagnostics["input_tokens"])
+                self.assertEqual(20, diagnostics["output_tokens"])
+                self.assertEqual(0, diagnostics["cache_creation_input_tokens"])
+                self.assertEqual(3, diagnostics["cache_read_input_tokens"])
+                if kind == "invalid_json":
+                    try:
+                        json.loads(text)
+                    except json.JSONDecodeError as error:
+                        self.assertEqual(error.pos, diagnostics["json_error_position"])
+                        self.assertEqual(error.lineno, diagnostics["json_error_line"])
+                        self.assertEqual(error.colno, diagnostics["json_error_column"])
+                else:
+                    self.assertNotIn("json_error_position", diagnostics)
+
+    def test_optional_usage_metadata_is_allowlisted_and_validated(self) -> None:
+        proposal = self.proposal([], decision="abstention")
+        for usage in (None, [], "PRIVATE", {}, {"input_tokens": True},
+                      {field: value for field, value in zip(GENERATOR.CLAUDE_TOKEN_FIELDS,
+                                                          (-1, 1.5, "PRIVATE", 2**64))}):
+            with self.subTest(usage=usage):
+                response = {"stop_reason": "end_turn", "usage": usage,
+                            "content": [{"type": "text", "text": json.dumps(proposal)}]}
+                self.assertEqual(proposal, GENERATOR.parse_claude_response(response, 16384))
+                response["stop_reason"] = "max_tokens"
+                with self.assertRaises(GENERATOR.ClaudeResponseError) as caught:
+                    GENERATOR.parse_claude_response(response, 16384)
+                self.assertEqual({"stop_reason", "max_tokens", "text_length"},
+                                 set(GENERATOR.technical_failure(caught.exception)["claude_diagnostics"]))
+
+    def test_diagnostic_serializer_revalidates_types_values_and_unknown_fields(self) -> None:
+        for field in GENERATOR.CLAUDE_DIAGNOSTIC_INTEGER_FIELDS:
+            for value in (True, None, -1, 1.5, "PRIVATE", {}, [], 2**64):
+                self.assertEqual({}, GENERATOR.safe_claude_diagnostics({field: value}))
+        for field in ("max_tokens", "json_error_line", "json_error_column"):
+            self.assertEqual({}, GENERATOR.safe_claude_diagnostics({field: 0}))
+        error = GENERATOR.ClaudeResponseError("truncated", {})
+        error.diagnostics = {"stop_reason": "PRIVATE", "headers": "PRIVATE", "output_tokens": True}
+        self.assertEqual({}, GENERATOR.technical_failure(error)["claude_diagnostics"])
+        with self.assertRaises(GENERATOR.ClaudeResponseError) as caught:
+            GENERATOR.parse_claude_response({}, 16384)
+        self.assertEqual("incompatible_stop_reason", caught.exception.kind)
+        self.assertNotIn("stop_reason", caught.exception.diagnostics)
 
     def test_multiple_documents_are_applied_as_one_validated_set(self) -> None:
         first_body = BODY_ONE.replace("24", "48")
@@ -809,7 +911,7 @@ class DocumentationProposalGeneratorTests(unittest.TestCase):
     def test_documentation_change_during_claude_request_prevents_apply(self) -> None:
         first_before = self.first.read_bytes()
         proposal = self.proposal()
-        response = {"content": [{"type": "text", "text": json.dumps(proposal)}]}
+        response = {"stop_reason": "end_turn", "content": [{"type": "text", "text": json.dumps(proposal)}]}
 
         def changing_transport(*args: object) -> dict[str, object]:
             self.second.write_text(
@@ -1379,7 +1481,7 @@ class JiraSourceManifestTests(unittest.TestCase):
         }
         references = {"jira_epic_key": "APP-10", "jira_task_keys": " TEAM-20 , APP-21 "}
         proposal = {"decision": "abstention", "summary": "Test", "reason": "Test", "evidence": "Test", "documents": []}
-        claude = mock.Mock(return_value={"content": [{"type": "text", "text": json.dumps(proposal)}]})
+        claude = mock.Mock(return_value={"stop_reason": "end_turn", "content": [{"type": "text", "text": json.dumps(proposal)}]})
         with tempfile.TemporaryDirectory() as temporary:
             root, ticket_file, prompt_file = self.diagnostic_files(temporary)
             ticket = {"issue_key": "DOC-999", "issue_summary": "Documentation", "issue_description": human}
@@ -1428,7 +1530,7 @@ class JiraSourceManifestTests(unittest.TestCase):
                     "OTHER-999", "Solicitud actual", parent=None, description={"type": "doc", "content": [
                         {"type": "paragraph", "content": [{"type": "text", "text": "x" * length}]}]})})
                 ticket_file.write_text(json.dumps(ticket), encoding="utf-8")
-                claude = mock.Mock(return_value={"content": [{"type": "text", "text": json.dumps({
+                claude = mock.Mock(return_value={"stop_reason": "end_turn", "content": [{"type": "text", "text": json.dumps({
                     "decision": "abstention", "summary": "Test", "reason": "Test", "evidence": "Test", "documents": [],
                 })}]})
                 with mock.patch.object(GENERATOR, "verify_head"):
@@ -1572,7 +1674,7 @@ class JiraSourceManifestTests(unittest.TestCase):
         }
         jira, calls = self.source_transport(issues)
         proposal = {"decision": "abstention", "summary": "Simulated", "reason": "Test", "evidence": "Test", "documents": []}
-        claude = mock.Mock(return_value={"content": [{"type": "text", "text": json.dumps(proposal)}]})
+        claude = mock.Mock(return_value={"stop_reason": "end_turn", "content": [{"type": "text", "text": json.dumps(proposal)}]})
         with tempfile.TemporaryDirectory() as temporary:
             root, ticket_file, prompt_file = self.diagnostic_files(temporary)
             with mock.patch.object(GENERATOR, "verify_head"), \

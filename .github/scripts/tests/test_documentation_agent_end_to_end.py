@@ -104,6 +104,7 @@ class DocumentationAgentEndToEndTests(unittest.TestCase):
 
             def transport(*args: object) -> dict[str, object]:
                 return {
+                    "stop_reason": "end_turn",
                     "content": [
                         {"type": "text", "text": json.dumps(proposal, ensure_ascii=False)}
                     ]

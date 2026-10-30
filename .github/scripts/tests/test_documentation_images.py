@@ -378,7 +378,7 @@ class ImageWorkflowTests(unittest.TestCase):
                         "evidence": "APP-2", "documents": [] if abstain else [{"operation": "update",
                         "path": self.doc.relative_to(self.root).as_posix(), "title": "Acceder", "reason": "Contexto",
                         "evidence": "APP-2", "proposed_body": rendered}]}
-            return {"content": [{"type": "text", "text": json.dumps(proposal)}]}
+            return {"stop_reason": "end_turn", "content": [{"type": "text", "text": json.dumps(proposal)}]}
         return GENERATOR.generate_and_apply(self.root, self.ticket, self.prompt, self.report, "test-only", model,
             base_sha=self.base, jira_configuration=CONFIG, jira_transport=self.jira,
             **getattr(self, "source_references", {"jira_epic_key": "APP-1", "jira_task_keys": "APP-2"}),

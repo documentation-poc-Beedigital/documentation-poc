@@ -157,6 +157,40 @@ class DocumentationAgentWorkflowTests(unittest.TestCase):
                         self.assertEqual("technical_error", actual["status"])
                         self.assertNotIn("decision", actual)
 
+    def test_fallback_preserves_claude_diagnostics_verbatim_in_existing_artifact(self):
+        code = self.serialization_code("Ensure an agent report exists")
+        with tempfile.TemporaryDirectory() as temporary:
+            report = Path(temporary) / "agent-report.md"
+            for outcome in ("failure", "skipped", "success"):
+                for kind in ("truncated", "invalid_json", "incompatible_stop_reason"):
+                    with self.subTest(outcome=outcome, kind=kind):
+                        content = json.dumps({
+                            "status": "technical_error", "error_type": "ClaudeResponseError",
+                            "failure_kind": kind, "claude_diagnostics": {
+                                "stop_reason": "max_tokens" if kind == "truncated" else "end_turn",
+                                "max_tokens": 16384, "output_tokens": 100, "text_length": 200,
+                            },
+                        }, indent=2) + "\n"
+                        report.write_text(content, encoding="utf-8", newline="")
+                        before = report.read_bytes()
+                        with mock.patch.dict(os.environ, {"RUNNER_TEMP": temporary,
+                                                          "GENERATION_OUTCOME": outcome}):
+                            exec(code, {})
+                        self.assertEqual(before, report.read_bytes())
+            for content in (None, "broken JSON", "{}", "[]"):
+                if content is None:
+                    report.unlink(missing_ok=True)
+                else:
+                    report.write_text(content, encoding="utf-8")
+                with mock.patch.dict(os.environ, {"RUNNER_TEMP": temporary, "GENERATION_OUTCOME": "failure"}):
+                    exec(code, {})
+                self.assertEqual({"status": "technical_error", "error_type": "MissingAgentReport"},
+                                 json.loads(report.read_text(encoding="utf-8")))
+        upload = self.workflow.split("- name: Upload proposal evidence", 1)
+        self.assertEqual(2, len(upload))
+        self.assertIn("if: always()", upload[1])
+        self.assertIn("${{ runner.temp }}/agent-report.md", upload[1])
+
     def serialization_code(self, step_name: str) -> str:
         step = self.workflow[self.workflow.index(f"- name: {step_name}"):]
         match = re.search(r"python - <<'PY'\n(.*?)\n          PY", step, re.DOTALL)
