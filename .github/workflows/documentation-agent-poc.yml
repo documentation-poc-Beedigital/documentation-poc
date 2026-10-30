@@ -394,7 +394,10 @@ jobs:
                       existing = {}
               except (ValueError, OSError):
                   pass
-          if not report.exists() or (failed and existing.get("status") != "technical_error"):
+          # Keep the generator's technical report verbatim, including safe Claude
+          # diagnostics. Replace stale proposals/abstentions after generation fails.
+          preserve_diagnostic = existing.get("status") == "technical_error"
+          if not report.exists() or (failed and not preserve_diagnostic):
               report.write_text(
                   json.dumps(
                       {

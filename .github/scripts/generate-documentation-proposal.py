@@ -93,6 +93,47 @@ class ProposalError(ValueError):
     """Raised when input or model output violates the proposal contract."""
 
 
+CLAUDE_STOP_REASONS = frozenset({
+    "end_turn", "max_tokens", "stop_sequence", "tool_use", "pause_turn",
+    "refusal", "model_context_window_exceeded",
+})
+CLAUDE_FAILURE_KINDS = frozenset({
+    "truncated", "invalid_json", "incompatible_stop_reason", "invalid_content",
+})
+CLAUDE_TOKEN_FIELDS = (
+    "input_tokens", "output_tokens", "cache_creation_input_tokens", "cache_read_input_tokens",
+)
+CLAUDE_DIAGNOSTIC_INTEGER_FIELDS = (
+    "max_tokens", *CLAUDE_TOKEN_FIELDS, "text_length", "json_error_position",
+    "json_error_line", "json_error_column",
+)
+
+
+def safe_claude_diagnostics(metadata: Mapping[str, object]) -> dict[str, object]:
+    """Only bounded integers and enumerated stop reasons can reach the report."""
+    safe: dict[str, object] = {}
+    reason = metadata.get("stop_reason")
+    if type(reason) is str and reason in CLAUDE_STOP_REASONS:
+        safe["stop_reason"] = reason
+    for field in CLAUDE_DIAGNOSTIC_INTEGER_FIELDS:
+        value = metadata.get(field)
+        minimum = 1 if field in {"max_tokens", "json_error_line", "json_error_column"} else 0
+        if type(value) is int and minimum <= value <= 2**63 - 1:
+            safe[field] = value
+    return safe
+
+
+class ClaudeResponseError(ProposalError):
+    """A response failure carrying only explicitly permitted diagnostic metadata."""
+
+    def __init__(self, kind: str, diagnostics: Mapping[str, object]) -> None:
+        if kind not in CLAUDE_FAILURE_KINDS:
+            raise ValueError("Unknown Claude response failure kind")
+        super().__init__(f"Claude response rejected: {kind}")
+        self.kind = kind
+        self.diagnostics = safe_claude_diagnostics(diagnostics)
+
+
 Transport = Callable[[str, str, dict[str, object], float], dict[str, object]]
 JiraTransport = Callable[[str, str, str, float], dict[str, object]]
 
@@ -655,6 +696,40 @@ def extract_output_text(response: Mapping[str, object]) -> str:
     return text
 
 
+def parse_claude_response(response: Mapping[str, object], max_tokens: object) -> dict[str, object]:
+    # Never copy the envelope or arbitrary metadata into a diagnostic.
+    metadata = {"max_tokens": max_tokens, "stop_reason": response.get("stop_reason")}
+    usage = response.get("usage")
+    if isinstance(usage, dict):
+        metadata.update({field: usage.get(field) for field in CLAUDE_TOKEN_FIELDS})
+    try:
+        text = extract_output_text(response)
+    except ProposalError:
+        text = ""
+    metadata["text_length"] = len(text)
+    diagnostics = safe_claude_diagnostics(metadata)
+    # Check completion before parsing, including when a cut response is valid JSON.
+    reason = diagnostics.get("stop_reason")
+    if reason == "max_tokens":
+        raise ClaudeResponseError("truncated", diagnostics)
+    if reason != "end_turn":
+        raise ClaudeResponseError("incompatible_stop_reason", diagnostics)
+    if not text:
+        raise ClaudeResponseError("invalid_content", diagnostics)
+    try:
+        return parse_proposal(text)
+    except ProposalError as error:
+        if isinstance(error.__cause__, json.JSONDecodeError):
+            json_error = error.__cause__
+            diagnostics.update({
+                "json_error_position": json_error.pos,
+                "json_error_line": json_error.lineno,
+                "json_error_column": json_error.colno,
+            })
+            raise ClaudeResponseError("invalid_json", diagnostics) from None
+        raise
+
+
 def validate_text_field(value: object, label: str) -> str:
     if not isinstance(value, str) or not value.strip():
         raise ProposalError(f"Claude proposal field {label} must be a non-empty string")
@@ -1119,6 +1194,9 @@ def diagnose_images(
 def technical_failure(error: Exception) -> dict[str, object]:
     # Never serialize exception text, response bodies, URLs or credentials.
     report = {"status": "technical_error", "error_type": type(error).__name__}
+    if isinstance(error, ClaudeResponseError) and error.kind in CLAUDE_FAILURE_KINDS:
+        report["failure_kind"] = error.kind
+        report["claude_diagnostics"] = safe_claude_diagnostics(error.diagnostics)
     match = re.fullmatch(r"Jira image download returned HTTP ([0-9]{3})", str(error))
     if isinstance(error, images.ImageError) and match:
         report["http_status"] = int(match[1])
@@ -1146,7 +1224,7 @@ def generate_and_apply(
     request = (build_request(trusted_prompt, ticket, documents, image_catalogue) if image_catalogue
                else build_request(trusted_prompt, ticket, documents))
     response = transport(API_URL, api_key, request, timeout)
-    proposal = parse_proposal(extract_output_text(response))
+    proposal = parse_claude_response(response, request["max_tokens"])
     if read_documentation(repo_root) != documents:
         raise ProposalError("Documentation changed after the Claude request was built")
     changes = prepare_changes(repo_root, proposal)
@@ -1252,7 +1330,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             return 1
         if not args.diagnose_jira_context and args.agent_report:
             write_agent_report(args.agent_report, failure)
-        sys.stderr.write(f"Documentation proposal generation failed: {error}\n")
+        sys.stderr.write("Documentation proposal generation failed; see safe agent report\n")
         return 1
     return 0
 
