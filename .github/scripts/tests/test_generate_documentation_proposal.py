@@ -1657,7 +1657,13 @@ class JiraSourceManifestTests(unittest.TestCase):
                         self.assertEqual(["DOC-123", "DOC-124", "DOC-125"][:int(key.split("-")[1]) - 122], calls)
                         claude.assert_not_called()
                         build.assert_not_called()
-                        self.assertFalse((root / "report.json").exists())
+                        if mode == "normal":
+                            report = json.loads((root / "report.json").read_text(encoding="utf-8"))
+                            self.assertEqual("ticket_jira_read", report["failure_stage"])
+                            self.assertEqual("not_started", report["claude_call_state"])
+                            self.assertEqual("jira_description_conversion_failed", report["error_code"])
+                        else:
+                            self.assertFalse((root / "report.json").exists())
 
     def test_normal_flow_passes_complete_code_blocks_to_build_request(self) -> None:
         texts = {

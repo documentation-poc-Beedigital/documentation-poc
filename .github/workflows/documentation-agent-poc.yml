@@ -394,8 +394,8 @@ jobs:
                       existing = {}
               except (ValueError, OSError):
                   pass
-          # Keep the generator's technical report verbatim, including safe Claude
-          # diagnostics. Replace stale proposals/abstentions after generation fails.
+          # Keep the generator's technical report verbatim, including stage, call
+          # state, stable error codes, HTTP metadata and safe Claude diagnostics. Replace stale proposals/abstentions after generation fails.
           preserve_diagnostic = existing.get("status") == "technical_error"
           if not report.exists() or (failed and not preserve_diagnostic):
               report.write_text(
@@ -403,6 +403,7 @@ jobs:
                       {
                           "status": "technical_error",
                           "error_type": "MissingAgentReport",
+                          "error_code": "report_unavailable",
                       },
                       ensure_ascii=False,
                       indent=2,

@@ -26,22 +26,30 @@ ORIGINAL_FIELDS = {"width", "height", "size", "sha256", "mime_type"}
 ASSET_PATH = re.compile(r"static/img/jira/([a-z0-9-]+)-([1-9][0-9]*)-([0-9a-f]{64})\.(png|jpg)")
 
 
+ERROR_CODES = frozenset({"image_invalid", "jira_image_http_error", "jira_image_download_failed"})
+
+
 class ImageError(ValueError):
-    pass
+    def __init__(self, message: str, *, code: str = "unclassified_error",
+                 service: str | None = None, http_status: int | None = None) -> None:
+        super().__init__(message)
+        self.code = code
+        self.service = service
+        self.http_status = http_status
 
 
 def validate_crop(value: object) -> dict:
     if not isinstance(value, dict) or set(value) != CROP_FIELDS:
-        raise ImageError("Invalid crop fields")
+        raise ImageError("Invalid crop fields", code="image_invalid")
     if any(type(value[f]) is not int for f in CROP_FIELDS - {"original_sha256"}):
-        raise ImageError("Crop coordinates and dimensions must be integers")
+        raise ImageError("Crop coordinates and dimensions must be integers", code="image_invalid")
     w, h = value["original_width"], value["original_height"]
     if (w <= 0 or h <= 0 or w * h > MAX_PIXELS
             or not 0 <= value["left"] < value["right"] <= w
             or not 0 <= value["top"] < value["bottom"] <= h
             or not isinstance(value["original_sha256"], str)
             or re.fullmatch(r"[0-9a-f]{64}", value["original_sha256"]) is None):
-        raise ImageError("Invalid crop bounds or original hash")
+        raise ImageError("Invalid crop bounds or original hash", code="image_invalid")
     return value
 
 
@@ -59,11 +67,11 @@ def process_image(data: bytes, crop: dict | None = None) -> tuple[bytes, dict, d
             with Image.open(io.BytesIO(data), formats=["PNG", "JPEG"]) as source:
                 w, h = source.size
                 if w <= 0 or h <= 0 or w * h > MAX_PIXELS or getattr(source, "n_frames", 1) != 1:
-                    raise ImageError("Excessive or multi-frame image")
+                    raise ImageError("Excessive or multi-frame image", code="image_invalid")
                 source.verify()
             with Image.open(io.BytesIO(data), formats=["PNG", "JPEG"]) as source:
                 if source.size != (w, h):
-                    raise ImageError("Inconsistent decoded dimensions")
+                    raise ImageError("Inconsistent decoded dimensions", code="image_invalid")
                 source.load()
                 original = {"width": w, "height": h, "size": len(data), "mime_type": mime,
                             "sha256": hashlib.sha256(data).hexdigest()}
@@ -71,14 +79,14 @@ def process_image(data: bytes, crop: dict | None = None) -> tuple[bytes, dict, d
                     return data, original, dict(original)
                 validate_crop(crop)
                 if mime == "image/png" and data[24] == 16:
-                    raise ImageError("16-bit PNG cropping would lose pixel precision")
+                    raise ImageError("16-bit PNG cropping would lose pixel precision", code="image_invalid")
                 if (crop["original_width"], crop["original_height"], crop["original_sha256"]) != (w, h, original["sha256"]):
-                    raise ImageError("Crop original dimensions or hash mismatch")
+                    raise ImageError("Crop original dimensions or hash mismatch", code="image_invalid")
                 if source.getexif().get(274, 1) != 1:
-                    raise ImageError("Crop requires EXIF orientation 1 or absent")
+                    raise ImageError("Crop requires EXIF orientation 1 or absent", code="image_invalid")
                 # Refuse modes that would require quantization/color conversion.
                 if source.mode not in ("RGB", "RGBA", "L", "LA", "P"):
-                    raise ImageError("Unsupported pixel mode for lossless crop")
+                    raise ImageError("Unsupported pixel mode for lossless crop", code="image_invalid")
                 if source.mode == "P":
                     source = source.convert("RGBA" if "transparency" in source.info else "RGB")
                 elif "transparency" in source.info:
@@ -95,13 +103,13 @@ def process_image(data: bytes, crop: dict | None = None) -> tuple[bytes, dict, d
     except ImageError:
         raise
     except (OSError, ValueError, SyntaxError, Image.DecompressionBombError, Image.DecompressionBombWarning) as error:
-        raise ImageError("Malformed or excessive image decoding") from error
+        raise ImageError("Malformed or excessive image decoding", code="image_invalid") from error
 
 
 def text(value: object, label: str) -> str:
     if (not isinstance(value, str) or not value.strip() or value != value.strip()
             or len(value) > 2000 or any(ord(c) < 32 or ord(c) == 127 for c in value)):
-        raise ImageError(f"Invalid image {label}")
+        raise ImageError(f"Invalid image {label}", code="image_invalid")
     return value
 
 
@@ -113,33 +121,33 @@ def selection(description: str) -> list[dict]:
     # Longer ADF fences are accepted; the closing fence must match exactly.
     blocks = re.findall(r"(?m)^(`{3,})documentation-images-v1\n(.*?)\n\1[ \t]*$", description, re.S)
     if len(blocks) != 1 or description.count(marker) != 1:
-        raise ImageError("Expected one fenced documentation-images-v1 JSON block")
+        raise ImageError("Expected one fenced documentation-images-v1 JSON block", code="image_invalid")
     def unique(pairs):
         result = {}
         for key, value in pairs:
             if key in result:
-                raise ImageError("Duplicate image JSON field")
+                raise ImageError("Duplicate image JSON field", code="image_invalid")
             result[key] = value
         return result
     try:
         value = json.loads(blocks[0][1], object_pairs_hook=unique)
     except (ValueError, TypeError) as error:
-        raise ImageError("Invalid image selection JSON") from error
+        raise ImageError("Invalid image selection JSON", code="image_invalid") from error
     if (not isinstance(value, dict) or set(value) != {"version", "images"}
             or type(value["version"]) is not int or value["version"] != 1
             or not isinstance(value["images"], list) or len(value["images"]) > MAX_IMAGES):
-        raise ImageError("Invalid image selection schema/version")
+        raise ImageError("Invalid image selection schema/version", code="image_invalid")
     result = []
     for item in value["images"]:
         if not isinstance(item, dict) or set(item) not in (SELECTION_FIELDS, SELECTION_FIELDS | {"crop"}):
-            raise ImageError("Invalid selected image fields")
+            raise ImageError("Invalid selected image fields", code="image_invalid")
         parsed = {field: text(item[field], field) for field in SELECTION_FIELDS}
         if "crop" in item:
             parsed["crop"] = validate_crop(item["crop"])
         if not re.fullmatch(KEY, parsed["issue_key"]) or not re.fullmatch(r"[1-9][0-9]*", parsed["attachment_id"]):
-            raise ImageError("Invalid image issue key or attachment ID")
+            raise ImageError("Invalid image issue key or attachment ID", code="image_invalid")
         if any(c in parsed["alt"] for c in "[]\\"):
-            raise ImageError("Image alt must be plain text without Markdown delimiters")
+            raise ImageError("Image alt must be plain text without Markdown delimiters", code="image_invalid")
         result.append(parsed)
     return result
 
@@ -147,7 +155,7 @@ def selection(description: str) -> list[dict]:
 def image_type(data: bytes) -> str:
     """Check container structure, dimensions and PNG checksum/compressed data."""
     if not data or len(data) > MAX_IMAGE_BYTES:
-        raise ImageError("Image exceeds size limit or is empty")
+        raise ImageError("Image exceeds size limit or is empty", code="image_invalid")
     if data.startswith(b"\x89PNG\r\n\x1a\n"):
         offset, chunks, compressed = 8, [], bytearray()
         while offset + 12 <= len(data):
@@ -155,30 +163,30 @@ def image_type(data: bytes) -> str:
             kind = data[offset + 4:offset + 8]
             end = offset + 12 + size
             if end > len(data):
-                raise ImageError("Truncated PNG")
+                raise ImageError("Truncated PNG", code="image_invalid")
             payload = data[offset + 8:end - 4]
             if zlib.crc32(kind + payload) & 0xffffffff != int.from_bytes(data[end - 4:end], "big"):
-                raise ImageError("Invalid PNG checksum")
+                raise ImageError("Invalid PNG checksum", code="image_invalid")
             chunks.append(kind)
             if kind == b"IHDR":
                 if len(chunks) != 1 or len(payload) != 13:
-                    raise ImageError("Invalid PNG header")
+                    raise ImageError("Invalid PNG header", code="image_invalid")
                 width, height, depth, color, compression, filtering, interlace = struct.unpack(">IIBBBBB", payload)
                 if (not width or not height or width * height > MAX_PIXELS or compression or filtering
                         or interlace not in (0, 1) or color not in (0, 2, 3, 4, 6)
                         or depth not in {0: (1, 2, 4, 8, 16), 2: (8, 16), 3: (1, 2, 4, 8), 4: (8, 16), 6: (8, 16)}[color]):
-                    raise ImageError("Invalid PNG dimensions/encoding")
+                    raise ImageError("Invalid PNG dimensions/encoding", code="image_invalid")
             if kind == b"IDAT":
                 compressed.extend(payload)
             offset = end
             if kind == b"IEND":
                 if payload or offset != len(data):
-                    raise ImageError("Invalid PNG end")
+                    raise ImageError("Invalid PNG end", code="image_invalid")
                 break
         if not chunks or chunks[0] != b"IHDR" or chunks[-1] != b"IEND" or not compressed:
-            raise ImageError("Incomplete PNG")
+            raise ImageError("Incomplete PNG", code="image_invalid")
         if color == 3 and b"PLTE" not in chunks:
-            raise ImageError("Indexed PNG has no palette")
+            raise ImageError("Indexed PNG has no palette", code="image_invalid")
         channels = {0: 1, 2: 3, 3: 1, 4: 2, 6: 4}[color]
         passes = [(width, height)]
         if interlace:
@@ -191,20 +199,20 @@ def image_type(data: bytes) -> str:
             decoder = zlib.decompressobj()
             decoded = decoder.decompress(bytes(compressed), expected_size + 1)
             if not decoder.eof or decoder.unused_data or len(decoded) != expected_size:
-                raise ImageError("Invalid or excessive PNG pixel data")
+                raise ImageError("Invalid or excessive PNG pixel data", code="image_invalid")
             cursor = 0
             for stride, count in rows:
                 if any(decoded[cursor + i * stride] > 4 for i in range(count)):
-                    raise ImageError("Invalid PNG scanline filter")
+                    raise ImageError("Invalid PNG scanline filter", code="image_invalid")
                 cursor += stride * count
         except zlib.error as error:
-            raise ImageError("Invalid PNG pixel data") from error
+            raise ImageError("Invalid PNG pixel data", code="image_invalid") from error
         return "image/png"
     if data.startswith(b"\xff\xd8") and data.endswith(b"\xff\xd9"):
         offset, dimensions, scan = 2, False, False
         while offset < len(data) - 2:
             if data[offset] != 255:
-                raise ImageError("Invalid JPEG marker")
+                raise ImageError("Invalid JPEG marker", code="image_invalid")
             while offset < len(data) and data[offset] == 255:
                 offset += 1
             if offset >= len(data):
@@ -212,16 +220,16 @@ def image_type(data: bytes) -> str:
             marker = data[offset]
             offset += 1
             if marker in (0, 0xd8, 0xd9):
-                raise ImageError("Invalid JPEG structure")
+                raise ImageError("Invalid JPEG structure", code="image_invalid")
             length = int.from_bytes(data[offset:offset + 2], "big")
             if length < 2 or offset + length > len(data) - 2:
-                raise ImageError("Truncated JPEG")
+                raise ImageError("Truncated JPEG", code="image_invalid")
             if marker in (0xc0, 0xc1, 0xc2):
                 if length < 8:
-                    raise ImageError("Invalid JPEG frame")
+                    raise ImageError("Invalid JPEG frame", code="image_invalid")
                 height, width = struct.unpack(">HH", data[offset + 3:offset + 7])
                 if not width or not height or width * height > MAX_PIXELS:
-                    raise ImageError("Invalid JPEG dimensions")
+                    raise ImageError("Invalid JPEG dimensions", code="image_invalid")
                 dimensions = True
             offset += length
             if marker == 0xda:
@@ -229,7 +237,7 @@ def image_type(data: bytes) -> str:
                 break
         if dimensions and scan:
             return "image/jpeg"
-    raise ImageError("Only structurally valid PNG and JPEG images are allowed")
+    raise ImageError("Only structurally valid PNG and JPEG images are allowed", code="image_invalid")
 
 
 class NoRedirect(urllib.request.HTTPRedirectHandler):
@@ -242,11 +250,11 @@ def safe_url(url: str):
         parsed = urllib.parse.urlsplit(url)
         port = parsed.port
     except ValueError as error:
-        raise ImageError("Unsafe Jira image download URL") from error
+        raise ImageError("Unsafe Jira image download URL", code="image_invalid") from error
     if (parsed.scheme != "https" or not parsed.hostname or parsed.username or parsed.password
             or parsed.fragment or port not in (None, 443)
             or any(ord(c) <= 32 for c in url)):
-        raise ImageError("Unsafe Jira image download URL")
+        raise ImageError("Unsafe Jira image download URL", code="image_invalid")
     return parsed
 
 
@@ -260,7 +268,7 @@ def download(endpoint: str, base_url: str, email: str, token: str, timeout: floa
         parsed = safe_url(url)
         same_origin = (parsed.hostname, parsed.port or 443) == (base.hostname, base.port or 443)
         if not same_origin and parsed.hostname != "api.media.atlassian.com":
-            raise ImageError("Jira image redirect host is not authorized")
+            raise ImageError("Jira image redirect host is not authorized", code="image_invalid")
         # The content endpoint can negotiate an opaque binary representation.
         # Publication types are enforced against bytes and metadata in catalogue().
         headers = {"Accept": "*/*"}
@@ -271,36 +279,37 @@ def download(endpoint: str, base_url: str, email: str, token: str, timeout: floa
             with open_request(request, timeout=timeout) as response:
                 data = response.read(MAX_IMAGE_BYTES + 1)
             if len(data) > MAX_IMAGE_BYTES:
-                raise ImageError("Downloaded image exceeds size limit")
+                raise ImageError("Downloaded image exceeds size limit", code="image_invalid")
             return data
         except urllib.error.HTTPError as error:
             if error.code in (301, 302, 303, 307, 308):
                 location = error.headers.get("Location")
                 error.close()
                 if not location:
-                    raise ImageError("Jira image redirect has no location") from error
+                    raise ImageError("Jira image redirect has no location", code="image_invalid") from error
                 url = urllib.parse.urljoin(url, location)
                 continue
             error.close()
-            raise ImageError(f"Jira image download returned HTTP {error.code}") from None
+            raise ImageError(f"Jira image download returned HTTP {error.code}",
+                             code="jira_image_http_error", service="jira", http_status=error.code) from None
         except (OSError, urllib.error.URLError) as error:
-            raise ImageError("Jira image download failed") from error
-    raise ImageError("Too many Jira image redirects")
+            raise ImageError("Jira image download failed", code="jira_image_download_failed", service="jira") from error
+    raise ImageError("Too many Jira image redirects", code="image_invalid")
 
 
 def asset_path(root: Path, raw: str) -> Path:
     if ASSET_PATH.fullmatch(raw) is None:
-        raise ImageError("Invalid deterministic image path")
+        raise ImageError("Invalid deterministic image path", code="image_invalid")
     candidate = root / raw
     cursor = root
     for part in raw.split("/"):
         cursor = cursor / part
         if cursor.is_symlink() or (hasattr(cursor, "is_junction") and cursor.is_junction()):
-            raise ImageError("Image path contains a symlink")
+            raise ImageError("Image path contains a symlink", code="image_invalid")
     try:
         candidate.resolve().relative_to(root.resolve())
     except ValueError as error:
-        raise ImageError("Image path escapes repository") from error
+        raise ImageError("Image path escapes repository", code="image_invalid") from error
     return candidate
 
 
@@ -311,38 +320,38 @@ def catalogue(descriptions: list[str], issues: dict, configuration: tuple[str, s
     else:
         selected = selection("```documentation-images-v1\n" + json.dumps({"version": 1, "images": selected}) + "\n```")
     if len(selected) > MAX_IMAGES:
-        raise ImageError("Image batch exceeds count limit")
+        raise ImageError("Image batch exceeds count limit", code="image_invalid")
     seen, result, blobs, total, published_total = set(), [], {}, 0, 0
     base, email, token = configuration
     for item in selected:
         key, identity = item["issue_key"], item["attachment_id"]
         image_id = f"{key}/{identity}"
         if image_id in seen:
-            raise ImageError("Duplicate selected attachment identity")
+            raise ImageError("Duplicate selected attachment identity", code="image_invalid")
         seen.add(image_id)
         if key not in issues:
-            raise ImageError("Selected attachment issue is outside the authorized batch")
+            raise ImageError("Selected attachment issue is outside the authorized batch", code="image_invalid")
         attachments = issues[key].get("attachment", [])
         if not isinstance(attachments, list):
-            raise ImageError("Invalid Jira attachment metadata")
+            raise ImageError("Invalid Jira attachment metadata", code="image_invalid")
         matches = [a for a in attachments if isinstance(a, dict) and a.get("id") == identity]
         if len(matches) != 1:
-            raise ImageError("Selected attachment does not belong to its authorized issue")
+            raise ImageError("Selected attachment does not belong to its authorized issue", code="image_invalid")
         attachment = matches[0]
         size, mime = attachment.get("size"), attachment.get("mimeType")
         if type(size) is not int or not 0 < size <= MAX_IMAGE_BYTES or mime not in ("image/png", "image/jpeg"):
-            raise ImageError("Invalid attachment type or size")
+            raise ImageError("Invalid attachment type or size", code="image_invalid")
         total += size
         if total > MAX_BATCH_BYTES:
-            raise ImageError("Image batch exceeds byte limit")
+            raise ImageError("Image batch exceeds byte limit", code="image_invalid")
         # Construct from the validated real ID; never consume attachment.content or filename as a URL/path.
         data = downloader(f"{base}/rest/api/3/attachment/content/{identity}", base, email, token, timeout)
         if len(data) != size or image_type(data) != mime:
-            raise ImageError("Downloaded image differs from Jira metadata")
+            raise ImageError("Downloaded image differs from Jira metadata", code="image_invalid")
         data, original, published = process_image(data, item.get("crop"))
         published_total += published["size"]
         if published_total > MAX_BATCH_BYTES:
-            raise ImageError("Derived image batch exceeds byte limit")
+            raise ImageError("Derived image batch exceeds byte limit", code="image_invalid")
         sha = published["sha256"]
         extension = "png" if published["mime_type"] == "image/png" else "jpg"
         path = f"static/img/jira/{key.lower()}-{identity}-{sha}.{extension}"
@@ -354,13 +363,13 @@ def catalogue(descriptions: list[str], issues: dict, configuration: tuple[str, s
 
 def validate_entries(images: object) -> list[dict]:
     if not isinstance(images, list) or len(images) > MAX_IMAGES:
-        raise ImageError("Invalid image catalogue")
+        raise ImageError("Invalid image catalogue", code="image_invalid")
     seen, identities = set(), set()
     for image in images:
         if not isinstance(image, dict) or set(image) not in (
                 IMAGE_FIELDS, IMAGE_FIELDS | {"width", "height", "original"},
                 IMAGE_FIELDS | {"width", "height", "original", "crop"}):
-            raise ImageError("Invalid image catalogue fields")
+            raise ImageError("Invalid image catalogue fields", code="image_invalid")
         selection("```documentation-images-v1\n" + json.dumps({"version": 1, "images": [
             {f: image[f] for f in SELECTION_FIELDS | ({"crop"} if "crop" in image else set())}]}) + "\n```")
         if "original" in image:
@@ -373,13 +382,13 @@ def validate_entries(images: object) -> list[dict]:
                 or type(image["size"]) is not int or not 0 < image["size"] <= MAX_IMAGE_BYTES
                 or image["operation"] not in ("create", "reuse") or image["path"] in seen
                 or image["id"] in identities):
-            raise ImageError("Invalid image identity/path/hash/size")
+            raise ImageError("Invalid image identity/path/hash/size", code="image_invalid")
         seen.add(image["path"])
         identities.add(image["id"])
     if sum(image["size"] for image in images) > MAX_BATCH_BYTES:
-        raise ImageError("Image batch exceeds byte limit")
+        raise ImageError("Image batch exceeds byte limit", code="image_invalid")
     if sum(image.get("original", image)["size"] for image in images) > MAX_BATCH_BYTES:
-        raise ImageError("Original image batch exceeds byte limit")
+        raise ImageError("Original image batch exceeds byte limit", code="image_invalid")
     return images
 
 
@@ -392,31 +401,31 @@ def validate_provenance(image: dict) -> None:
             or not isinstance(original["sha256"], str) or re.fullmatch(r"[0-9a-f]{64}", original["sha256"]) is None
             or any(type(image[f]) is not int or image[f] <= 0 for f in ("width", "height"))
             or image["width"] * image["height"] > MAX_PIXELS):
-        raise ImageError("Invalid original/published image metadata")
+        raise ImageError("Invalid original/published image metadata", code="image_invalid")
     if "crop" in image:
         crop = validate_crop(image["crop"])
         if (crop["original_width"], crop["original_height"], crop["original_sha256"]) != (
                 original["width"], original["height"], original["sha256"]):
-            raise ImageError("Crop provenance mismatch")
+            raise ImageError("Crop provenance mismatch", code="image_invalid")
         if (image["width"], image["height"], image["mime_type"]) != (
                 crop["right"] - crop["left"], crop["bottom"] - crop["top"], "image/png"):
-            raise ImageError("Derived crop metadata mismatch")
+            raise ImageError("Derived crop metadata mismatch", code="image_invalid")
     elif any(image[f] != original[f] for f in ORIGINAL_FIELDS):
-        raise ImageError("Uncropped image differs from original")
+        raise ImageError("Uncropped image differs from original", code="image_invalid")
 
 
 def verify_file(root: Path, image: dict) -> None:
     candidate = asset_path(root, image["path"])
     if not candidate.is_file() or candidate.stat().st_size != image["size"]:
-        raise ImageError("Image file is missing or has an invalid size")
+        raise ImageError("Image file is missing or has an invalid size", code="image_invalid")
     data = candidate.read_bytes()
     if hashlib.sha256(data).hexdigest() != image["sha256"] or image_type(data) != image["mime_type"]:
-        raise ImageError("Image file type or hash does not match catalogue")
+        raise ImageError("Image file type or hash does not match catalogue", code="image_invalid")
     _, _, actual = process_image(data)
     if "original" in image:
         validate_provenance(image)
         if any(actual[f] != image[f] for f in ORIGINAL_FIELDS):
-            raise ImageError("Published dimensions differ from catalogue")
+            raise ImageError("Published dimensions differ from catalogue", code="image_invalid")
 
 
 def references(body: str, images: list[dict], before: str = "") -> set[str]:
@@ -431,7 +440,7 @@ def references(body: str, images: list[dict], before: str = "") -> set[str]:
     body, before = prose(body), prose(before)
     for imported in re.findall(r"(?m)^\s*import\b[^\n]*", body):
         if imported not in before:
-            raise ImageError("New MDX image imports are not supported")
+            raise ImageError("New MDX image imports are not supported", code="image_invalid")
     pattern = r"!\[[^\n]*?\](?:\([^\n]*?\)|\[[^\n]*?\])|(?is:<(?:img|Image)\b[^>]*>)"
     existing = re.findall(pattern, before)
     for raw in re.findall(pattern, body):
@@ -439,12 +448,12 @@ def references(body: str, images: list[dict], before: str = "") -> set[str]:
         if match and match.group(2) in allowed:
             image = allowed[match.group(2)]
             if match.group(1) != image["alt"]:
-                raise ImageError("Image alt does not match approved selection")
+                raise ImageError("Image alt does not match approved selection", code="image_invalid")
             used.add(image["path"])
         elif raw not in existing:
-            raise ImageError("New image reference is not an authorized catalogue image")
+            raise ImageError("New image reference is not an authorized catalogue image", code="image_invalid")
     # Reference-style images, dynamic MDX and disguised catalogue URLs are not supported in v1.
     remainder = re.sub(pattern, "", body)
     if "/img/jira/" in remainder or re.search(r"!\[|<img\b|<Image\b", remainder, re.I):
-        raise ImageError("Unsupported or malformed image reference")
+        raise ImageError("Unsupported or malformed image reference", code="image_invalid")
     return used
