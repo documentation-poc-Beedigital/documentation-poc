@@ -134,10 +134,11 @@ class SafeGenerationDiagnosticsTests(unittest.TestCase):
         progress = {"claude_call_state": "not_started"}
         error = urllib.error.HTTPError("https://" + PRIVATE, 503, PRIVATE, {}, io.BytesIO(PRIVATE.encode()))
         opener = mock.Mock(side_effect=[error, socket.timeout(PRIVATE), socket.timeout(PRIVATE)])
-        with mock.patch.object(error, "read", side_effect=AssertionError("Error body forbidden")), \
+        with mock.patch.object(error, "read", wraps=error.read) as read, \
              self.assertRaises(G.ProposalError):
             G.http_transport("https://example.invalid", PRIVATE, {}, 1,
                              opener=opener, sleeper=lambda _: None, progress=progress)
+        read.assert_called_once_with(G.MAX_CLAUDE_ERROR_BYTES + 1)
         self.assertEqual("response_received", progress["claude_call_state"])
         self.assertEqual(3, opener.call_count)
 

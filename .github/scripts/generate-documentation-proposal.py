@@ -7,6 +7,7 @@ import argparse
 import base64
 import difflib
 import hashlib
+import http.client
 import json
 import os
 import re
@@ -35,6 +36,8 @@ MAX_PROPOSED_BODY_CHARACTERS = 1_000_000
 MAX_PROPOSED_DOCUMENTS = 50
 MAX_REPORT_BYTES = 262_144
 MAX_API_RESPONSE_BYTES = 2_000_000
+MAX_CLAUDE_ERROR_BYTES = 16_384
+MAX_CLAUDE_ERROR_MESSAGE_CHARACTERS = 2_048
 MAX_JIRA_RESPONSE_BYTES = 2_000_000
 JIRA_REQUEST_TIMEOUT = 30.0
 RETRY_DELAYS = (2.0, 5.0)
@@ -141,6 +144,95 @@ class ClaudeResponseError(ProposalError):
         }[kind])
         self.kind = kind
         self.diagnostics = safe_claude_diagnostics(diagnostics)
+
+
+CLAUDE_HTTP_ERROR_TYPES = frozenset({
+    "invalid_request_error", "authentication_error", "billing_error", "permission_error",
+    "not_found_error", "conflict_error", "request_too_large", "rate_limit_error",
+    "api_error", "timeout_error", "overloaded_error",
+})
+CLAUDE_HTTP_BODY_STATES = frozenset({"parsed", "malformed", "too_large", "unreadable"})
+CLAUDE_HTTP_REJECTIONS = frozenset({"unknown_http_error", "schema_too_complex", "unexpected_parameter"})
+CLAUDE_HTTP_PARAMETERS = frozenset({
+    "model", "max_tokens", "system", "messages", "output_config", "output_config.format",
+    "output_config.format.schema", "temperature", "top_p", "top_k",
+})
+
+
+def safe_claude_http_diagnostics(metadata: Mapping[str, object]) -> dict[str, str]:
+    # No server-controlled free text, identifiers, URLs, headers or hashes are permitted.
+    safe = {}
+    for field, allowed in (("body_state", CLAUDE_HTTP_BODY_STATES),
+                           ("error_type", CLAUDE_HTTP_ERROR_TYPES),
+                           ("rejection_code", CLAUDE_HTTP_REJECTIONS),
+                           ("parameter", CLAUDE_HTTP_PARAMETERS)):
+        value = metadata.get(field)
+        if type(value) is str and len(value) <= 64 and value in allowed:
+            safe[field] = value
+    if safe.get("rejection_code") == "schema_too_complex":
+        safe["parameter"] = "output_config.format.schema"
+    elif safe.get("rejection_code") != "unexpected_parameter":
+        safe.pop("parameter", None)
+    return safe
+
+
+def _unique_error_object(pairs: list[tuple[str, object]]) -> dict[str, object]:
+    result = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError("Duplicate error envelope key")
+        result[key] = value
+    return result
+
+
+def claude_http_error_diagnostics(error: urllib.error.HTTPError) -> dict[str, str]:
+    metadata = {"body_state": "unreadable", "rejection_code": "unknown_http_error"}
+    try:
+        raw = error.read(MAX_CLAUDE_ERROR_BYTES + 1)
+        if type(raw) is not bytes:
+            return metadata
+        if len(raw) > MAX_CLAUDE_ERROR_BYTES:
+            return {**metadata, "body_state": "too_large"}
+        metadata["body_state"] = "malformed"
+        envelope = json.loads(raw.decode("utf-8"), object_pairs_hook=_unique_error_object)
+        if not isinstance(envelope, dict) or envelope.get("type") != "error":
+            return metadata
+        detail = envelope.get("error")
+        if not isinstance(detail, dict):
+            return metadata
+        error_type, message = detail.get("type"), detail.get("message")
+        if type(error_type) is not str or type(message) is not str:
+            return metadata
+        metadata["body_state"] = "parsed"
+        if len(error_type) <= 64 and error_type in CLAUDE_HTTP_ERROR_TYPES:
+            metadata["error_type"] = error_type
+        # Match the whole bounded message. Never search for a phrase inside echoed input.
+        if (error.code == 400 and error_type == "invalid_request_error"
+                and len(message) <= MAX_CLAUDE_ERROR_MESSAGE_CHARACTERS):
+            if message in {"Schema is too complex for compilation", "Schema is too complex for compilation."}:
+                metadata.update(rejection_code="schema_too_complex", parameter="output_config.format.schema")
+            else:
+                for parameter in CLAUDE_HTTP_PARAMETERS:
+                    if message == parameter + ": Extra inputs are not permitted":
+                        metadata.update(rejection_code="unexpected_parameter", parameter=parameter)
+                        break
+        return safe_claude_http_diagnostics(metadata)
+    except (OSError, ValueError, RecursionError, http.client.HTTPException):
+        return safe_claude_http_diagnostics(metadata)
+    finally:
+        try:
+            error.close()
+        except (OSError, ValueError, http.client.HTTPException):
+            pass
+
+
+class ClaudeHTTPError(ProposalError):
+    """HTTP rejection carrying only allowlisted, bounded diagnostic values."""
+
+    def __init__(self, status: int, diagnostics: Mapping[str, object]) -> None:
+        super().__init__(f"Claude API returned HTTP {status}", code="claude_http_error",
+                         service="claude", http_status=status)
+        self.diagnostics = safe_claude_http_diagnostics(diagnostics)
 
 
 Transport = Callable[[str, str, dict[str, object], float], dict[str, object]]
@@ -651,10 +743,11 @@ def http_transport(
         except urllib.error.HTTPError as error:
             if progress is not None:
                 progress["claude_call_state"] = "response_received"
+            diagnostics = claude_http_error_diagnostics(error)
             if error.code in TRANSIENT_HTTP_CODES and attempt < attempts - 1:
                 sleeper(RETRY_DELAYS[attempt])
                 continue
-            raise ProposalError(f"Claude API returned HTTP {error.code}", code="claude_http_error", service="claude", http_status=error.code) from error
+            raise ClaudeHTTPError(error.code, diagnostics) from None
         except (TimeoutError, socket.timeout, urllib.error.URLError) as error:
             if is_read_timeout(error):
                 if attempt < attempts - 1:
@@ -1204,7 +1297,7 @@ def diagnose_images(
 # Failure report schema: only these fields and their validated values are emitted.
 FAILURE_REPORT_FIELDS = frozenset({
     "status", "error_type", "error_code", "failure_stage", "claude_call_state",
-    "service", "http_status", "failure_kind", "claude_diagnostics",
+    "service", "http_status", "failure_kind", "claude_diagnostics", "claude_http_diagnostics",
 })
 FAILURE_STAGES = frozenset({
     "configuration", "ticket_jira_read", "image_preparation", "documentation_prompt_read",
@@ -1254,7 +1347,7 @@ ERROR_CODES = frozenset({
     "ticket_read_failed",
     "unclassified_error",
 }) | images.ERROR_CODES
-ERROR_TYPES = frozenset({"ProposalError", "ClaudeResponseError", "ImageError", "OSError"})
+ERROR_TYPES = frozenset({"ProposalError", "ClaudeResponseError", "ClaudeHTTPError", "ImageError", "OSError"})
 
 
 def technical_failure(error: Exception, progress: Mapping[str, object] | None = None) -> dict[str, object]:
@@ -1283,6 +1376,8 @@ def technical_failure(error: Exception, progress: Mapping[str, object] | None = 
         diagnostics = error.diagnostics
     if isinstance(diagnostics, Mapping):
         report["claude_diagnostics"] = safe_claude_diagnostics(diagnostics)
+    if isinstance(error, ClaudeHTTPError) and isinstance(error.diagnostics, Mapping):
+        report["claude_http_diagnostics"] = safe_claude_http_diagnostics(error.diagnostics)
     return report
 
 
