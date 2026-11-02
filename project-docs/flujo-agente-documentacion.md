@@ -240,7 +240,7 @@ El informe de propuesta de ?xito mantiene su contrato documental existente.
 | Campo | Valores y tipos admitidos |
 |---|---|
 | `status` | Cadena fija `technical_error` |
-| `error_type` | `ProposalError`, `ClaudeResponseError`, `ImageError`, `OSError` o `UnclassifiedError`; el respaldo usa `MissingAgentReport` |
+| `error_type` | `ProposalError`, `ClaudeResponseError`, `ClaudeHTTPError`, `ImageError`, `OSError` o `UnclassifiedError`; el respaldo usa `MissingAgentReport` |
 | `error_code` | Cadena del cat?logo expl?cito `ERROR_CODES`, asignada en los puntos de rechazo; `unclassified_error` para errores sin clasificar |
 | `failure_stage` | `configuration`, `ticket_jira_read`, `image_preparation`, `documentation_prompt_read`, `request_construction`, `claude_http_transport`, `response_interpretation`, `change_validation_preparation` o `application` |
 | `claude_call_state` | `not_started`, `started_no_response` o `response_received` |
@@ -266,7 +266,8 @@ aunque se ejecuta dentro del transporte, se identifica como `response_interpreta
 
 El diagn?stico excluye texto de tickets, documentos, prompt y respuesta, mensajes arbitrarios
 de excepciones, cuerpo de errores HTTP, URLs, cabeceras y credenciales. Los errores HTTP
-usan metadatos estructurados; no se lee su cuerpo para producir mensajes ni c?digos.
+usan metadatos estructurados. Solo Claude lee su cuerpo de forma limitada para clasificar
+rechazos mediante coincidencias completas; Jira sigue sin leer cuerpos de error.
 Las pruebas de `test_safe_generation_diagnostics.py` simulan las nueve etapas, HTTP de Jira
 y Claude, ausencia de respuesta, lectura fallida, sobres y propuestas inv?lidos, fallos tras
 respuesta v?lida y reversi?n al fallar el segundo archivo. Las regresiones de im?genes y del
@@ -275,3 +276,66 @@ workflow comprueban adem?s la atomicidad conjunta y los controles de publicaci?n
 Estos campos permiten distinguir fallos futuros. El diagn?stico de contexto posterior a la
 ejecuci?n 41045495951 no demuestra en qu? etapa fall? aquella generaci?n ni si llam? a Claude;
 el informe antiguo carece de esa evidencia. No se han realizado llamadas reales para deducirlo.
+
+## Investigación del HTTP 400 de DOC-110 (ejecución 41063641764)
+
+Revisión del 2 de noviembre de 2026. Los metadatos del artefacto de
+[la ejecución](https://github.com/documentation-poc-Beedigital/documentation-poc/actions/runs/41063641764)
+identifican el commit `34584960a0274e4d1a764b484ff07dce186b7173`, igual al HEAD local
+antes de estos cambios. El informe aportado identifica `claude_http_error`,
+`claude_http_transport`, `response_received`, servicio `claude`, HTTP 400. El diagnóstico
+de contexto aportado registra 26.941 caracteres, `contexts_match=true` y 36 documentos;
+esto confirma esa comprobación de contexto, sin explicar el rechazo HTTP.
+
+La petición reconstruida desde ese código y comprobada con un transporte simulado es:
+
+| Elemento | Valor enviado y contraste oficial |
+|---|---|
+| Endpoint | `POST https://api.anthropic.com/v1/messages`; coincide con [Messages](https://platform.claude.com/docs/en/api/messages/create). |
+| Cabeceras explícitas | `Content-Type: application/json`, `x-api-key` (valor excluido), `anthropic-version: 2023-06-01`. `x-api-key` sigue admitido según [API overview](https://platform.claude.com/docs/en/api/overview); la versión figura en [Versions](https://platform.claude.com/docs/en/api/versioning). urllib añade las cabeceras de transporte. |
+| Modelo | `claude-sonnet-5-5`, identificador listado en [Models overview](https://platform.claude.com/docs/en/models/overview). Esto no verifica permisos ni disponibilidad en la cuenta. |
+| Parámetros | `max_tokens=16384`, `system` de texto y un mensaje `user` cuyo contenido es JSON serializado como texto. El máximo de salida publicado para Sonnet 5.5 es 128K; no hay evidencia para cambiar 16384. No se envían `temperature`, `top_p`, `top_k`, herramientas, prefill ni streaming. |
+| Salida estructurada | `output_config.format={type: json_schema, schema: PROPOSAL_SCHEMA}`. La [guía oficial](https://platform.claude.com/docs/en/build-with-claude/structured-outputs) documenta esta forma sin cabecera beta obligatoria. |
+| Esquema | Objetos raíz y documento con `additionalProperties=false`; tipos básicos, enumeraciones, propiedades, descripciones, listas `required` y un array de documentos. `sidebar_position` es un número opcional: las propiedades opcionales están admitidas. No se envían restricciones numéricas, de longitud, recursión ni referencias externas incompatibles. |
+
+No se ha demostrado una incompatibilidad con el contrato vigente. El transporte anterior
+descartaba el cuerpo del 400, así que no puede recuperarse retrospectivamente su motivo.
+Un 400 admite varias causas según [Errors](https://platform.claude.com/docs/en/api/errors);
+no demuestra truncado. No se modifican petición, modelo, presupuesto, prompt editorial,
+esquema interno ni validaciones. Tampoco se añade fallback, reparación JSON ni reintentos;
+se conserva la política previa de transporte y el 400 sigue teniendo un único intento.
+
+### Diagnóstico HTTP permitido
+
+El nuevo campo opcional `claude_http_diagnostics` conserva exclusivamente estas cadenas
+de catálogos cerrados, verificadas otra vez al serializar el informe (tipo exacto `str`,
+longitud máxima 64 y pertenencia al catálogo):
+
+| Campo | Valores permitidos |
+|---|---|
+| `body_state` | `parsed`, `malformed`, `too_large`, `unreadable` |
+| `error_type` | `invalid_request_error`, `authentication_error`, `billing_error`, `permission_error`, `not_found_error`, `conflict_error`, `request_too_large`, `rate_limit_error`, `api_error`, `timeout_error`, `overloaded_error` |
+| `rejection_code` | `unknown_http_error`, `schema_too_complex`, `unexpected_parameter` |
+| `parameter` | `model`, `max_tokens`, `system`, `messages`, `output_config`, `output_config.format`, `output_config.format.schema`, `temperature`, `top_p`, `top_k`; solo para rechazo conocido |
+
+Se solicita una lectura de hasta 16.385 bytes para detectar el límite de 16 KiB. Un cuerpo
+mayor no se analiza parcialmente. JSON inválido, UTF-8 inválido, claves duplicadas, estructura
+incorrecta o profundidad excesiva producen `malformed`; los fallos de lectura producen
+`unreadable`, manteniendo el HTTP original y el estado de respuesta recibida. El recurso se cierra.
+El cuerpo solo se utiliza en memoria para clasificarlo: no se guarda, imprime ni incorpora a
+la excepción local. Tampoco se copian cabeceras, identificadores, URLs ni campos adicionales.
+
+La clasificación exige HTTP 400 y `invalid_request_error`, con mensaje de tipo `str` y hasta
+2.048 caracteres. Solo se reconoce el mensaje completo de complejidad de esquema documentado
+en la guía oficial (con o sin punto final), que se convierte en `schema_too_complex` y
+`output_config.format.schema`; también se reconoce la forma completa
+`<parámetro permitido>: Extra inputs are not permitted`, convertida en `unexpected_parameter`.
+La documentación de [Errors](https://platform.claude.com/docs/en/api/errors) muestra esta
+familia de rechazos de campos. La lista de parámetros es local y nunca se extraen rutas
+arbitrarias del servidor. Cualquier otra forma, incluso una frase conocida seguida de texto
+de ticket, produce `unknown_http_error` sin parámetro. Un tipo futuro no se reproduce.
+
+`error_code=claude_http_error`, etapa, estado de llamada, servicio y HTTP status se conservan.
+Las pruebas de `test_claude_http_diagnostics.py` verifican el transporte real con HTTP simulado,
+rechazos conocidos y desconocidos, tipos incorrectos, cuerpos malformados y excesivos,
+fallos de lectura y ausencia de secretos/texto de tickets en informe, salida y excepción visible.
