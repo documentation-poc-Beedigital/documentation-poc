@@ -689,7 +689,7 @@ def build_request(trusted_prompt: str, ticket: Mapping[str, str], documents: lis
     untrusted_data = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
     return {
         "model": MODEL,
-        "max_tokens": 16384,
+        "max_tokens": 32768,
         "system": system_instruction,
         "messages": [{"role": "user", "content": untrusted_data}],
         "output_config": {

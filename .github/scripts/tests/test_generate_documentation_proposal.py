@@ -153,6 +153,42 @@ class DocumentationProposalGeneratorTests(unittest.TestCase):
         self.assertEqual(GENERATOR.sha256_text(body), report["documents"][0]["proposed_body_sha256"])
         self.assertIn("## Expiry", report["documents"][0]["diff"])
 
+    def test_complete_response_above_previous_budget_through_http_and_artifacts(self) -> None:
+        # Usage is simulated, not a character-to-token estimate or a real API call.
+        body = "\n# Invitations\n\n" + "Invitations expire after 48 hours.\n" * 3000
+        proposal = self.proposal([self.document("docs/invitaciones.md", body)])
+        response = json.loads(response_envelope(proposal))
+        response["usage"] = {"input_tokens": 64549, "output_tokens": 20000}
+        raw = json.dumps(response).encode("utf-8")
+        self.assertGreater(response["usage"]["output_tokens"], 16384)
+        self.assertLess(response["usage"]["output_tokens"], 32768)
+        self.assertGreater(len(response["content"][0]["text"]), 24834)
+        self.assertLess(len(raw), GENERATOR.MAX_API_RESPONSE_BYTES)
+        artifacts = self.root.parent / "proposal-files"
+        with mock.patch.object(GENERATOR.urllib.request, "urlopen",
+                               return_value=FakeResponse(raw)) as opener, \
+             mock.patch.object(GENERATOR.time, "sleep") as sleeper:
+            result = GENERATOR.generate_and_apply(
+                self.root, self.ticket_file, self.prompt_file, self.report_file,
+                "test-secret-key", timeout=300, image_artifacts=artifacts,
+            )
+        opener.assert_called_once()
+        sleeper.assert_not_called()
+        request = json.loads(opener.call_args.args[0].data)
+        self.assertEqual(32768, request["max_tokens"])
+        self.assertEqual("claude-sonnet-5-5", request["model"])
+        self.assertNotIn("stream", request)
+        self.assertEqual(300, opener.call_args.kwargs["timeout"])
+        self.assertEqual(proposal, result)
+        applied = self.first.read_bytes()
+        self.assertTrue(applied.decode("utf-8").endswith(body))
+        self.assertEqual(applied, (artifacts / "files/docs/invitaciones.md").read_bytes())
+        self.assertLess(self.report_file.stat().st_size, GENERATOR.MAX_REPORT_BYTES)
+        report = json.loads(self.report_file.read_text(encoding="utf-8"))
+        self.assertEqual(GENERATOR.sha256_text(body),
+                         report["documents"][0]["proposed_body_sha256"])
+        self.assertIn("+Invitations expire after 48 hours.", report["documents"][0]["diff"])
+
     def test_response_completion_failures_are_safe_and_never_apply(self) -> None:
         private = "PRIVATE_RESPONSE_PROMPT_JIRA_HEADER_SECRET"
         self.prompt_file.write_text(private, encoding="utf-8")
@@ -176,7 +212,7 @@ class DocumentationProposalGeneratorTests(unittest.TestCase):
                 before = {p.relative_to(self.root): p.read_bytes()
                           for p in self.root.rglob("*") if p.is_file()}
                 response = {"stop_reason": reason, "content": [{"type": "text", "text": text}],
-                            "usage": {"input_tokens": 10, "output_tokens": 20,
+                            "usage": {"input_tokens": 64549, "output_tokens": 32768,
                                       "cache_creation_input_tokens": 0, "cache_read_input_tokens": 3,
                                       "private": private}, "headers": {"secret": private}}
                 transport = mock.Mock(return_value=response)
@@ -196,6 +232,7 @@ class DocumentationProposalGeneratorTests(unittest.TestCase):
                     ])
                 self.assertEqual(1, result)
                 transport.assert_called_once()
+                self.assertEqual(32768, transport.call_args.args[2]["max_tokens"])
                 prepare.assert_not_called()
                 apply.assert_not_called()
                 if kind != "invalid_json":
@@ -210,10 +247,10 @@ class DocumentationProposalGeneratorTests(unittest.TestCase):
                 self.assertNotIn("decision", report)
                 self.assertNotIn(private, raw_report + stdout.getvalue() + stderr.getvalue())
                 diagnostics = report["claude_diagnostics"]
-                self.assertEqual(16384, diagnostics["max_tokens"])
+                self.assertEqual(32768, diagnostics["max_tokens"])
                 self.assertEqual(len(text), diagnostics["text_length"])
-                self.assertEqual(10, diagnostics["input_tokens"])
-                self.assertEqual(20, diagnostics["output_tokens"])
+                self.assertEqual(64549, diagnostics["input_tokens"])
+                self.assertEqual(32768, diagnostics["output_tokens"])
                 self.assertEqual(0, diagnostics["cache_creation_input_tokens"])
                 self.assertEqual(3, diagnostics["cache_read_input_tokens"])
                 if kind == "invalid_json":
@@ -234,10 +271,10 @@ class DocumentationProposalGeneratorTests(unittest.TestCase):
             with self.subTest(usage=usage):
                 response = {"stop_reason": "end_turn", "usage": usage,
                             "content": [{"type": "text", "text": json.dumps(proposal)}]}
-                self.assertEqual(proposal, GENERATOR.parse_claude_response(response, 16384))
+                self.assertEqual(proposal, GENERATOR.parse_claude_response(response, 32768))
                 response["stop_reason"] = "max_tokens"
                 with self.assertRaises(GENERATOR.ClaudeResponseError) as caught:
-                    GENERATOR.parse_claude_response(response, 16384)
+                    GENERATOR.parse_claude_response(response, 32768)
                 self.assertEqual({"stop_reason", "max_tokens", "text_length"},
                                  set(GENERATOR.technical_failure(caught.exception)["claude_diagnostics"]))
 
@@ -251,7 +288,7 @@ class DocumentationProposalGeneratorTests(unittest.TestCase):
         error.diagnostics = {"stop_reason": "PRIVATE", "headers": "PRIVATE", "output_tokens": True}
         self.assertEqual({}, GENERATOR.technical_failure(error)["claude_diagnostics"])
         with self.assertRaises(GENERATOR.ClaudeResponseError) as caught:
-            GENERATOR.parse_claude_response({}, 16384)
+            GENERATOR.parse_claude_response({}, 32768)
         self.assertEqual("incompatible_stop_reason", caught.exception.kind)
         self.assertNotIn("stop_reason", caught.exception.diagnostics)
 
@@ -338,7 +375,7 @@ class DocumentationProposalGeneratorTests(unittest.TestCase):
         self.assertEqual(sorted(GENERATOR.ROOT_FIELDS), schema["required"])
         self.assertEqual(sorted(GENERATOR.DOCUMENT_FIELDS), schema["properties"]["documents"]["items"]["required"])
         self.assertNotIn("tools", self.captured_request)
-        self.assertEqual(16384, self.captured_request["max_tokens"])
+        self.assertEqual(32768, self.captured_request["max_tokens"])
         self.assertEqual("json_schema", self.captured_request["output_config"]["format"]["type"])
 
     def test_issue_description_at_60000_characters_is_sent_to_claude_complete(self) -> None:
@@ -1344,7 +1381,7 @@ class JiraSourceManifestTests(unittest.TestCase):
             for text in texts.values():
                 self.assertIn(text, payload["ticket"]["issue_description"])
             self.assertEqual(GENERATOR.MODEL, request["model"])
-            self.assertEqual(16384, request["max_tokens"])
+            self.assertEqual(32768, request["max_tokens"])
             self.assertEqual(set(GENERATOR.DIAGNOSTIC_REPORT_FIELDS), set(report))
             for item in [report["epic"], *report["tasks"]]:
                 self.assertEqual(set(GENERATOR.DIAGNOSTIC_DESCRIPTION_FIELDS), set(item))

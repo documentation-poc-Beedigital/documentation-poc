@@ -173,7 +173,7 @@ class ClaudeHTTPDiagnosticsTests(unittest.TestCase):
         sent = json.loads(request.data)
         self.assertEqual({"model", "max_tokens", "system", "messages", "output_config"}, set(sent))
         self.assertEqual("claude-sonnet-5-5", sent["model"])
-        self.assertEqual(16384, sent["max_tokens"])
+        self.assertEqual(32768, sent["max_tokens"])
         self.assertEqual({"format": {"type": "json_schema", "schema": G.PROPOSAL_SCHEMA}}, sent["output_config"])
         self.assertEqual(["user"], [message["role"] for message in sent["messages"]])
         self.assertFalse(G.PROPOSAL_SCHEMA["additionalProperties"])

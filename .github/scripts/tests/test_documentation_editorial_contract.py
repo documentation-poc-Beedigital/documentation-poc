@@ -39,7 +39,7 @@ class EditorialContractTests(unittest.TestCase):
         request = G.build_request("Prompt", {"issue_description": "Error secundario [VERIFICAR] V-99"}, [])
         self.assertIn("verified_destinations", json.loads(request["messages"][0]["content"]))
         contract.check_content("", "Recorrido principal confirmado", dict(reason="V-99 omitido: secundario", evidence="Ticket"))
-        self.assertEqual(16384, request["max_tokens"])
+        self.assertEqual(32768, request["max_tokens"])
         self.assertNotIn("sidebar_position", G.DOCUMENT_SCHEMA["required"])
 
     def test_order_metadata_survives_report_and_independent_validation(self):
