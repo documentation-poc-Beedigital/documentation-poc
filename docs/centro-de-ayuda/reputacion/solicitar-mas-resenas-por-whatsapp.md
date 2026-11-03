@@ -1,13 +1,12 @@
 ---
 article_id: NOTION-29CB7527AC2580EBB5F8FEFE35C75D98
 title: "Solicitar más reseñas por WhatsApp"
-version: 1.0
+version: 1.1
 status: published
 owner: Product
 last_reviewed: 2026-09-09
 notion_id: 29cb7527ac2580ebb5f8fefe35c75d98
 ---
-
 # <HelpIcon name="reputation" /> Solicitar más reseñas por WhatsApp
 
 Solicitar reseñas a tus clientes es una forma directa y eficaz de **mejorar tu reputación online**, ya que cada comentario aumenta tu visibilidad, transmite confianza a futuros clientes, mejora tu posicionamiento local y ofrece información útil sobre tu servicio.
@@ -32,6 +31,16 @@ Desde la plataforma, puedes **compartir fácilmente un enlace por WhatsApp** y a
 
 6. **Elige los clientes** con los que deseas compartir el mensaje y **envíalo** directamente desde WhatsApp.
 
+### Desde Acciones
+
+Si tienes el panel **Acciones**, puedes empezar desde allí:
+
+1. En **Acciones**, busca la tarjeta para solicitar reseñas y usa su opción.
+2. Se abrirá la misma ventana emergente sobre el panel, sin salir de **Acciones**.
+3. Continúa con el paso 3 de la lista anterior: **Compartir enlace** y envío desde WhatsApp.
+
+Solicitar una reseña no garantiza que tu cliente la deje. Más detalles sobre este panel en [Revisar y gestionar tus acciones en Beesible](../inicio-y-acceso/revisar-y-gestionar-tus-acciones-en-beesible.md).
+
 ---
 
 ### <HelpIcon name="recommendations" />  Recomendaciones:
@@ -52,3 +61,5 @@ Desde la plataforma, puedes **compartir fácilmente un enlace por WhatsApp** y a
 **<HelpIcon name="related" /> [Analizar reseñas con Beelma](analizar-resenas-con-beelma.md)**
 
 **<HelpIcon name="related" /> [Configurar alertas automáticas de nuevas reseñas](configurar-alertas-automaticas-de-nuevas-resenas.md)**
+
+**<HelpIcon name="related" /> [Revisar y gestionar tus acciones en Beesible](../inicio-y-acceso/revisar-y-gestionar-tus-acciones-en-beesible.md)**

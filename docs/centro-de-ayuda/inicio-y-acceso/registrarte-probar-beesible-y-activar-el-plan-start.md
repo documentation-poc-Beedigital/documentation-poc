@@ -1,7 +1,7 @@
 ---
 article_id: GITHUB-6274BA706E64091E96A83280061A2AAA
 title: "Registrarte, probar Beesible y activar el Plan Start"
-version: 1.2
+version: 1.3
 sidebar_position: 2
 ---
 # <HelpIcon name="signIn" /> Registrarte, probar Beesible y activar el Plan Start
@@ -189,6 +189,8 @@ Como ejemplo, sin descuento, el Plan Start de 60 € más 12,60 € de IVA suma 
 
 Cuando el pago está confirmado, accedes a **Home** y a las acciones incluidas en el Plan Start. Llegar a la pantalla de pago no confirma que el pago se haya realizado.
 
+Si has contratado el Plan Start desde el 7 de octubre de 2026, esa pantalla inicial es **Acciones**. Puedes volver a ella desde **Acciones** en el menú lateral. Para saber cómo usarla, consulta [Revisar y gestionar tus acciones en Beesible](revisar-y-gestionar-tus-acciones-en-beesible.md).
+
 Para gestionar tu plan o consultar tus facturas más adelante, consulta [Gestionar tu plan y tus facturas](../cuenta-y-facturacion/gestionar-tu-plan-y-tus-facturas.md).
 
 ---
@@ -212,6 +214,8 @@ Solicitar el informe no equivale a tener una cuenta ni a contratar. Después, el
 ### ¿Te resultó útil esta información? También puedes leer:
 
 **<HelpIcon name="related" /> [Acceder a la plataforma](acceder-a-la-plataforma.md)**
+
+**<HelpIcon name="related" /> [Revisar y gestionar tus acciones en Beesible](revisar-y-gestionar-tus-acciones-en-beesible.md)**
 
 **<HelpIcon name="related" /> [Cómo conectar tu Perfil de Google](../perfil-de-empresa-en-google/como-conectar-tu-perfil-de-google.md)**
 
