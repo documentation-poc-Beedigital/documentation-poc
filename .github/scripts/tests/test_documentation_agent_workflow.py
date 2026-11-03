@@ -170,7 +170,7 @@ class DocumentationAgentWorkflowTests(unittest.TestCase):
                             "claude_call_state": "response_received", "service": "claude", "http_status": 400,
                             "failure_kind": kind, "claude_diagnostics": {
                                 "stop_reason": "max_tokens" if kind == "truncated" else "end_turn",
-                                "max_tokens": 16384, "output_tokens": 100, "text_length": 200,
+                                "max_tokens": 32768, "output_tokens": 100, "text_length": 200,
                             },
                         }, indent=2) + "\n"
                         report.write_text(content, encoding="utf-8", newline="")

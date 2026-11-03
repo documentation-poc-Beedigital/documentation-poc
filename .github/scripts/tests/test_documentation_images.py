@@ -533,7 +533,7 @@ class ImageWorkflowTests(unittest.TestCase):
         self.assertEqual(self.doc.read_bytes(), (self.artifacts / "files" / self.doc.relative_to(self.root)).read_bytes())
         self.assertEqual(image["sha256"], hashlib.sha256(PNG).hexdigest())
         self.assertEqual(GENERATOR.MODEL, self.requests[0]["model"])
-        self.assertEqual(16384, self.requests[0]["max_tokens"])
+        self.assertEqual(32768, self.requests[0]["max_tokens"])
         self.assertEqual(GENERATOR.PROPOSAL_SCHEMA, self.requests[0]["output_config"]["format"]["schema"])
         self.assertIsInstance(self.requests[0]["messages"][0]["content"], str)
         output = Path(self.temp.name) / "validation.json"

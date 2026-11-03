@@ -294,7 +294,7 @@ La petición reconstruida desde ese código y comprobada con un transporte simul
 | Endpoint | `POST https://api.anthropic.com/v1/messages`; coincide con [Messages](https://platform.claude.com/docs/en/api/messages/create). |
 | Cabeceras explícitas | `Content-Type: application/json`, `x-api-key` (valor excluido), `anthropic-version: 2023-06-01`. `x-api-key` sigue admitido según [API overview](https://platform.claude.com/docs/en/api/overview); la versión figura en [Versions](https://platform.claude.com/docs/en/api/versioning). urllib añade las cabeceras de transporte. |
 | Modelo | `claude-sonnet-5-5`, identificador listado en [Models overview](https://platform.claude.com/docs/en/models/overview). Esto no verifica permisos ni disponibilidad en la cuenta. |
-| Parámetros | `max_tokens=16384`, `system` de texto y un mensaje `user` cuyo contenido es JSON serializado como texto. El máximo de salida publicado para Sonnet 5.5 es 128K; no hay evidencia para cambiar 16384. No se envían `temperature`, `top_p`, `top_k`, herramientas, prefill ni streaming. |
+| Parámetros | En aquella ejecución: `max_tokens=16384`, `system` de texto y un mensaje `user` cuyo contenido es JSON serializado como texto. El presupuesto vigente se amplía a 32768 en la revisión de DOC-110 documentada más abajo. No se envían `temperature`, `top_p`, `top_k`, herramientas, prefill ni streaming. |
 | Salida estructurada | `output_config.format={type: json_schema, schema: PROPOSAL_SCHEMA}`. La [guía oficial](https://platform.claude.com/docs/en/build-with-claude/structured-outputs) documenta esta forma sin cabecera beta obligatoria. |
 | Esquema | Objetos raíz y documento con `additionalProperties=false`; tipos básicos, enumeraciones, propiedades, descripciones, listas `required` y un array de documentos. `sidebar_position` es un número opcional: las propiedades opcionales están admitidas. No se envían restricciones numéricas, de longitud, recursión ni referencias externas incompatibles. |
 
@@ -304,6 +304,67 @@ Un 400 admite varias causas según [Errors](https://platform.claude.com/docs/en/
 no demuestra truncado. No se modifican petición, modelo, presupuesto, prompt editorial,
 esquema interno ni validaciones. Tampoco se añade fallback, reparación JSON ni reintentos;
 se conserva la política previa de transporte y el 400 sigue teniendo un único intento.
+
+### Presupuesto de salida tras el truncado de DOC-110
+
+Revisión del 3 de noviembre de 2026. Según los datos aportados de la ejecución
+41667548446, `claude_truncated`, `stop_reason=max_tokens`, `max_tokens=16384`,
+`input_tokens=64549`, `output_tokens=16384` y `text_length=24834` confirman que se
+agotó el presupuesto. El rechazo fue correcto y no se aplicaron cambios.
+
+Antes de modificarlo se consultó la [ficha oficial de Claude Sonnet 5.5](https://platform.claude.com/docs/en/models/sonnet-5-5/overview):
+identifica exactamente `claude-sonnet-5-5`, el valor de `MODEL`, con salida máxima
+de 128K tokens y ventana de contexto de 1M. Se amplía únicamente `max_tokens`
+de 16384 a **32768**. Para la entrada observada, 64549 + 32768 = 97317 tokens,
+por debajo de esa ventana. Esta comprobación no garantiza que cualquier futura
+entrada admitida por el límite local de bytes quepa en el contexto: bytes,
+caracteres y tokens son medidas distintas. No se añaden llamadas de conteo.
+
+Según [Messages](https://platform.claude.com/docs/en/api/messages/create),
+`max_tokens` es un máximo: el modelo puede detenerse antes. No obliga a consumir
+32768 tokens ni garantiza una respuesta completa. Se conserva el rechazo de
+`stop_reason=max_tokens`, incluso si el texto contiene JSON válido. Se mantienen
+el esquema, las validaciones completas, la aplicación atómica y el diagnóstico
+seguro; no hay reparación, continuación ni llamadas adicionales tras un truncado.
+Modelo, prompt editorial y límite Jira de 60000 caracteres permanecen iguales.
+
+El transporte actual llama directamente a Messages con `urllib`, sin streaming
+ni SDK. La API admite respuestas sin streaming. La guía de
+[peticiones largas](https://platform.claude.com/docs/en/api/errors#long-requests)
+advierte que las conexiones inactivas pueden cortarse y recomienda streaming o
+batches para peticiones largas, especialmente por encima de diez minutos. La
+restricción preventiva de duración del SDK no se ejecuta en este transporte;
+no se ha encontrado un límite de tokens específico de la API sin streaming que
+prohíba 32768. La compatibilidad del parámetro no garantiza la latencia ni la
+fiabilidad de la conexión. No se modifica el transporte.
+
+Se mantienen `--timeout 300` en Actions, 120 segundos por defecto en el CLI y
+20 minutos en el job de generación. Los dos reintentos existentes y las pausas
+de 2 y 5 segundos suponen 3 × 300 + 7 = 907 segundos de espera configurada para
+Claude, con 293 segundos restantes para preparación, Jira, pruebas, validación,
+build y publicación de evidencias. Es un margen compartido, no una garantía:
+el timeout de `urllib` limita operaciones bloqueantes de socket, no el tiempo
+total del job; Jira y las demás etapas también consumen tiempo. No hay datos de
+latencia que justifiquen aumentar los timeouts. No se añaden reintentos ni se
+modifica su política; un truncado sigue sin provocar otro intento.
+
+Se revisan y conservan los límites independientes: respuesta API de 2000000 bytes;
+informe, diff validado e informe leído para preparar la PR de 262144 bytes;
+documentación de entrada de 3000000 bytes; cuerpo propuesto de 1000000 caracteres
+y 50 documentos. Los artefactos contienen los documentos completos y el informe,
+sin otro tope local que deba ampliarse por este cambio; las imágenes mantienen
+sus límites actuales. No existe una conversión fija tokens/bytes: estos límites
+siguen pudiendo rechazar una propuesta por tamaño, antes de aplicar cambios,
+aunque esté dentro del presupuesto de tokens. No hay evidencia de que deban
+ampliarse para resolver el truncado observado.
+
+Las pruebas sin servicios reales comprueban el presupuesto enviado, una respuesta
+completa con uso simulado de 20000 tokens y texto mayor que los 24834 caracteres
+observados, su paso por HTTP simulado, informe, hashes, aplicación y artefacto;
+también el rechazo sin escritura ni segundo intento de respuestas truncadas con
+presupuesto de 32768, tanto con JSON válido como incompleto. Las aserciones y
+fixtures que fijaban el presupuesto anterior se actualizan a 32768. Los tokens
+de las pruebas son metadatos simulados, no medidas de un tokenizador.
 
 ### Diagnóstico HTTP permitido
 
