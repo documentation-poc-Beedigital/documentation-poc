@@ -40,7 +40,28 @@ presentan como preview vigente. Los enlaces apuntan al artículo completo.
 de PR, y a creación/edición del comentario de Cloudflare. No sondea: cada evento
 hace una lectura acotada y una descarga con timeout. Permite recuperación manual
 con `workflow_dispatch` y `pr_number`. Si la descarga no está disponible todavía,
-queda pendiente hasta otro evento o una ejecución manual.
+se indica como no verificable hasta otro evento o una ejecución manual.
+
+## Diagnóstico de la descarga
+
+La [ejecución 41840378248](https://github.com/documentation-poc-Beedigital/documentation-poc/actions/runs/41840378248)
+terminó correctamente, pero solo registró `Preview no verificable: HTTPError`.
+Ese log no permite recuperar el código HTTP ni distinguir un rechazo de acceso,
+un archivo ausente o una redirección. No demuestra que sean necesarias credenciales.
+
+El diagnóstico utiliza códigos y mensajes controlados: `http_error` con código
+HTTP, `redirect_rejected`, `connection_error`, `timeout`, `invalid_json`,
+`incompatible_manifest` y `sha_mismatch`. No registra cuerpos de respuesta,
+destinos de redirección, cookies, cabeceras ni texto libre de excepciones.
+La descarga sigue sin enviar el token de GitHub y rechaza las redirecciones
+antes de seguirlas. No se añaden credenciales ni se modifican controles de acceso.
+
+El resumen de Actions distingue enlaces actualizados, vigentes sin cambios,
+pendientes, no verificables y escrituras omitidas por cambios concurrentes.
+También aclara si se modificó la descripción de la PR: retirar enlaces antiguos
+para mostrar un error no equivale a verificar una preview. Los estados pendientes
+o no verificables emiten un aviso. El verde del job solo indica que el proceso
+terminó. El paso expone `preview_status` y `body_changed` como outputs.
 
 Solo procesa PR abiertas de `github-actions[bot]`, del propio repositorio, con
 rama `automation/documentation-*`. El job privilegiado utiliza exclusivamente
@@ -68,7 +89,7 @@ body; queda una pequeña ventana de concurrencia entre esa lectura y el PATCH.
    este workflow. No hace falta ampliar permisos de la app Cloudflare.
 4. Mantener `CF_PAGES_COMMIT_SHA` sin sobrescribir y el manifiesto accesible en
    la raíz del despliegue. Los entornos protegidos por Cloudflare Access necesitan
-   una vía de lectura del manifiesto; sin ella se informa de preview pendiente.
+   una vía de lectura del manifiesto; sin ella se informa de preview no verificable.
 
 No se ha cambiado la configuración remota ni ejecutado ningún despliegue.
 
