@@ -8,14 +8,68 @@ from __future__ import annotations
 import json
 import os
 import re
+import socket
 from html import unescape
 from pathlib import Path
 from urllib.parse import urlsplit
+from urllib.error import HTTPError, URLError
 from urllib.request import HTTPRedirectHandler, Request, build_opener, urlopen
 
 BOT_ID = 73139402
 APP_ID = 85455
 MANIFEST = "document-preview-routes.json"
+
+
+class PreviewError(ValueError):
+    def __init__(self, code: str, message: str):
+        super().__init__(message)
+        self.code = code
+
+
+def safe_diagnostic(error: Exception) -> str:
+    """Only controlled messages: never stringify transport errors or responses."""
+    if isinstance(error, PreviewError):
+        return f"{error.code}: {error}"
+    if isinstance(error, HTTPError):
+        if 300 <= error.code < 400:
+            return f"redirect_rejected: redirección rechazada (HTTP {error.code})"
+        return f"http_error: HTTP {error.code}"
+    if isinstance(error, (TimeoutError, socket.timeout)):
+        return "timeout: tiempo de espera agotado"
+    if isinstance(error, URLError):
+        if isinstance(error.reason, (TimeoutError, socket.timeout)):
+            return "timeout: tiempo de espera agotado"
+        return "connection_error: error de conexión"
+    if isinstance(error, OSError):
+        return "connection_error: error de conexión"
+    if isinstance(error, (json.JSONDecodeError, UnicodeDecodeError)):
+        return "invalid_json: JSON inválido"
+    return "unexpected_error: error no clasificado"
+
+
+def report(outcome: str, detail: str, changed: bool = False):
+    labels = {
+        "updated": "Enlaces actualizados; manifiesto verificado",
+        "unchanged": "Enlaces vigentes sin cambios; manifiesto verificado",
+        "pending": "Enlaces pendientes; preview sin verificar",
+        "unverified": "Preview no verificable",
+        "skipped": "Actualización omitida; preview sin verificar",
+    }
+    print(f"Preview: {labels[outcome]}. {detail}")
+    if outcome in {"pending", "unverified"}:
+        print(f"::warning title=Preview sin verificar::{detail}")
+    if path := os.environ.get("GITHUB_STEP_SUMMARY"):
+        with Path(path).open("a", encoding="utf-8") as summary:
+            summary.write(
+                f"## Preview documental\n\n**Resultado:** {labels[outcome]}.\n\n"
+                f"{detail}\n\n"
+                f"**Descripción de la PR modificada:** {'sí' if changed else 'no'}.\n\n"
+                "El verde del job indica que el proceso terminó; por sí solo no "
+                "acredita una preview verificada.\n\n"
+            )
+    if path := os.environ.get("GITHUB_OUTPUT"):
+        with Path(path).open("a", encoding="utf-8") as output:
+            output.write(f"preview_status={outcome}\nbody_changed={'true' if changed else 'false'}\n")
 
 
 def slot(key: str, value: str) -> str:
@@ -52,19 +106,21 @@ def cloudflare_preview(comments: list[dict], sha: str) -> tuple[str, str | None]
 
 
 def validated_routes(manifest: dict, sha: str) -> tuple[str, dict[str, str]]:
-    if manifest.get("schema") != 1 or manifest.get("commit") != sha:
-        raise ValueError("El manifiesto no corresponde al último commit de la PR")
+    if not isinstance(manifest, dict) or type(manifest.get("schema")) is not int or manifest["schema"] != 1:
+        raise PreviewError("incompatible_manifest", "esquema de manifiesto incompatible")
+    if manifest.get("commit") != sha:
+        raise PreviewError("sha_mismatch", "el manifiesto no corresponde al último commit de la PR")
     base = manifest.get("baseUrl")
     if not isinstance(base, str) or not base.startswith("/") or not base.endswith("/"):
-        raise ValueError("baseUrl inválida en el manifiesto")
+        raise PreviewError("incompatible_manifest", "baseUrl inválida en el manifiesto")
     routes = manifest.get("routes")
     if not isinstance(routes, dict):
-        raise ValueError("Rutas ausentes en el manifiesto")
+        raise PreviewError("incompatible_manifest", "rutas ausentes en el manifiesto")
     for source, route in routes.items():
         if (not isinstance(source, str) or not isinstance(route, str)
                 or not route.startswith(base) or route.startswith("//")
                 or any(char in route for char in "\r\n<>\\#?")):
-            raise ValueError("Ruta inválida en el manifiesto")
+            raise PreviewError("incompatible_manifest", "ruta inválida en el manifiesto")
     return base, routes
 
 
@@ -134,17 +190,17 @@ class GitHub:
 
 class NoRedirect(HTTPRedirectHandler):
     def redirect_request(self, req, fp, code, msg, headers, newurl):
-        return None
+        raise PreviewError("redirect_rejected", f"redirección rechazada (HTTP {code})")
 
 
 def fetch_manifest(url: str) -> dict:
     # Do not forward a GitHub token to Cloudflare or follow redirects to an alias.
     with build_opener(NoRedirect).open(url + "/" + MANIFEST, timeout=20) as response:
         if response.geturl() != url + "/" + MANIFEST:
-            raise ValueError("El manifiesto redirige a otro destino")
+            raise PreviewError("redirect_rejected", "el manifiesto redirige a otro destino")
         raw = response.read(2_000_001)
         if len(raw) > 2_000_000:
-            raise ValueError("Manifiesto demasiado grande")
+            raise PreviewError("incompatible_manifest", "manifiesto demasiado grande")
         return json.loads(raw)
 
 
@@ -154,25 +210,39 @@ def update(api, number: int):
     if (pr["state"] != "open" or pr["head"]["repo"]["full_name"] != repo
             or not pr["head"]["ref"].startswith("automation/documentation-")
             or pr["user"]["login"] != "github-actions[bot]"):
+        report("skipped", "PR fuera del ámbito del agente documental.")
         return
     sha, body = pr["head"]["sha"], pr.get("body") or ""
     state, url = cloudflare_preview(api.comments(number), sha)
     manifest = None
+    outcome = "pending" if state.startswith("pendiente") else "unverified"
+    detail = state
     if url:
         try:
             manifest = fetch_manifest(url)
             validated_routes(manifest, sha)
+            sources = re.findall(r"^- Ruta: `(docs/[^`\r\n]+\.mdx?)`\s*$", body, re.M)
+            missing = sum(source not in manifest["routes"] for source in sources)
+            outcome = "unverified" if missing or not sources else "updated"
+            detail = (f"Manifiesto del último commit verificado; {missing} documentos sin ruta publicada."
+                      if missing else "Manifiesto del último commit verificado."
+                      if sources else "Manifiesto verificado; no se identificaron documentos para enlazar.")
         except Exception as error:
-            print(f"Preview no verificable: {type(error).__name__}")
-            state, url = "pendiente: no se pudo verificar el manifiesto del último commit", None
+            detail = safe_diagnostic(error)
+            print(f"Preview no verificable: {detail}")
+            outcome = "unverified"
+            state, url = f"no verificable: {detail}", None
     result = reconcile(body, sha, state, url, manifest)
     # Re-read before PATCH: discard stale runs and concurrent human body edits.
     current = api.request(f"/pulls/{number}")
     if current["head"]["sha"] != sha or current.get("body") != pr.get("body") or current["state"] != "open":
-        print("PR modificada durante la ejecución; se omite la escritura")
+        report("skipped", "PR modificada durante la ejecución; se omite la escritura.")
         return
     if result != body:
         api.request(f"/pulls/{number}", {"body": result})
+    elif outcome == "updated":
+        outcome = "unchanged"
+    report(outcome, detail, changed=result != body)
 
 
 def main():
@@ -192,4 +262,9 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception as error:
+        # Also avoid leaking GitHub HTTP headers or exception payloads in a traceback.
+        report("unverified", "El proceso no pudo completarse: " + safe_diagnostic(error))
+        raise SystemExit(1) from None
