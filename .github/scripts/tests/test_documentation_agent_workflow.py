@@ -400,14 +400,16 @@ class DocumentationAgentWorkflowTests(unittest.TestCase):
     def test_unsafe_legacy_parallel_workflow_is_removed(self) -> None:
         self.assertFalse(LEGACY_WORKFLOW.exists())
 
-    def test_only_documentation_agent_workflow_has_manual_dispatch(self) -> None:
+    def test_manual_dispatch_is_limited_to_agent_and_preview_reconciliation(self) -> None:
         workflow_directory = WORKFLOW.parent
         dispatched = [
             path.name
             for path in workflow_directory.glob("*.yml")
             if "workflow_dispatch:" in path.read_text(encoding="utf-8")
         ]
-        self.assertEqual(["documentation-agent-poc.yml"], dispatched)
+        self.assertEqual(
+            ["document-preview-links.yml", "documentation-agent-poc.yml"], sorted(dispatched)
+        )
 
     def test_active_workflows_do_not_reference_legacy_workflow(self) -> None:
         for path in WORKFLOW.parent.glob("*.yml"):

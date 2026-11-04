@@ -395,6 +395,11 @@ def build_pull_request_body(
             except ValueError as error:
                 raise PublicationPreparationError(str(error)) from error
             section += f"- Posición propuesta en la categoría: `{item['sidebar_position']}`\n"
+        section += (
+            f"\n<!-- document-preview:{path}:start -->\n"
+            "Ver en preview: pendiente del despliegue del último commit.\n"
+            f"<!-- document-preview:{path}:end -->\n"
+        )
         (created_sections if operation == "create" else updated_sections).append(
             section
         )
@@ -430,6 +435,9 @@ def build_pull_request_body(
         + ("\n".join(updated_sections) if updated_sections else "Ninguno.\n")
         + "\n## Imágenes\n\n" + (image_sections or "Ninguna.\n")
         + "\n"
+        "<!-- document-preview:general:start -->\n"
+        "Preview general: pendiente del despliegue del último commit.\n"
+        "<!-- document-preview:general:end -->\n\n"
         f"[Ver ejecución de GitHub Actions]({actions_url})\n\n"
         "> Esta propuesta fue generada por Claude y validada "
         "determinísticamente antes de su publicación.\n"
