@@ -22,6 +22,7 @@ const config = {
   },
   themes: ['@docusaurus/theme-mermaid'],
   plugins: [
+    require.resolve('./src/plugins/document-preview-routes.cjs'),
     ['@cmfcmf/docusaurus-search-local', {
       indexDocs: true,
       indexBlog: false,

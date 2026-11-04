@@ -10,3 +10,9 @@ test-results/
 
 # Local Python dependencies for offline validation
 .local-python-deps/
+/.tmp-documentation-test-deps/
+
+# Generated Python caches
+__pycache__/
+*.pyc
+*.pyo
