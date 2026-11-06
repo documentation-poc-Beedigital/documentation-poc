@@ -1,0 +1,28 @@
+name: Diagnose preview manifest (read only)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: read
+  issues: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - name: Check fixed URL against current PR 121 head and Cloudflare comment
+        id: association
+        continue-on-error: true
+        env:
+          # Token scope is this GitHub-only step; never the Cloudflare probe.
+          GH_TOKEN: ${{ github.token }}
+        run: python -B .github/scripts/diagnose-preview-manifest.py verify-pr
+      - name: Compare Python and curl without credentials or redirects
+        if: always()
+        run: python -B .github/scripts/diagnose-preview-manifest.py probe

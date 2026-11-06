@@ -77,6 +77,47 @@ segunda lectura de la PR descarta la escritura si cambiaron el SHA o el body.
 La API de GitHub no ofrece una operación atómica de comparación y escritura del
 body; queda una pequeña ventana de concurrencia entre esa lectura y el PATCH.
 
+## Comprobación manual con Python y curl
+
+El workflow `Diagnose preview manifest (read only)` se activa únicamente mediante
+`workflow_dispatch`. Una vez disponible en Actions, se puede ejecutar manualmente
+desde su pantalla. Prepararlo no lo ejecuta ni modifica las protecciones.
+Su URL es fija:
+`https://fdbe23fb.documentation-poc.pages.dev/document-preview-routes.json`.
+
+Primero vuelve a consultar en GitHub el head de la PR #121 y el comentario de la
+app Cloudflare, sin escribir en la PR. En la comprobación de preparación, el head
+era `c76c8420bcd7ec27ec03cfa7e5c538efb8dd2c2b`, el comentario indicaba `c76c842`
+y anunciaba exactamente ese despliegue. Si cambia el head, el diagnóstico de la
+URL fija sigue siendo útil, pero no se presenta como preview vigente.
+
+El segundo paso no recibe `GH_TOKEN`. Ejecuta desde el mismo runner un GET con
+el opener urllib y la política de redirecciones del actualizador, y otro con
+curl. Este último ignora `.curlrc`, desactiva netrc y descarta el cuerpo en el
+dispositivo nulo. No usa cookies ni credenciales. Las cabeceras recibidas por
+curl se capturan en memoria y se filtran antes de imprimir o guardar el resumen.
+No se publican logs brutos ni artefactos de respuestas. No hay sondeo ni reintentos.
+
+El resumen compara solo el código HTTP y `Content-Type`, `Server`, `cf-ray` y
+`cf-mitigated`, además del estado controlado de conexión/redirección. Ninguno de
+estos GET valida el JSON ni el SHA interno: un HTTP 200 no implica verificación
+del manifiesto.
+
+| Resultado observado | Qué permite distinguir |
+| --- | --- |
+| Python 403, curl 200 | Diferencia dependiente del cliente en el mismo runner; aún no distingue User-Agent, TLS u otra señal. |
+| Ambos 403 y `cf-mitigated: challenge` | Cloudflare está devolviendo un challenge, no el JSON esperado. |
+| Ambos 403 sin esa cabecera | El código por sí solo no demuestra falta de credenciales ni una regla concreta; correlacionar los `cf-ray` con los eventos existentes de Cloudflare. |
+| Ambos 200 | El fallo no se reproduce en ese runner y momento; contrastar con el evento original. |
+| 3xx | Hay una redirección que ambos clientes deben rechazar; no se imprime su destino. |
+| Sin código HTTP | El fallo ocurrió en conexión, TLS o timeout, antes de una respuesta HTTP utilizable. |
+
+La [documentación de Cloudflare](https://developers.cloudflare.com/cloudflare-challenges/challenge-types/challenge-pages/detect-response/)
+identifica `cf-mitigated: challenge` como señal de Challenge Page y su tipo de
+contenido como `text/html`. Que Edge InPrivate abra la URL no aísla la causa:
+también cambian la red de origen y las características del cliente. La prueba
+del mismo runner reduce esa incertidumbre sin cambiar reglas ni añadir secretos.
+
 ## Activación pendiente
 
 1. Incorporar los cambios a la rama predeterminada mediante el proceso habitual.

@@ -30,7 +30,9 @@ jobs:
         run: npm ci
 
       - name: Test document preview reconciliation
-        run: python -B -m unittest discover -s .github/scripts/tests -p test_document_preview_links.py
+        run: |
+          python -B -m unittest discover -s .github/scripts/tests -p test_document_preview_links.py
+          python -B -m unittest discover -s .github/scripts/tests -p test_diagnose_preview_manifest.py
 
       - name: Test published document preview routes
         run: node --test tests/document-preview-routes-build.cjs
