@@ -9,11 +9,12 @@ import json
 import os
 import re
 import socket
+import subprocess
 from html import unescape
 from pathlib import Path
 from urllib.parse import urlsplit
 from urllib.error import HTTPError, URLError
-from urllib.request import HTTPRedirectHandler, Request, build_opener, urlopen
+from urllib.request import HTTPRedirectHandler, Request, urlopen
 
 BOT_ID = 73139402
 APP_ID = 85455
@@ -194,14 +195,50 @@ class NoRedirect(HTTPRedirectHandler):
 
 
 def fetch_manifest(url: str) -> dict:
-    # Do not forward a GitHub token to Cloudflare or follow redirects to an alias.
-    with build_opener(NoRedirect).open(url + "/" + MANIFEST, timeout=20) as response:
-        if response.geturl() != url + "/" + MANIFEST:
-            raise PreviewError("redirect_rejected", "el manifiesto redirige a otro destino")
-        raw = response.read(2_000_001)
-        if len(raw) > 2_000_000:
-            raise PreviewError("incompatible_manifest", "manifiesto demasiado grande")
-        return json.loads(raw)
+    if not re.fullmatch(r"https://[0-9a-f]{8}\.[a-z0-9-]+\.pages\.dev", url):
+        raise PreviewError("invalid_preview_url", "URL de despliegue no permitida")
+    environment = {key: value for key, value in os.environ.items()
+                   if key not in {"GH_TOKEN", "GITHUB_TOKEN"}}
+    try:
+        # Before 8.4, --max-filesize could rely only on Content-Length. Fail
+        # closed on older curl: the 2 MB cap must also cover chunked responses.
+        version = subprocess.run(["curl", "-q", "--version"], stdout=subprocess.PIPE,
+                                 stderr=subprocess.DEVNULL, timeout=5, env=environment,
+                                 shell=False, check=False)
+        match = re.match(rb"curl (\d+)\.(\d+)\.(\d+)\b", version.stdout)
+        if version.returncode or not match or tuple(map(int, match.groups())) < (8, 4, 0):
+            raise PreviewError("transport_error", "se requiere curl 8.4.0 o posterior")
+        # No curlrc/netrc, credentials, cookies, redirects, retries or UA override.
+        # curl enforces the cap DURING transfer; captured stdout is bounded body
+        # plus a fixed four-byte status suffix, never printed to logs.
+        result = subprocess.run(
+            ["curl", "-q", "--silent", "--no-netrc", "--proto", "=https",
+             "--max-redirs", "0", "--retry", "0", "--connect-timeout", "10",
+             "--max-time", "20", "--max-filesize", "2000000",
+             "--output", "-", "--write-out", "\n%{http_code}", url + "/" + MANIFEST],
+            stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=25,
+            env=environment, shell=False, check=False)
+    except subprocess.TimeoutExpired:
+        raise PreviewError("timeout", "tiempo de espera agotado") from None
+    except OSError:
+        raise PreviewError("transport_error", "no se pudo ejecutar curl") from None
+    if result.returncode == 63:
+        raise PreviewError("incompatible_manifest", "manifiesto demasiado grande")
+    if result.returncode == 28:
+        raise PreviewError("timeout", "tiempo de espera agotado")
+    if result.returncode:
+        raise PreviewError("connection_error", f"curl terminó con código {result.returncode}")
+    if not re.fullmatch(rb"\n[1-5][0-9]{2}", result.stdout[-4:]):
+        raise PreviewError("http_error", "curl no devolvió un estado HTTP válido")
+    status = int(result.stdout[-3:])
+    if 300 <= status < 400:
+        raise PreviewError("redirect_rejected", f"redirección rechazada (HTTP {status})")
+    if status != 200:
+        raise PreviewError("http_error", f"HTTP {status}")
+    raw = result.stdout[:-4]
+    if len(raw) > 2_000_000:
+        raise PreviewError("incompatible_manifest", "manifiesto demasiado grande")
+    return json.loads(raw)
 
 
 def update(api, number: int):

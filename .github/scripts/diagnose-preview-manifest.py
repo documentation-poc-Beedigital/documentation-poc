@@ -39,8 +39,8 @@ def python_probe() -> dict:
 
     handler = DiagnosticNoRedirect()
     try:
-        # Same urllib opener, default Python headers and redirect policy as
-        # fetch_manifest. No GitHub Request, token, cookies or credentials.
+        # Original urllib client retained for the read-only comparison. Production
+        # fetch_manifest now uses curl. No token, cookies or credentials.
         with build_opener(handler).open(URL, timeout=20) as response:
             return {"status": response.status, "headers": allowed_headers(response.headers),
                     "result": "http_response"}

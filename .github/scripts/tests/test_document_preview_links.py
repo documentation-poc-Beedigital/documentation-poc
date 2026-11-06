@@ -3,6 +3,7 @@ import io
 import json
 import os
 import socket
+import subprocess
 import tempfile
 from contextlib import redirect_stdout
 from pathlib import Path
@@ -190,22 +191,120 @@ class PreviewTests(unittest.TestCase):
 
     def test_fetch_rejects_invalid_json_without_sending_github_token(self):
         for raw in (b'PRIVATE_BODY_NOT_JSON', b'\xff'):
-            response = Mock()
-            response.geturl.return_value = URL + '/' + PREVIEW.MANIFEST
-            response.read.return_value = raw
-            opener = Mock()
-            opener.open.return_value.__enter__ = Mock(return_value=response)
-            opener.open.return_value.__exit__ = Mock(return_value=False)
-            with patch.dict(os.environ, {'GH_TOKEN': 'PRIVATE_GITHUB_TOKEN'}), \
-                    patch.object(PREVIEW, 'build_opener', return_value=opener) as build:
+            with patch.dict(os.environ, {'GH_TOKEN': 'PRIVATE_GITHUB_TOKEN', 'GITHUB_TOKEN': 'PRIVATE'}), \
+                    patch.object(PREVIEW.subprocess, 'run', side_effect=[
+                        Mock(returncode=0, stdout=b'curl 8.4.0 test'),
+                        Mock(returncode=0, stdout=raw + b'\n200')]) as run:
                 with self.assertRaises((json.JSONDecodeError, UnicodeDecodeError)) as raised:
                     PREVIEW.fetch_manifest(URL)
                 self.assertEqual(PREVIEW.safe_diagnostic(raised.exception), 'invalid_json: JSON inválido')
-            self.assertIs(build.call_args.args[0], PREVIEW.NoRedirect)
-            # Plain URL and timeout only: no Request carrying Authorization,
-            # Cookie, GitHub headers or environment token is passed to Pages.
-            opener.open.assert_called_once_with(URL + '/' + PREVIEW.MANIFEST, timeout=20)
-            response.read.assert_called_once_with(2_000_001)
+            for call in run.call_args_list:
+                self.assertFalse(call.kwargs['shell'])
+                self.assertNotIn('GH_TOKEN', call.kwargs['env'])
+                self.assertNotIn('GITHUB_TOKEN', call.kwargs['env'])
+                self.assertEqual(call.kwargs['stderr'], subprocess.DEVNULL)
+
+    def test_curl_transport_success_flags_and_exact_size_boundary(self):
+        raw = json.dumps(manifest()).encode()
+        for data in (raw, raw + b' ' * (2_000_000 - len(raw))):
+            with patch.object(PREVIEW.subprocess, 'run', side_effect=[
+                    Mock(returncode=0, stdout=b'curl 8.5.0 test'),
+                    Mock(returncode=0, stdout=data + b'\n200')]) as run:
+                self.assertEqual(PREVIEW.fetch_manifest(URL), manifest())
+            self.assertEqual(run.call_count, 2)  # local version check, then one GET
+            command = run.call_args.args[0]
+            self.assertEqual(command[:2], ['curl', '-q'])
+            self.assertEqual(command[-1], URL + '/' + PREVIEW.MANIFEST)
+            for option, value in (('--proto', '=https'), ('--max-redirs', '0'),
+                                  ('--retry', '0'), ('--max-time', '20'),
+                                  ('--max-filesize', '2000000')):
+                self.assertEqual(command[command.index(option) + 1], value)
+            for forbidden in ('--location', '-L', '--user', '-u', '--cookie', '-b',
+                              '--header', '-H', '--user-agent', '-A', '--insecure'):
+                self.assertNotIn(forbidden, command)
+            self.assertIn('--no-netrc', command)
+            self.assertEqual(run.call_args.kwargs['timeout'], 25)
+            self.assertFalse(run.call_args.kwargs['check'])
+
+    def test_curl_http_and_process_failures_are_safe(self):
+        cases = [
+            (0, b'PRIVATE_ERROR_BODY\n403', 'http_error', 'HTTP 403'),
+            (0, b'PRIVATE\n404', 'http_error', 'HTTP 404'),
+            (0, b'PRIVATE\n500', 'http_error', 'HTTP 500'),
+            (0, b'PRIVATE\n302', 'redirect_rejected', 'HTTP 302'),
+            (0, b'PRIVATE\n307', 'redirect_rejected', 'HTTP 307'),
+            (0, b'PRIVATE\n204', 'http_error', 'HTTP 204'),
+            (0, b'PRIVATE\n000', 'http_error', 'estado HTTP válido'),
+            (0, b'PRIVATE', 'http_error', 'estado HTTP válido'),
+            (6, b'PRIVATE\n000', 'connection_error', 'código 6'),
+            (60, b'PRIVATE\n000', 'connection_error', 'código 60'),
+            (23, json.dumps(manifest()).encode() + b'\n200', 'connection_error', 'código 23'),
+            (28, b'PRIVATE\n200', 'timeout', 'espera agotado'),
+            # curl enforces the cap while receiving chunked/unknown-size bodies;
+            # no Content-Length assumption or parsing of the partial JSON.
+            (63, b'PRIVATE_PARTIAL_CHUNKED_BODY\n200', 'incompatible_manifest', 'demasiado grande'),
+            (0, b'x' * 2_000_001 + b'\n200', 'incompatible_manifest', 'demasiado grande'),
+        ]
+        for returncode, stdout, category, message in cases:
+            with self.subTest(returncode=returncode, category=category), \
+                    patch.object(PREVIEW.subprocess, 'run', side_effect=[
+                        Mock(returncode=0, stdout=b'curl 8.4.0 test'),
+                        Mock(returncode=returncode, stdout=stdout)]), \
+                    self.assertRaises(PREVIEW.PreviewError) as raised:
+                PREVIEW.fetch_manifest(URL)
+            self.assertEqual(raised.exception.code, category)
+            self.assertIn(message, str(raised.exception))
+            self.assertNotIn('PRIVATE', PREVIEW.safe_diagnostic(raised.exception))
+
+    def test_curl_timeouts_missing_binary_and_old_version_fail_closed(self):
+        for error, category in ((FileNotFoundError('PRIVATE'), 'transport_error'),
+                                 (subprocess.TimeoutExpired('PRIVATE', 25, output=b'PRIVATE'), 'timeout')):
+            for position in (0, 1):
+                effects = [error] if position == 0 else [Mock(returncode=0, stdout=b'curl 8.5.0'), error]
+                with patch.object(PREVIEW.subprocess, 'run', side_effect=effects), \
+                        self.assertRaises(PREVIEW.PreviewError) as raised:
+                    PREVIEW.fetch_manifest(URL)
+                self.assertEqual(raised.exception.code, category)
+                self.assertNotIn('PRIVATE', str(raised.exception))
+        for version, code in ((b'curl 8.3.0', 0), (b'curl 7.88.1', 0),
+                              (b'PRIVATE', 0), (b'curl 8.5.0', 1)):
+            with patch.object(PREVIEW.subprocess, 'run', return_value=Mock(returncode=code, stdout=version)) as run, \
+                    self.assertRaises(PREVIEW.PreviewError):
+                PREVIEW.fetch_manifest(URL)
+            self.assertEqual(run.call_count, 1)  # never download with an unsafe cap
+
+    def test_curl_rejects_disallowed_urls_before_launch(self):
+        for url in ('http://591b11de.documentation-poc.pages.dev',
+                    'https://branch.documentation-poc.pages.dev', 'https://private.invalid',
+                    URL + ':443', URL + '/extra', URL + '?token=PRIVATE',
+                    'https://PRIVATE@591b11de.documentation-poc.pages.dev'):
+            with patch.object(PREVIEW.subprocess, 'run') as run, \
+                    self.assertRaises(PREVIEW.PreviewError) as raised:
+                PREVIEW.fetch_manifest(url)
+            run.assert_not_called()
+            self.assertEqual(raised.exception.code, 'invalid_preview_url')
+
+    @patch.dict(os.environ, {'GITHUB_REPOSITORY': 'example/repo'})
+    def test_real_transport_failures_remove_links_and_preserve_human_text(self):
+        body = PREVIEW.reconcile(BODY, SHA, 'disponible', URL, manifest())
+        pr = {'state': 'open', 'head': {'sha': SHA, 'repo': {'full_name': 'example/repo'},
+              'ref': 'automation/documentation-doc-1'}, 'user': {'login': 'github-actions[bot]'}, 'body': body}
+        for returncode, response in ((0, b'PRIVATE\n403'), (0, b'PRIVATE\n302'),
+                                     (63, b'PRIVATE\n200'), (28, b'PRIVATE\n000'),
+                                     (0, b'PRIVATE_INVALID_JSON\n200')):
+            api = Mock()
+            api.request.side_effect = [pr, pr, {}]
+            api.comments.return_value = [comment()]
+            logs = io.StringIO()
+            with patch.object(PREVIEW.subprocess, 'run', side_effect=[
+                    Mock(returncode=0, stdout=b'curl 8.5.0'), Mock(returncode=returncode, stdout=response)]), \
+                    patch.object(PREVIEW, 'report') as report, redirect_stdout(logs):
+                PREVIEW.update(api, 1)
+            updated = api.request.call_args.args[1]['body']
+            self.assertNotIn(URL, updated)
+            self.assertIn('Texto humano después.', updated)
+            self.assertNotIn('PRIVATE', updated + logs.getvalue())
+            self.assertEqual(report.call_args.args[0], 'unverified')
 
     def test_incompatible_manifests_and_sha_have_separate_codes(self):
         for data in (None, [], {'schema': 2}, dict(manifest(), schema=True),
