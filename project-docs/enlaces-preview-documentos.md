@@ -56,6 +56,15 @@ destinos de redirección, cookies, cabeceras ni texto libre de excepciones.
 La descarga sigue sin enviar el token de GitHub y rechaza las redirecciones
 antes de seguirlas. No se añaden credenciales ni se modifican controles de acceso.
 
+Tras observar urllib 403 y curl 200 desde el mismo runner, la descarga del
+actualizador utiliza curl mediante argumentos separados, sin shell ni fallback.
+Ignora curlrc/netrc, no sigue redirecciones ni reintenta, y comprueba tanto el
+código de salida como HTTP 200 antes de analizar el JSON. Mantiene las
+validaciones de esquema, SHA completo y rutas. El límite de 2.000.000 bytes se
+aplica durante la transferencia con `--max-filesize`, incluso sin Content-Length;
+se exige curl 8.4.0 o posterior para garantizar ese comportamiento. No cambia
+el User-Agent ni intenta imitar un navegador.
+
 El resumen de Actions distingue enlaces actualizados, vigentes sin cambios,
 pendientes, no verificables y escrituras omitidas por cambios concurrentes.
 También aclara si se modificó la descripción de la PR: retirar enlaces antiguos
@@ -92,7 +101,7 @@ y anunciaba exactamente ese despliegue. Si cambia el head, el diagnóstico de la
 URL fija sigue siendo útil, pero no se presenta como preview vigente.
 
 El segundo paso no recibe `GH_TOKEN`. Ejecuta desde el mismo runner un GET con
-el opener urllib y la política de redirecciones del actualizador, y otro con
+el opener urllib de la comparación original y otro con
 curl. Este último ignora `.curlrc`, desactiva netrc y descarta el cuerpo en el
 dispositivo nulo. No usa cookies ni credenciales. Las cabeceras recibidas por
 curl se capturan en memoria y se filtran antes de imprimir o guardar el resumen.
