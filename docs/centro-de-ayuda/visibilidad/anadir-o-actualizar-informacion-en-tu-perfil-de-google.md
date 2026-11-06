@@ -1,13 +1,12 @@
 ---
 article_id: NOTION-281B7527AC25816F982ADF1D7872261E
 title: "Añadir o actualizar información en tu Perfil de Google"
-version: 1.1
+version: 1.2
 status: published
 owner: Product
 last_reviewed: 2026-09-09
 notion_id: 281b7527ac25816f982adf1d7872261e
 ---
-
 # <HelpIcon name="google" /> Añadir o actualizar información en tu Perfil de Google
 
 La plataforma te permite **añadir o actualizar la información de tu Perfil de Empresa en Google** de forma centralizada, lo que garantiza que tus clientes siempre vean datos correctos sobre tu negocio.
@@ -30,6 +29,16 @@ Así puedes mantener actualizados tu **contacto, ubicación y horarios**, gestio
     - **Fotos**
     - **Más información (Atributos)**
 5. Para editar cualquier apartado, pulsa **“Editar”**, realiza los cambios y finalmente da clic en **“Guardar cambios”**. Si pulsas **“Cancelar”**, los cambios que hayas hecho no se guardarán.
+
+### Completar datos desde Acciones
+
+Si tienes el panel **Acciones**, también puedes completar algunos datos desde una tarjeta, sin pasar antes por **Visibilidad**. Según la tarjeta verás **Añadir horarios**, **Añadir** para WhatsApp o atributos, o **Subir foto**.
+
+1. Pulsa la opción de la tarjeta para abrir el formulario.
+2. Completa los datos.
+3. Usa la opción de guardar del formulario. Si pulsas **Cancelar**, el formulario se cierra y la acción no se completa.
+
+Guardar la información no significa que ya se vea publicada en Google. Más detalles sobre este panel en [Revisar y gestionar tus acciones en Beesible](../inicio-y-acceso/revisar-y-gestionar-tus-acciones-en-beesible.md).
 
 ### Información
 
@@ -140,3 +149,5 @@ Modificar los horarios puede suspender tu perfil de empresa en Google si el camb
 **<HelpIcon name="related" /> [Consultar estadísticas del Perfil de Google](../analitica/consultar-estadisticas-del-perfil-de-google.md)**
 
 **<HelpIcon name="related" /> [Crear publicaciones en Google](../fidelizacion/crear-publicaciones-en-google.md)**
+
+**<HelpIcon name="related" /> [Revisar y gestionar tus acciones en Beesible](../inicio-y-acceso/revisar-y-gestionar-tus-acciones-en-beesible.md)**

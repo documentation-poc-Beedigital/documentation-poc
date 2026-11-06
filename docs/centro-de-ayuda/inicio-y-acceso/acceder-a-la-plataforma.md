@@ -1,7 +1,7 @@
 ---
 article_id: NOTION-29CB7527AC25802184E3E9E42CF145C4
 title: "Acceder a la plataforma"
-version: 1.3
+version: 1.4
 status: published
 owner: Product
 last_reviewed: 2026-09-09
@@ -37,6 +37,12 @@ sidebar_position: 3
 - Si tienes activado el **[2FA (autenticación de doble factor)](configurar-opciones-de-seguridad.md),** tras introducir tus credenciales se te solicitará el **código de verificación** que recibirás por email.
 :::
 
+### Qué verás al entrar
+
+Si tienes el Plan Start y contrataste desde el 7 de octubre de 2026, al iniciar sesión llegas a **Acciones**. Puedes volver a esta pantalla cuando quieras pulsando **Acciones** en el menú lateral.
+
+En [Revisar y gestionar tus acciones en Beesible](revisar-y-gestionar-tus-acciones-en-beesible.md) te explicamos cómo usarla.
+
 ---
 
 ### <HelpIcon name="password" />  Cómo restablecer tu contraseña si la has olvidado:
@@ -52,6 +58,8 @@ sidebar_position: 3
 ### ¿Te resultó útil esta información? También puedes leer:
 
 **<HelpIcon name="related" /> [Registrarte, probar Beesible y activar el Plan Start](registrarte-probar-beesible-y-activar-el-plan-start.md)**
+
+**<HelpIcon name="related" /> [Revisar y gestionar tus acciones en Beesible](revisar-y-gestionar-tus-acciones-en-beesible.md)**
 
 **<HelpIcon name="related" /> [Configurar opciones de seguridad](configurar-opciones-de-seguridad.md)**
 
